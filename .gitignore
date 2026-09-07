@@ -5,8 +5,8 @@
 cookies.json
 
 # Data corpus: large, append-only, and personal. Rebuildable forward only.
-data/
-!data/.gitkeep
+/data/
+!/data/.gitkeep
 
 # Python
 __pycache__/
