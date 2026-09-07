@@ -36,7 +36,7 @@ import numpy as np
 import polars as pl
 
 from . import corpus
-from .core import PlayerOutlook, WeeklyOutlook
+from .core import Objective, PlayerOutlook, WeeklyOutlook
 from .espn.client import EspnClient
 from .espn.endpoints import league_url
 from .espn.league import League
@@ -78,6 +78,26 @@ def client_from_env(env_file: Path | str | None = None) -> EspnClient:
         log.warning("no ESPN_SWID/ESPN_S2 in the environment; private leagues will 401")
         return EspnClient()
     return EspnClient(swid=swid, espn_s2=s2)
+
+
+def check_objective_supported(objective: Objective | str) -> None:
+    """Refuse to run a league whose objective no decision surface implements.
+
+    Every surface currently maximises championship probability. In a league that
+    pays for total points-for -- common in high-stakes formats -- that is not
+    merely suboptimal, it is backwards near the playoff cut, where the right move
+    is to keep scoring rather than to protect a seed. The registry can express
+    that objective and nothing downstream honours it yet, so this fails loudly
+    rather than quietly optimising the wrong thing.
+    """
+    obj = Objective(objective)
+    if obj is not Objective.CHAMPIONSHIP:
+        raise PipelineError(
+            f"league objective {obj.value!r} is not implemented: every decision surface "
+            "maximises championship probability. In a points-for league that is wrong, "
+            'not just approximate. Set objective = "championship" to proceed, or leave '
+            "this league out until the surfaces read core.Objective."
+        )
 
 
 def scoring_for(league: League) -> LeagueScoring:
@@ -271,8 +291,10 @@ def build(
     variant: str = "ppr",
     root: Path | str = corpus.DEFAULT_ROOT,
     calibration: CalibrationSet | None = None,
+    objective: Objective | str = Objective.CHAMPIONSHIP,
 ) -> LeagueSim:
     """Assemble one league end to end, ready to simulate."""
+    check_objective_supported(objective)
     own_client = client is None
     client = client or client_from_env()
     try:
@@ -331,6 +353,7 @@ __all__ = [
     "build",
     "calibrated_outlooks",
     "championship_table",
+    "check_objective_supported",
     "client_from_env",
     "league_projections",
     "scoring_for",

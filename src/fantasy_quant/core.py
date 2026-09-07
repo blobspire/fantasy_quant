@@ -289,6 +289,35 @@ class Recommendation:
         return self.delta_title < other.delta_title
 
 
+class MoveEvaluator(Protocol):
+    """Scores candidate moves in championship probability.
+
+    Defined here rather than in `decide/title.py` so the decision surfaces can be
+    written and tested against the contract without importing the engine -- and
+    so a surface can be exercised with a cheap fake in unit tests while still
+    being wired to the real two-tier engine in production.
+
+    Implementations are expected to be two-tier: `screen` is an analytic
+    approximation cheap enough to run over thousands of candidates, and `confirm`
+    is a paired common-random-numbers simulation run only on the survivors. A
+    caller that only ever uses `confirm` is correct but slow; one that only ever
+    uses `screen` is fast and will occasionally rank a move wrongly near the
+    playoff cut line, where the sign on the variance term flips.
+    """
+
+    def screen(self, moves: Sequence[Move]) -> list[Recommendation]:
+        """Cheap analytic estimate for every candidate. May be approximate."""
+        ...
+
+    def confirm(self, moves: Sequence[Move]) -> list[Recommendation]:
+        """Paired CRN simulation. Authoritative, and populates `stderr`."""
+        ...
+
+    def baseline_title(self, team_id: int) -> float:
+        """P(championship) for a team under no move, for reporting a delta against."""
+        ...
+
+
 # --------------------------------------------------------------------------------------
 # Win-probability helpers
 # --------------------------------------------------------------------------------------

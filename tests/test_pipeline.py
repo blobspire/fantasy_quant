@@ -145,3 +145,26 @@ class TestAgainstTheRealLeagues:
         half = P.scoring_for(P.League(client, 161496047, 2026))
         line = {"53": 6.0, "42": 80.0}  # 6 catches, 80 yards
         assert full.score(line, 3) - half.score(line, 3) == pytest.approx(3.0)
+
+
+class TestUnsupportedObjectivesFailLoudly:
+    """No decision surface reads core.Objective yet; all four maximise title odds.
+
+    In a points-for league that is backwards near the playoff cut, so the entry
+    point refuses rather than quietly optimising the wrong quantity.
+    """
+
+    def test_championship_is_accepted(self):
+        from fantasy_quant.core import Objective
+
+        P.check_objective_supported(Objective.CHAMPIONSHIP)
+        P.check_objective_supported("championship")
+
+    @pytest.mark.parametrize("objective", ["points", "hybrid"])
+    def test_other_objectives_are_refused_with_a_reason(self, objective):
+        with pytest.raises(P.PipelineError, match="not implemented"):
+            P.check_objective_supported(objective)
+
+    def test_the_error_says_what_to_do(self):
+        with pytest.raises(P.PipelineError, match="championship"):
+            P.check_objective_supported("points")
