@@ -1,0 +1,33 @@
+# Secrets — never commit
+.env
+.env.local
+*.pem
+cookies.json
+
+# Data corpus: large, append-only, and personal. Rebuildable forward only.
+data/
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+web/dist/
+web/.vite/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
