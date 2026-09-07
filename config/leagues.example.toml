@@ -1,0 +1,38 @@
+# fantasy_quant league registry. Everything is keyed on (league_id, season).
+#
+# objective:
+#   championship  maximise P(title). Variance is a tool: trail the cut line and you want
+#                 more of it, lead it and you want less.
+#   points        the league pays for total points-for. Win probability is irrelevant and
+#                 optimizing it actively destroys value here.
+#   hybrid        pays for both; set points_weight in [0, 1] to say how it splits.
+#
+# [discovery].manual_league_ids is pulled whether or not Fan API discovery finds them.
+
+[defaults]
+objective = "championship"
+scoring_variant = "ppr"
+season = 2026
+
+# Run `fq discover` to populate this from the ESPN Fan API, or fill it in by hand.
+[[leagues]]
+league_id = 123456789
+season = 2026
+name = "My Redraft League"
+objective = "championship"
+scoring_variant = "half_ppr"
+enabled = true
+team_id = 1
+notes = "12 teams, half PPR. Snake, redraft, waiver priority."
+tags = ["redraft", "half-ppr", "12team"]
+
+# A league that pays for total points-for. Optimizing weekly win probability
+# actively destroys value here, so the objective inverts.
+# [[leagues]]
+# league_id = 987654321
+# season = 2026
+# name = "High Stakes Points League"
+# objective = "hybrid"
+# points_weight = 0.4
+# scoring_variant = "ppr"
+# enabled = true

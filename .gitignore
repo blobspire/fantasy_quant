@@ -4,6 +4,9 @@
 *.pem
 cookies.json
 
+# The real league config names the user's actual leagues; the repo is public.
+config/leagues.toml
+
 # Data corpus: large, append-only, and personal. Rebuildable forward only.
 /data/
 !/data/.gitkeep
