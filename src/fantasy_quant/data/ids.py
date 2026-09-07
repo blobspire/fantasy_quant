@@ -486,7 +486,7 @@ def _build_dst_keys() -> dict[str, TeamDefense]:
 _DST_KEYS: dict[str, TeamDefense] = _build_dst_keys()
 
 
-def resolve_dst(value: object) -> TeamDefense | None:
+def resolve_dst(value: object, *, numeric_ids: bool = True) -> TeamDefense | None:
     """Resolve any platform's spelling of a team defense.
 
     Handles nflverse/ESPN/Sleeper abbreviations, ESPN's numeric ``proTeamId``,
@@ -495,16 +495,22 @@ def resolve_dst(value: object) -> TeamDefense | None:
 
     Never guess at a defense. Every join failure observed in testing was one, and
     a wrong defense is indistinguishable from a right one in a points column.
+
+    Pass ``numeric_ids=False`` when the input is a human display name rather than
+    an identifier. Otherwise a name that happens to be all digits is read as a
+    ``proTeamId`` -- ``"12"`` would resolve to the Chiefs defense at full
+    confidence, which is exactly the silent wrong-join this module exists to
+    prevent.
     """
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, int):
-        return _dst_from_int(value)
+        return _dst_from_int(value) if numeric_ids else None
     s = str(value).strip()
     if not s:
         return None
     if s.lstrip("-").isdigit():
-        return _dst_from_int(int(s))
+        return _dst_from_int(int(s)) if numeric_ids else None
     return _DST_KEYS.get(normalize_name(s))
 
 
@@ -953,7 +959,7 @@ class IdResolver:
         # table recognizes is a defense; pairing it with a player position is a
         # contradiction in the caller's data, not an invitation to go looking for
         # a wide receiver that happens to be spelled a bit like the Rams.
-        if (defense := resolve_dst(name)) is not None:
+        if (defense := resolve_dst(name, numeric_ids=False)) is not None:
             if position_key not in (None, "DST"):
                 return None
             record = self._by_canonical.get(defense.canonical)

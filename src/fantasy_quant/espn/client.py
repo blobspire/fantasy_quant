@@ -106,9 +106,12 @@ class EspnClient:
                 "yearly and dies silently -- re-copy it from your browser."
             )
         if resp.status_code == 404:
-            # ESPN returns 404 for both "private" and "does not exist"; they are
-            # indistinguishable without valid cookies.
-            raise EspnError(f"404 from ESPN ({url}): private league, or no such league.")
+            # Measured 2026-09-07 across six league ids: a league that exists but
+            # is not visible to you returns 401 AUTH_LEAGUE_NOT_VISIBLE, while one
+            # that does not exist returns 404. So a 404 really does mean "no such
+            # thing" -- for a leaguedefaults variant too, several of which exist
+            # only in recent seasons.
+            raise EspnError(f"404 from ESPN ({url}): no such league or resource.")
         if resp.status_code != 200:
             raise EspnError(f"HTTP {resp.status_code} from ESPN ({url}): {resp.text[:300]}")
 

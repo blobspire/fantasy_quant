@@ -27,7 +27,7 @@ from typing import Any
 
 import polars as pl
 
-from .espn.client import EspnClient
+from .espn.client import EspnClient, EspnError
 from .espn.endpoints import LEAGUE_DEFAULTS, league_default_url
 from .espn.statrows import parse_rows
 
@@ -181,14 +181,28 @@ def snapshot_all(
     variants: list[str] | None = None,
     root: Path = DEFAULT_ROOT,
 ) -> list[Path]:
-    """Capture every scoring variant. This is what the daily cron calls."""
+    """Capture every scoring variant. This is what the daily cron calls.
+
+    Not every variant exists in every season -- `leaguedefaults/8` (half PPR) is
+    2026-only and 404s for 2022-2025. A variant that is missing is skipped with a
+    warning rather than aborting the run, because this is a cron job and losing
+    the whole day's capture over one absent scoring preset is the worse outcome.
+    """
     variants = variants or list(LEAGUE_DEFAULTS)
     written: list[Path] = []
     with EspnClient() as client:
         if season is None:
             season, _ = client.current_season_and_week()
         for variant in variants:
-            written.append(snapshot_variant(client, season, variant, root=root))
+            try:
+                written.append(snapshot_variant(client, season, variant, root=root))
+            except EspnError as exc:
+                log.warning("skipping variant %r for season %d: %s", variant, season, exc)
+    if not written:
+        raise RuntimeError(
+            f"no variants captured for season {season}; tried {variants}. "
+            "Every request failed -- check connectivity before assuming ESPN changed."
+        )
     return written
 
 

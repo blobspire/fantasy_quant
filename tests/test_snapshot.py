@@ -116,3 +116,65 @@ def test_unfiltered_pool_returns_weekly_projections():
         and s.get("statSplitTypeId") == 1
     }
     assert len(weeks) >= 15, f"expected a full weekly projection set, got {sorted(weeks)}"
+
+
+def test_a_missing_variant_is_skipped_not_fatal(monkeypatch, tmp_path):
+    """leaguedefaults/8 is 2026-only and 404s for prior seasons.
+
+    A cron job must not lose the whole day's capture because one scoring preset
+    does not exist for the season being requested.
+    """
+    from fantasy_quant import snapshot as snap
+    from fantasy_quant.espn.client import EspnError
+
+    attempted: list[str] = []
+
+    def fake_variant(client, season, variant, root=None, captured_at=None):
+        attempted.append(variant)
+        if variant == "half_ppr":
+            raise EspnError("404 from ESPN: no such leaguedefaults")
+        return tmp_path / f"{variant}.parquet"
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+        def current_season_and_week(self):
+            return 2025, 1
+
+    monkeypatch.setattr(snap, "snapshot_variant", fake_variant)
+    monkeypatch.setattr(snap, "EspnClient", FakeClient)
+
+    written = snap.snapshot_all(season=2025, root=tmp_path)
+    assert "half_ppr" in attempted, "the missing variant should still be attempted"
+    assert len(written) == 2, "the two surviving variants should be captured"
+
+
+def test_total_failure_is_still_loud(monkeypatch, tmp_path):
+    """Skipping one variant is fine; silently writing nothing is not."""
+    import pytest as _pytest
+
+    from fantasy_quant import snapshot as snap
+    from fantasy_quant.espn.client import EspnError
+
+    def always_fails(client, season, variant, root=None, captured_at=None):
+        raise EspnError("404")
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+        def current_season_and_week(self):
+            return 2025, 1
+
+    monkeypatch.setattr(snap, "snapshot_variant", always_fails)
+    monkeypatch.setattr(snap, "EspnClient", FakeClient)
+
+    with _pytest.raises(RuntimeError, match="no variants captured"):
+        snap.snapshot_all(season=2025, root=tmp_path)

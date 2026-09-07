@@ -976,3 +976,21 @@ def test_live_espn_dst_ids_match_the_hard_coded_table():
         assert team.espn_player_id == entry["id"]
         assert resolve_dst(player["fullName"]) is team
         assert player["defaultPositionId"] == 16
+
+
+def test_a_numeric_display_name_is_not_read_as_a_pro_team_id():
+    """`resolve_dst` doubles as an id resolver, so the name path must opt out.
+
+    Without this, a source that hands us "12" as a player name gets the Chiefs
+    defense back at confidence 1.0 -- a wrong join that is invisible downstream.
+    """
+    from fantasy_quant.data.ids import resolve_dst
+
+    # As an identifier, a bare number is a proTeamId and should resolve.
+    assert resolve_dst("12") is not None
+    assert resolve_dst(12) is not None
+    # As a display name, it is not a defense.
+    assert resolve_dst("12", numeric_ids=False) is None
+    assert resolve_dst(12, numeric_ids=False) is None
+    # Real spellings still resolve on the name path.
+    assert resolve_dst("Kansas City Chiefs", numeric_ids=False) is not None
