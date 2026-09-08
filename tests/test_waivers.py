@@ -1464,3 +1464,80 @@ class TestEveryShortlistedPlayerReachesConfirm:
         wide = _board(priority=4, drop_pairs=3)
         narrow = _board(priority=4, drop_pairs=1)
         assert len(wide.board) >= len(narrow.board)
+
+
+class TestWireLevelsCarriesADistribution:
+    """The wire floor is a distribution, not a number.
+
+    Crediting an empty seat a constant gave it zero variance, and on a live league
+    15.7% of all slot-weeks fall back to that constant -- 70.6% of the WR3 slot.
+    The spread turns out to be nearly as large as the mean (WR 6.40 +/- 5.33), so
+    treating the floor as a point value discarded most of what a streamed seat does.
+    """
+
+    WEEKS = (1, 2, 3)
+
+    def _outlooks(self, specs):
+        """specs: list of (player_id, mean, sd, p_zero)."""
+        from fantasy_quant.core import PlayerOutlook, WeeklyOutlook
+
+        return [
+            PlayerOutlook(
+                player_id=pid,
+                name=f"p{pid}",
+                position_id=3,
+                pro_team_id=1,
+                weeks={
+                    w: WeeklyOutlook(
+                        player_id=pid,
+                        season=2026,
+                        week=w,
+                        position_id=3,
+                        mean=mean,
+                        sd=sd,
+                        p_zero=pz,
+                        shape=2.0,
+                        scale=max(mean / 2, 0.1),
+                    )
+                    for w in self.WEEKS
+                },
+            )
+            for pid, mean, sd, pz in specs
+        ]
+
+    def test_the_mean_matches_wire_floor_exactly(self):
+        from fantasy_quant.decide import wire
+
+        outlooks = self._outlooks([(1, 9.0, 7.0, 0.2), (2, 6.0, 5.0, 0.3), (3, 4.0, 3.0, 0.4)])
+        el = {4: frozenset({3})}
+        levels = wire.wire_levels(outlooks, [], self.WEEKS, el, depth=2)
+        floors = wire.wire_floor(outlooks, [], self.WEEKS, el, depth=2)
+        assert levels[4].mean == pytest.approx(floors[4])
+
+    def test_the_spread_comes_from_the_body_that_fills_the_seat(self):
+        """Not the k-th largest sd -- that would pair one body's mean with another's
+        variance. Player 2 is 2nd by projection, so his sd and p_zero are the ones."""
+        from fantasy_quant.decide import wire
+
+        outlooks = self._outlooks([(1, 9.0, 1.0, 0.05), (2, 6.0, 5.0, 0.30), (3, 4.0, 9.0, 0.60)])
+        level = wire.wire_levels(outlooks, [], self.WEEKS, {4: frozenset({3})}, depth=2)[4]
+        assert level.mean == pytest.approx(6.0)
+        assert level.sd == pytest.approx(5.0)
+        assert level.p_zero == pytest.approx(0.30)
+
+    def test_the_triple_is_reproducible_by_the_hurdle_gamma(self):
+        """All three moments come off one body, so the credit can hit them exactly."""
+        from fantasy_quant.decide import wire
+        from fantasy_quant.projections.calibration import hurdle_gamma_from_moments
+
+        outlooks = self._outlooks([(1, 9.0, 7.0, 0.2), (2, 6.4, 5.3, 0.15)])
+        level = wire.wire_levels(outlooks, [], self.WEEKS, {4: frozenset({3})}, depth=2)[4]
+        mean, sd = hurdle_gamma_from_moments(level.mean, level.sd, level.p_zero).moments()
+        assert mean == pytest.approx(level.mean, abs=1e-6)
+        assert sd == pytest.approx(level.sd, abs=1e-3)
+
+    def test_an_empty_wire_reports_no_body_rather_than_a_free_one(self):
+        from fantasy_quant.decide import wire
+
+        level = wire.wire_levels([], [], self.WEEKS, {4: frozenset({3})})[4]
+        assert (level.mean, level.sd, level.p_zero) == (0.0, 0.0, 1.0)

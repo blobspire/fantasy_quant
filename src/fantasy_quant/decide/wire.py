@@ -23,6 +23,7 @@ different questions and the bug was using one where the other belongs.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -33,6 +34,20 @@ from ..core import PlayerOutlook
 DEFAULT_WIRE_DEPTH = 2
 
 
+@dataclass(frozen=True, slots=True)
+class WireLevel:
+    """What an empty seat streams, as a DISTRIBUTION rather than a number.
+
+    All three moments are read off the SAME body -- the player who is k-th best by
+    projection in a given week -- so the triple is internally consistent and
+    `calibration.hurdle_gamma_from_moments` can reproduce it exactly.
+    """
+
+    mean: float
+    sd: float
+    p_zero: float
+
+
 def wire_floor(
     outlooks: Sequence[PlayerOutlook],
     rostered: Iterable[int],
@@ -41,48 +56,96 @@ def wire_floor(
     *,
     depth: int = DEFAULT_WIRE_DEPTH,
 ) -> dict[int, float]:
-    """slotId -> the weekly points an unfilled slot would stream off this wire.
+    """slotId -> the mean weekly points an unfilled slot would stream off this wire.
 
-    **The `depth`-th best is taken WEEK BY WEEK, not once for the season.** The two
-    are not the same number and the gap is not small. An empty slot is not "the one
-    free agent with the best season total, started seventeen times" -- it is
-    "whoever is best on the wire *that week*", and at a streamed position the
-    identity changes every week. Measured on the user's three leagues, the
-    season-total reading understates the D/ST floor by 1.1-1.3 points a week and the
-    QB floor by 1.1-1.3: about 19-23 points of rest-of-season score per slot. Under
-    the season-total floor every board came back dominated by "add a second D/ST",
-    and the entire gain was the difference between a real streaming slot and a floor
-    set at one fixed defense's season average.
+    The mean alone, for callers that solve a lineup: the start/sit decision is made on
+    expectations, so this is the right number to compare a rostered player against.
+    `wire_levels` carries the spread as well, for crediting what the seat actually scored.
+    """
+    return {
+        slot: level.mean
+        for slot, level in wire_levels(
+            outlooks, rostered, weeks, slot_eligibility, depth=depth
+        ).items()
+    }
 
-    The result is a per-week mean, which is what `sim/season.py` wants for
-    `replacement=` -- `_franchise_scores` carries one scalar per slot, so the
-    week-to-week variation has to be averaged out here rather than passed through.
-    `monotone_floor` then lifts a flex to at least the floors of the slots nested
-    inside it, so the values here need not be consistent by construction.
+
+def wire_levels(
+    outlooks: Sequence[PlayerOutlook],
+    rostered: Iterable[int],
+    weeks: Sequence[int],
+    slot_eligibility: Mapping[int, frozenset[int]],
+    *,
+    depth: int = DEFAULT_WIRE_DEPTH,
+) -> dict[int, WireLevel]:
+    """slotId -> the distribution of what an empty seat streams off this wire.
+
+    **The `depth`-th best is taken WEEK BY WEEK, not once for the season.** An empty
+    slot is not "the one free agent with the best season total, started seventeen
+    times" -- it is "whoever is best on the wire *that week*", and at a streamed
+    position the identity changes every week. Measured on the user's three leagues,
+    the season-total reading understates the D/ST floor by 1.1-1.3 points a week and
+    the QB floor by the same: about 19-23 points of rest-of-season score per slot.
+
+    **The SPREAD is the outcome dispersion of the body who fills the seat, not the
+    week-to-week variation of his projection.** Those are different numbers and only
+    the first is what a manager experiences. So for each week we find the player who
+    is k-th best BY PROJECTION -- the one actually streamed that week -- and take his
+    own `sd` and `p_zero`, which already carry the chance he simply blanks.
+
+    Why the spread has to exist at all: crediting an empty seat a constant gave it zero
+    variance, and on a live league 15.7% of all slot-weeks fall back to that constant --
+    70.6% of the WR3 slot. Measured here, the spread is nearly as large as the mean
+    (WR 6.40 +/- 5.33), so treating it as a point value discarded most of what a
+    streamed seat actually does. Variance is also what decides whether a team near the
+    playoff cut should seek it or avoid it, so the bias landed on the decisions that
+    matter most.
+
+    The result is a per-week average, which is what `sim/season.py` wants -- one scalar
+    triple per slot. `monotone_floor` then lifts a flex to at least the floors of the
+    slots nested inside it, and it lifts the MEAN only: the lift is a statement about
+    which body a wider slot could reach, and applying it to a sample would let a manager
+    gain points by leaving the FLEX empty, which is hindsight through the back door.
     """
     owned = {int(p) for p in rostered}
     span = tuple(int(w) for w in weeks)
-    per_position: dict[int, list[list[float]]] = {}
+    means: dict[int, list[list[float]]] = {}
+    sds: dict[int, list[list[float]]] = {}
+    zeros: dict[int, list[list[float]]] = {}
     for o in outlooks:
         if o.player_id in owned:
             continue
         row = [o.weeks[w].mean if w in o.weeks else 0.0 for w in span]
         if not row or sum(row) <= 0.0:
             continue
-        per_position.setdefault(o.position_id, []).append(row)
+        means.setdefault(o.position_id, []).append(row)
+        sds.setdefault(o.position_id, []).append(
+            [o.weeks[w].sd if w in o.weeks else 0.0 for w in span]
+        )
+        zeros.setdefault(o.position_id, []).append(
+            [o.weeks[w].p_zero if w in o.weeks else 1.0 for w in span]
+        )
 
     k = max(int(depth), 1)
-    out: dict[int, float] = {}
+    out: dict[int, WireLevel] = {}
     for slot, eligible in slot_eligibility.items():
-        rows = [r for pos in eligible for r in per_position.get(pos, ())]
+        rows = [r for pos in eligible for r in means.get(pos, ())]
         if not rows:
-            out[slot] = 0.0
+            out[slot] = WireLevel(0.0, 0.0, 1.0)
             continue
-        # (players, weeks) sorted best-first down each week's column independently:
-        # the streamer is chosen per week, so the k-th best is a different player
-        # each week.
-        grid = -np.sort(-np.asarray(rows, dtype=np.float64), axis=0)
-        out[slot] = float(grid[min(k, grid.shape[0]) - 1].mean())
+        mu = np.asarray(rows, dtype=np.float64)
+        sd = np.asarray([r for pos in eligible for r in sds.get(pos, ())], dtype=np.float64)
+        pz = np.asarray([r for pos in eligible for r in zeros.get(pos, ())], dtype=np.float64)
+        # Rank by projection down each week's column independently, then take THAT
+        # player's own spread and hurdle -- not the k-th largest of each, which would
+        # pair one body's mean with another body's variance.
+        pick = np.argsort(-mu, axis=0)[min(k, mu.shape[0]) - 1]
+        cols = np.arange(mu.shape[1])
+        out[slot] = WireLevel(
+            mean=float(mu[pick, cols].mean()),
+            sd=float(sd[pick, cols].mean()),
+            p_zero=float(pz[pick, cols].mean()),
+        )
     return out
 
 
