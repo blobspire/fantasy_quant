@@ -1475,7 +1475,7 @@ def state_from_league(
     schedule = settings.schedule
     teams = league.teams()
     week = roster_week if roster_week is not None else league.current_week()
-    _warn_if_bracket_started(week, playoff_round_weeks(schedule))
+    _warn_if_bracket_started(week, playoff_round_weeks(settings))
     rosters = league.rosters(week)
     matchups = league.matchups()
 

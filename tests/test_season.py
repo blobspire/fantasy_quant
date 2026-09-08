@@ -1765,3 +1765,32 @@ class TestMidBracketRunsWarn:
             _w.simplefilter("always")
             _warn_if_bracket_started(17, [])
         assert not caught
+
+
+@pytest.mark.network
+def test_state_from_league_assembles_a_real_league():
+    """Covers the whole assembly path against live ESPN.
+
+    Added after a one-line change to this function passed the entire 1,845-test
+    offline suite and then broke every league in the CLI: the argument types
+    inside `state_from_league` were exercised nowhere. An offline suite cannot
+    check that a LeagueSettings is what a helper wants when the only caller
+    builds one from the network.
+    """
+    from fantasy_quant.espn.league import League
+    from fantasy_quant.pipeline import client_from_env
+    from fantasy_quant.sim.season import state_from_league
+
+    client = client_from_env()
+    try:
+        league = League(client, 161496047, 2026)
+        state = state_from_league(league, my_team_id=1)
+    finally:
+        client.close()
+
+    assert state.league_id == 161496047
+    assert state.my_team_id == 1
+    assert len(state.franchises) == 12
+    assert state.weeks, "a live league must have remaining weeks"
+    assert state.playoff_rounds, "a live league must have a bracket"
+    assert state.pool.size > 100
