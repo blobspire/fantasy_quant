@@ -38,6 +38,7 @@ import pytest
 from scipy.stats import norm, skew
 
 from fantasy_quant.core import PlayerOutlook
+from fantasy_quant.sim.lineup import plan_from_slots
 from fantasy_quant.sim.season import (
     _TIEBREAK_WARNED,
     ANCHOR_TEAM_MEAN,
@@ -45,6 +46,7 @@ from fantasy_quant.sim.season import (
     ANCHOR_TEAM_SKEW,
     OPPONENT_LINEUP_EFFICIENCY,
     OPPONENT_LINEUP_EFFICIENCY_SD,
+    FloorNoise,
     Franchise,
     LeagueState,
     LineupEfficiency,
@@ -1794,3 +1796,118 @@ def test_state_from_league_assembles_a_real_league():
     assert state.weeks, "a live league must have remaining weeks"
     assert state.playoff_rounds, "a live league must have a bracket"
     assert state.pool.size > 100
+
+
+class TestTheEmptySeatIsPaidADraw:
+    """An empty starting slot used to be credited a CONSTANT with zero variance.
+
+    On a live league 15.7% of all slot-weeks fall back to that constant, and 70.6%
+    of the WR3 slot, so most of a team's exposure at those seats carried no risk at
+    all. That biases the modelled spread low, and the spread is what decides whether
+    a team near the playoff cut should seek variance or avoid it -- so the bias
+    landed on the decisions that matter most.
+    """
+
+    MEAN = {0: 12.0, 2: 4.0, 4: 5.0, 6: 6.0, 16: 5.0, 17: 7.0, 23: 6.0}
+
+    def _levels(self, cv: float = 0.8):
+        from fantasy_quant.core import WireLevel
+
+        return {s: WireLevel(m, cv * m, 0.15) for s, m in self.MEAN.items()}
+
+    def _sd_diff(self, x):
+        n = x.shape[2]
+        return float(
+            np.mean([(x[:, :, i] - x[:, :, j]).std() for i in range(n) for j in range(i + 1, n)])
+        )
+
+    def test_passing_no_noise_is_bit_identical(self):
+        """The negative control. Proves the effect comes from the distribution and
+        not from a reshape somewhere in the plumbing."""
+        state, draw = _league(n_sims=400)
+        a = team_week_scores(state, draw, replacement=self.MEAN)
+        b = team_week_scores(state, draw, replacement=self.MEAN, noise=None)
+        assert np.array_equal(a, b)
+
+    def test_a_zero_spread_reproduces_the_constant_floor_exactly(self):
+        from fantasy_quant.core import WireLevel
+
+        state, draw = _league(n_sims=400)
+        flat = {s: WireLevel(m, 0.0, 0.0) for s, m in self.MEAN.items()}
+        const = team_week_scores(state, draw, replacement=self.MEAN)
+        drawn = team_week_scores(state, draw, replacement=flat, noise=FloorNoise(state, draw))
+        assert np.allclose(const, drawn, atol=1e-4)
+
+    def test_the_mean_is_unchanged_and_the_spread_rises(self):
+        """The invariant first: if the mean moved, a spread gain is not real."""
+        state, draw = _league(n_sims=1500)
+        const = team_week_scores(state, draw, replacement=self.MEAN)
+        drawn = team_week_scores(
+            state, draw, replacement=self._levels(), noise=FloorNoise(state, draw)
+        )
+        assert drawn.mean() == pytest.approx(const.mean(), abs=0.15)
+        assert drawn.std() > const.std() * 1.05
+
+    def test_sharing_one_body_across_teams_collapses_the_gain(self):
+        """The other negative control, and the reason the noise is per team.
+
+        A shared body contributes to both terms of Var(A)+Var(B)-2Cov(A,B) and
+        cancels; empties are strongly correlated across teams because byes are
+        league-wide. Sharing recovers a small fraction of what independence does.
+        """
+        state, draw = _league(n_sims=1500)
+        const = team_week_scores(state, draw, replacement=self.MEAN)
+        indep = team_week_scores(
+            state, draw, replacement=self._levels(), noise=FloorNoise(state, draw)
+        )
+        shared_noise = FloorNoise(state, draw)
+        shared_noise._u[:] = shared_noise._u[:, :, 0:1, :]
+        shared = team_week_scores(state, draw, replacement=self._levels(), noise=shared_noise)
+
+        base, wide, narrow = (self._sd_diff(x) for x in (const, indep, shared))
+        assert wide > base, "independent seats must raise the matchup spread"
+        assert narrow < wide, "a shared body must recover far less than independent seats"
+
+    def test_the_noise_survives_a_roster_changing_shape(self):
+        """`plan.slot_ids` is a per-roster lexsort: seat 1 is the D/ST on one roster
+        and the TE on another. The gather must go through the canonical
+        (slot_id, occurrence), or a roster change silently pays the kicker's draw to
+        the tight end."""
+        state, draw = _league(n_sims=200)
+        noise = FloorNoise(state, draw)
+        a = state.franchises[0]
+        plan_a = plan_from_slots(
+            state.lineup_slot_counts,
+            state.slot_eligibility,
+            state.pool.positions_of(a.player_ids),
+        )
+        shorter = a.with_players(a.player_ids[:-2])
+        plan_b = plan_from_slots(
+            state.lineup_slot_counts,
+            state.slot_eligibility,
+            state.pool.positions_of(shorter.player_ids),
+        )
+        ua, ub = noise.for_plan(plan_a, 0), noise.for_plan(plan_b, 0)
+        # Every seat that names the same (slot_id, occurrence) must get the same draw.
+        seen_a: dict[int, int] = {}
+        seen_b: dict[int, int] = {}
+        key_a = {}
+        for i, slot in enumerate(plan_a.slot_ids):
+            k = (slot, seen_a.get(slot, 0))
+            seen_a[slot] = k[1] + 1
+            key_a[k] = i
+        for j, slot in enumerate(plan_b.slot_ids):
+            k = (slot, seen_b.get(slot, 0))
+            seen_b[slot] = k[1] + 1
+            if k in key_a:
+                assert np.array_equal(ua[:, :, key_a[k]], ub[:, :, j]), f"seat {k} drifted"
+
+
+def _league(*, n_sims: int = 800, seed: int = 5):
+    """The shared fixture, imported rather than rebuilt."""
+    import sys
+
+    sys.path.insert(0, "tests")
+    from test_title import build_league
+
+    return build_league(n_sims=n_sims, seed=seed)

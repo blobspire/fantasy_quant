@@ -568,6 +568,7 @@ def team_week_scores(
     efficiency: LineupEfficiency | np.ndarray | None = None,
     plans: Sequence[LineupPlan] | None = None,
     replacement: Mapping[int, float] | float | None = None,
+    noise: FloorNoise | None = None,
 ) -> np.ndarray:
     """`(sims, weeks, teams)` starting-lineup totals.
 
@@ -608,7 +609,13 @@ def team_week_scores(
     scores = np.zeros((n_sims, n_weeks, state.size), dtype=np.float32)
     for t, franchise in enumerate(state.franchises):
         scores[:, :, t] = _franchise_scores(
-            state.pool, franchise, plans[t], points, rank_source, replacement
+            state.pool,
+            franchise,
+            plans[t],
+            points,
+            rank_source,
+            replacement,
+            floor_noise=None if noise is None else noise.for_plan(plans[t], t),
         )
 
     if efficiency is None:
@@ -1300,6 +1307,7 @@ def leave_one_out(
     efficiency: LineupEfficiency | np.ndarray | None = None,
     all_play: bool = True,
     replacement: Mapping[int, float] | float | None = None,
+    noise: FloorNoise | None = None,
 ) -> tuple[PlayerContribution, ...]:
     """Wins added and title added per player, by removing him and re-simulating.
 
@@ -1361,7 +1369,15 @@ def leave_one_out(
             state.slot_eligibility,
             state.pool.positions_of(shortened.player_ids),
         )
-        solo = _franchise_scores(state.pool, shortened, plan, points, rank_source, replacement)
+        solo = _franchise_scores(
+            state.pool,
+            shortened,
+            plan,
+            points,
+            rank_source,
+            replacement,
+            floor_noise=None if noise is None else noise.for_plan(plan, t),
+        )
         scores = base_scores.copy()
         scores[:, :, t] = solo * factors[:, t : t + 1]
         alt = simulate_from_scores(reduced, scores, all_play=all_play, hindsight_lineups=hindsight)
