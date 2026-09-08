@@ -461,7 +461,9 @@ class TestTheFreeAgentFloor:
 
     def test_the_engine_fits_a_floor_rather_than_leaving_the_seat_empty(self, engine):
         assert isinstance(engine.replacement, dict) and engine.replacement
-        assert all(v > 0.0 for v in engine.replacement.values())
+        # Levels now, not bare floats: the seat has to be PAID, and paying it the mean
+        # gives it zero variance. The claim is unchanged -- a real floor, not empty.
+        assert all(v.mean > 0.0 for v in engine.replacement.values())
 
     def test_the_floor_is_ordered_like_the_positions_it_prices(self, league):
         state, draw = league
@@ -700,7 +702,7 @@ class TestTheWaiverBoardCanReachThisEngine:
 
         evaluator = W.default_evaluator(state, draw, 1)
         assert isinstance(evaluator.replacement, dict)
-        assert all(v > 0.0 for v in evaluator.replacement.values())
+        assert all(v.mean > 0.0 for v in evaluator.replacement.values())
 
 
 class TestLeverage:

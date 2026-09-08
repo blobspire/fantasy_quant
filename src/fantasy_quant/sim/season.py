@@ -768,6 +768,20 @@ class _CreditParams:
             sc.append(g.scale)
         return cls(np.asarray(p), np.asarray(sh), np.asarray(sc))
 
+    @property
+    def variance(self) -> np.ndarray:
+        """Per-slot variance of the credit. Tier-1 needs it to match tier-2.
+
+        The screen prices a candidate from moments rather than by simulating, so if it
+        omitted this the screen would measure a world with a deterministic floor while
+        the confirm measured one without. Every add and drop changes how many seats sit
+        empty, so the two would disagree on exactly the candidates being ranked.
+        """
+        q = 1.0 - self.p_zero
+        m_pos = self.shape * self.scale
+        v_pos = self.shape * self.scale * self.scale
+        return q * v_pos + q * self.p_zero * m_pos * m_pos
+
     def credit(self, u: np.ndarray) -> np.ndarray:
         """`(sims, weeks, slots)` payouts from `(sims, weeks, slots)` uniforms."""
         from .distributions import hurdle_gamma_quantile

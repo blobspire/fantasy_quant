@@ -142,13 +142,14 @@ from ..core import (
     PlayerOutlook,
     Recommendation,
     WeeklyOutlook,
+    WireLevel,
     leverage,
     points_to_win_prob,
 )
 from ..sim import season as S
 from ..sim.distributions import Draw
 from ..sim.lineup import LineupPlan, plan_from_slots
-from .wire import DEFAULT_WIRE_DEPTH, all_rostered, wire_floor
+from .wire import DEFAULT_WIRE_DEPTH, all_rostered, wire_levels
 
 log = logging.getLogger(__name__)
 
@@ -508,16 +509,36 @@ def streaming_replacement(
       bug that made dropping a kicker cost more title probability than dropping
       Justin Jefferson.
     """
+    return {
+        slot: level.mean
+        for slot, level in streaming_levels(state, draw, wire_depth=wire_depth).items()
+    }
+
+
+def streaming_levels(
+    state: S.LeagueState, draw: Draw, *, wire_depth: int = DEFAULT_WIRE_DEPTH
+) -> dict[int, WireLevel]:
+    """`streaming_replacement`, plus how much that level VARIES.
+
+    The mean is identical to `streaming_replacement` -- verified equal at every slot --
+    so a caller that only solves a lineup can keep using the float form. This one is for
+    the caller that has to PAY an empty seat, because paying it the mean gives the seat
+    zero variance, and on a live league 15.7% of slot-weeks are paid that way.
+
+    When the panel holds no wire there is no body to read a spread off either. The VOLS
+    rank still gives a defensible LEVEL, so the seat keeps its floor and stays
+    deterministic rather than being handed an invented spread.
+    """
     outlooks = _outlooks_from_panel(draw, state)
-    floors = wire_floor(
+    levels = wire_levels(
         outlooks, all_rostered(state), state.weeks, state.slot_eligibility, depth=wire_depth
     )
-    missing = [s for s, v in floors.items() if v <= 0.0]
+    missing = [slot for slot, v in levels.items() if v.mean <= 0.0]
     if missing:
         fallback = _vols_replacement(state, draw)
         for slot in missing:
-            floors[slot] = fallback.get(slot, 0.0)
-    return floors
+            levels[slot] = WireLevel(fallback.get(slot, 0.0), 0.0, 0.0)
+    return levels
 
 
 def _vols_replacement(state: S.LeagueState, draw: Draw) -> dict[int, float]:
@@ -568,6 +589,11 @@ def _outlooks_from_panel(draw: Draw, state: S.LeagueState) -> list[PlayerOutlook
     are never handed back to a caller.
     """
     mean = np.asarray(draw.panel.mean, dtype=np.float64)
+    # sd and p_zero as well as the mean: the floor is a DISTRIBUTION, and rebuilding
+    # these as zero silently made every wire level deterministic -- which is exactly
+    # what it did until a measurement on the real leagues showed sd 0.00 everywhere.
+    sd = np.asarray(draw.panel.sd, dtype=np.float64)
+    p_zero = np.asarray(draw.panel.p_zero, dtype=np.float64)
     weeks = tuple(int(w) for w in state.weeks)
     ids = list(state.pool.player_ids)
     positions = list(state.pool.position_ids)
@@ -580,8 +606,8 @@ def _outlooks_from_panel(draw: Draw, state: S.LeagueState) -> list[PlayerOutlook
                 week=int(w),
                 position_id=int(pos),
                 mean=float(mean[i, col]),
-                sd=0.0,
-                p_zero=0.0,
+                sd=float(sd[i, col]),
+                p_zero=float(np.clip(p_zero[i, col], 0.0, 1.0)),
                 shape=1.0,
                 scale=1.0,
             )
@@ -647,6 +673,7 @@ class TitleEngine:
         "_factors",
         "_leverage",
         "_moment_cache",
+        "_noise",
         "_mu",
         "_plan_cache",
         "_points",
@@ -715,8 +742,12 @@ class TitleEngine:
         # baseline, which is what `season.team_week_scores(replacement=None)` does and is
         # right only for "how good is this lineup".
         if replacement is None:
-            replacement = streaming_replacement(state, draw)
+            # Levels, not just means: an empty seat has to be PAID, and paying it
+            # the mean gives it zero variance. `_floors` reads the means off these
+            # for the solve, so the lineup decision is unchanged.
+            replacement = streaming_levels(state, draw)
         self.replacement = replacement
+        self._noise = S.FloorNoise(state, draw)
 
         # Stated per-player moments and the availability the tensor actually drew. Using
         # the drawn availability rather than a hazard formula keeps the screen and the
@@ -975,8 +1006,13 @@ class TitleEngine:
         omitted = 0.0
         for g in empty:
             slot = plan.group_slot_ids[g]
-            omitted += float(floors[slot]) * plan.group_counts[g]
-            safe[slot] = 0.0
+            level = floors[slot]
+            # The floors may be WireLevels; the omission correction is a MEAN, because
+            # a group with nothing eligible takes its floor in every week of every
+            # simulation and the constant part is what the guard adds back. Zeroing the
+            # entry still zeroes the credit, because `_floors` derives both from here.
+            omitted += float(getattr(level, "mean", level)) * plan.group_counts[g]
+            safe[slot] = WireLevel(0.0, 0.0, 0.0) if isinstance(level, WireLevel) else 0.0
         return safe, omitted
 
     def _franchise_column(self, franchise: S.Franchise, team: int) -> np.ndarray:
@@ -993,7 +1029,13 @@ class TitleEngine:
         )
         floors, omitted = self._floors_for(plan)
         solo = S._franchise_scores(
-            self.state.pool, franchise, plan, self._points, self._rank, floors
+            self.state.pool,
+            franchise,
+            plan,
+            self._points,
+            self._rank,
+            floors,
+            floor_noise=self._noise.for_plan(plan, team),
         )
         return (solo + np.float32(omitted)) * self._factors[:, team : team + 1]
 
@@ -1027,7 +1069,8 @@ class TitleEngine:
 
         plan = self._plan_for(self._positions[cols])
         floors, omitted = self._floors_for(plan)
-        groups, per_slot, _credit = S._floors(plan, floors)
+        groups, per_slot, credit = S._floors(plan, floors)
+        floor_var = np.zeros(plan.n_slots) if credit is None else np.asarray(credit.variance)
         rank = np.where(avail > 0.0, mu, -np.inf)
         assignment = plan.solve(rank, floor=groups, assignment=True).assignment
         assert assignment is not None
@@ -1054,7 +1097,10 @@ class TitleEngine:
         for i in range(plan.n_slots):
             g = int(group_of[i])
             floor = float(per_slot[i])
-            first, second_moment = floor, floor * floor
+            # Second moment carries the floor's own variance, so the screen and the
+            # confirm price the same world. Without it they diverge on every
+            # candidate that changes how many seats sit empty -- which is all of them.
+            first, second_moment = floor, floor * floor + float(floor_var[i])
             order = bench[g]
             usable = plan._eligible[g][None, :] & ~used
             # Each instance in a group starts one place further down the shared bench, so
