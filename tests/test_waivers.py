@@ -1190,9 +1190,15 @@ class TestBoard:
                 return 0.25
 
         report = _board(priority=4, evaluator=Fake())
-        assert seen and seen[0] == len(report.board)
         assert report.baseline_title == 0.25
-        assert max(r.delta_title for r in report.board) == pytest.approx(0.01 * len(report.board))
+        # More moves are CONFIRMED than are shown: each add is paired against several
+        # drops and only its best pairing reaches the board, because the points screen
+        # and the title objective disagree about which drop is right.
+        assert seen and seen[0] >= len(report.board)
+        adds = [
+            next(p.player_id for p in r.move.players if p.to_team is not None) for r in report.board
+        ]
+        assert len(adds) == len(set(adds)), "one row per player, not one per pairing"
 
     def test_blocking_candidates_come_back_tagged_and_tiny(self):
         report = _board(priority=4, blocks=2)
@@ -1423,3 +1429,38 @@ def test_augment_does_re_roll_the_free_agents_own_pro_team():
     # draw a null move is exactly zero, so every claim is measured against itself.
     eng = RosterSimulator.build(wide.state, wide.draw, 1)
     assert float(np.abs(eng.marginal_points((), ())).max()) == 0.0
+
+
+class TestEveryShortlistedPlayerReachesConfirm:
+    """Points decide the ORDER of the queue; they must not decide who is measured.
+
+    Both filters ahead of `confirm` ranked on marginal points, and a bench body's
+    marginal points with no drop are ~0 because he does not crack the current
+    lineup. So the players whose entire value is covering an injury -- exactly what
+    a bench slot is for -- were cut before the objective that would have priced
+    them was ever computed. On the live board that meant Josh Downs, the third-best
+    body on the wire by the pool's own ranking, never appeared while the
+    fourth-best available defense did.
+    """
+
+    def test_a_points_neutral_candidate_is_still_measured(self):
+        """A player who adds nothing to the current lineup must still be priced."""
+        report = _board(priority=4)
+        adds = [
+            next(p.player_id for p in r.move.players if p.to_team is not None) for r in report.board
+        ]
+        assert len(adds) == len(set(adds)), "one row per player, not one per pairing"
+        assert len(report.board) > 1
+
+    def test_the_board_shows_one_row_per_player_not_per_pairing(self):
+        report = _board(priority=4, drop_pairs=3)
+        adds = [
+            next(p.player_id for p in r.move.players if p.to_team is not None) for r in report.board
+        ]
+        assert len(adds) == len(set(adds))
+
+    def test_drop_pairs_of_one_restores_the_single_pairing_behaviour(self):
+        """The knob is real: at 1 each add is committed to its points-best drop."""
+        wide = _board(priority=4, drop_pairs=3)
+        narrow = _board(priority=4, drop_pairs=1)
+        assert len(wide.board) >= len(narrow.board)

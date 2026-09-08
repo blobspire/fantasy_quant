@@ -135,10 +135,20 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from ..core import Move, MoveKind, PlayerMove, Recommendation, leverage, points_to_win_prob
+from ..core import (
+    Move,
+    MoveKind,
+    PlayerMove,
+    PlayerOutlook,
+    Recommendation,
+    WeeklyOutlook,
+    leverage,
+    points_to_win_prob,
+)
 from ..sim import season as S
 from ..sim.distributions import Draw
 from ..sim.lineup import LineupPlan, plan_from_slots
+from .wire import DEFAULT_WIRE_DEPTH, all_rostered, wire_floor
 
 log = logging.getLogger(__name__)
 
@@ -468,42 +478,56 @@ class ScreenAgreement:
 
 
 def streaming_replacement(
-    state: S.LeagueState, draw: Draw, *, wire_depth: int = 2
+    state: S.LeagueState, draw: Draw, *, wire_depth: int = DEFAULT_WIRE_DEPTH
 ) -> dict[int, float]:
-    """What an unfilled starting slot streams off the wire, in points a week, per slot id.
+    """What an unfilled starting slot streams off the wire, per slot id.
 
     **This is the difference between a recommendation and a joke, and it is not
-    optional.** `sim/season._floors` prices an unfilled slot at zero when no replacement
-    level is supplied, which asks "what if this seat were empty for the rest of the
-    season" -- a question nobody faces, because the wire always has a kicker. Measured on
-    the user's own leagues with an empty seat, dropping Harrison Butker cost 4.15pp of
-    title probability against Justin Jefferson's 3.50pp, and dropping Evan McPherson cost
-    6.53pp against Jonathan Taylor's 5.67pp. A surface that ranks a kicker above a first-
-    round back is not a surface anyone should act on. With the levels this function
-    returns, both kickers price under a tenth of a point, which is what they are worth.
+    optional.** `sim/season._floors` prices an unfilled slot at zero when no
+    replacement level is supplied, which asks "what if this seat were empty for the
+    rest of the season" -- a question nobody faces, because the wire always has a
+    kicker. With an empty seat, dropping Harrison Butker cost 4.15pp of title
+    probability against Justin Jefferson's 3.50pp. A surface that ranks a kicker
+    above a first-round back is not one anyone should act on.
 
-    The level is VOLS: for each slot, rank every player the slot can start by projected
-    points a week and read off the one just past league-wide starter demand, since that
-    is the best body still unrostered. Demand counts every starting slot in the league
-    weighted by how much of its eligible pool this slot shares -- `count * |E_t & E| /
-    |E_t|` -- so a FLEX is charged in full for the RB, WR and TE slots it can raid, and
-    each of those is charged a third of the FLEX in return. On a 12-team 2RB/2WR/1TE/1FLEX
-    league that lands on RB28 / WR28 / TE16 / QB12, against the fixed point in
-    `docs/RESEARCH.md` (RB30 / WR42 / TE12 for its 3WR shape) -- the same construction,
-    with the flex split evenly instead of solved for.
+    Delegates to `decide.wire.wire_floor`, which owns the definition. This function
+    used to carry a second, worse one -- the VOLS demand rank, which reads the bottom
+    of a ROSTER rather than the top of the wire and so priced every bench receiver at
+    exactly zero. See `decide/wire.py` for what that cost.
 
-    Two approximations, both stated. The pool here is the rostered players, so the level
-    is read at the bottom of the roster rather than the top of the wire; where demand
-    runs past the pool -- kickers and defences, where the league rosters exactly one
-    each -- the worst rostered body is used, which is the right answer for those two
-    positions and the reason they stop dominating the board.
+    Two pools, and which one is available decides the answer:
 
-    Players are rated on the weeks they are projected to play rather than on all
-    remaining weeks: a streamed replacement is by construction someone who is playing
-    that week, so averaging a bye into his rate would understate the floor.
+    * The panel covers free agents (`sim_with_free_agents`): the floor is the real
+      wire, which is the number that matters and the one this exists to give.
+    * The panel holds only rostered players (`pipeline.build` pools that way, and it
+      is what `championship_table`, the API and the dashboard all run on): there is
+      no wire to read, so fall back to the VOLS demand rank. That reads the bottom
+      of a roster and is too high -- measured at WR28 8.90/wk against a true
+      best-available WR55 of 6.48 -- but "too high" beats the alternative. Returning
+      zero here would price an unfilled slot as empty for the season, which is the
+      bug that made dropping a kicker cost more title probability than dropping
+      Justin Jefferson.
+    """
+    outlooks = _outlooks_from_panel(draw, state)
+    floors = wire_floor(
+        outlooks, all_rostered(state), state.weeks, state.slot_eligibility, depth=wire_depth
+    )
+    missing = [s for s, v in floors.items() if v <= 0.0]
+    if missing:
+        fallback = _vols_replacement(state, draw)
+        for slot in missing:
+            floors[slot] = fallback.get(slot, 0.0)
+    return floors
 
-    A caller who has run `decide/valuation.py`'s `ReplacementModel` should pass that
-    instead -- it solves the flex-demand fixed point rather than approximating it.
+
+def _vols_replacement(state: S.LeagueState, draw: Draw) -> dict[int, float]:
+    """VOLS demand rank, used only when the panel shows no free agents at a slot.
+
+    For each slot, rank every player it can start by projected points a week and read
+    off the one just past league-wide starter demand. Demand counts every starting
+    slot weighted by how much of its eligible pool this slot shares --
+    `count * |E_t & E| / |E_t|` -- so a FLEX is charged in full for the RB, WR and TE
+    slots it can raid and each of those is charged a third of the FLEX in return.
     """
     mean = np.asarray(draw.panel.mean, dtype=np.float64)
     played = mean > 0.0
@@ -511,8 +535,6 @@ def streaming_replacement(
     rate = np.where(weeks_playing > 0, mean.sum(axis=0) / np.maximum(weeks_playing, 1), 0.0)
     positions = np.asarray(state.pool.position_ids, dtype=np.int64)
 
-    # The starting slots, taken off a compiled plan so bench/IR/invalid rows are dropped
-    # by the same rule the simulator uses rather than by a second copy of it here.
     plan = plan_from_slots(
         state.lineup_slot_counts,
         state.slot_eligibility,
@@ -522,42 +544,55 @@ def streaming_replacement(
     eligible = {s: frozenset(int(p) for p in state.slot_eligibility[s]) for s in slots}
     counts = {s: int(state.lineup_slot_counts[s]) for s in slots}
 
-    # Who is actually unrostered in THIS league. When the panel was built over the
-    # union of rosters and free agents (`sim_with_free_agents`), this is the real
-    # wire and is what an empty slot would truly stream.
-    on_rosters: set[int] = set()
-    for franchise in state.franchises:
-        on_rosters.update(int(p) for p in franchise.player_ids)
-    player_ids = np.asarray(state.pool.player_ids, dtype=np.int64)
-    is_free = ~np.isin(player_ids, list(on_rosters))
-
-    levels: dict[int, float] = {}
+    out: dict[int, float] = {}
     for s in slots:
         wanted = eligible[s]
-        at_slot = np.isin(positions, list(wanted))
-
-        # Preferred: the depth-th best player nobody rosters. `depth` rather than the
-        # very best because the wire is contested -- by the time the slot is empty the
-        # top name is usually gone.
-        free_here = np.sort(rate[at_slot & is_free])[::-1]
-        if free_here.size >= wire_depth:
-            levels[s] = float(free_here[wire_depth - 1])
-            continue
-
-        # Fallback for a panel that holds only rostered players: VOLS demand rank.
-        # This reads the bottom of the ROSTER rather than the top of the wire, which
-        # in a league that carries five receivers is materially too high -- measured
-        # at WR28 8.90/wk against a best-available WR55 of 6.48/wk. Use it only when
-        # the real wire is unknown.
         demand = state.size * sum(
             n * len(eligible[t] & wanted) / len(eligible[t]) for t, n in counts.items()
         )
-        candidates = np.sort(rate[at_slot])[::-1]
-        if candidates.size == 0:
-            levels[s] = 0.0
-        else:
-            levels[s] = float(candidates[min(int(round(demand)), candidates.size - 1)])
-    return levels
+        candidates = np.sort(rate[np.isin(positions, list(wanted))])[::-1]
+        out[s] = (
+            0.0
+            if candidates.size == 0
+            else float(candidates[min(int(round(demand)), candidates.size - 1)])
+        )
+    return out
+
+
+def _outlooks_from_panel(draw: Draw, state: S.LeagueState) -> list[PlayerOutlook]:
+    """Rebuild per-player weekly means from the drawn panel.
+
+    `wire_floor` reads `PlayerOutlook`s and the engine holds a panel, so this is the
+    adapter between them. Only the means are needed -- the floor is a per-week mean,
+    not a distribution -- so the reconstructed outlooks are deliberately partial and
+    are never handed back to a caller.
+    """
+    mean = np.asarray(draw.panel.mean, dtype=np.float64)
+    weeks = tuple(int(w) for w in state.weeks)
+    ids = list(state.pool.player_ids)
+    positions = list(state.pool.position_ids)
+    out: list[PlayerOutlook] = []
+    for col, (pid, pos) in enumerate(zip(ids, positions, strict=True)):
+        by_week = {
+            int(w): WeeklyOutlook(
+                player_id=int(pid),
+                season=0,
+                week=int(w),
+                position_id=int(pos),
+                mean=float(mean[i, col]),
+                sd=0.0,
+                p_zero=0.0,
+                shape=1.0,
+                scale=1.0,
+            )
+            for i, w in enumerate(weeks)
+        }
+        out.append(
+            PlayerOutlook(
+                player_id=int(pid), name="", position_id=int(pos), pro_team_id=0, weeks=by_week
+            )
+        )
+    return out
 
 
 def _spearman(a: Sequence[float], b: Sequence[float]) -> float:

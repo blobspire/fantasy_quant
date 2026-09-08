@@ -113,6 +113,8 @@ from ..sim import season as S
 from ..sim.distributions import Draw, WeeklySampler
 from ..sim.lineup import plan_from_slots
 from .valuation import POSITION_ABBREV
+from .wire import DEFAULT_WIRE_DEPTH as _DEFAULT_WIRE_DEPTH
+from .wire import wire_floor as _wire_floor
 
 if TYPE_CHECKING:  # pragma: no cover - only the type checker needs these
     from ..espn.league import TransactionLog
@@ -134,7 +136,7 @@ DEFAULT_CONTEST_RATE = 0.15
 #: Which unrostered player at a slot the floor reads. 1 would be the best free agent --
 #: usually the player being recommended, so the claim would be priced against itself. 2
 #: is the honest "what could I still stream if I left this slot open".
-DEFAULT_WIRE_DEPTH = 2
+DEFAULT_WIRE_DEPTH = _DEFAULT_WIRE_DEPTH
 
 #: Free agents carried into the simulated pool. The tensor is `(sims, weeks, players)`,
 #: so this is the memory knob: 60 adds about a quarter to a 14-team league's pool.
@@ -250,57 +252,9 @@ def free_agent_pool(
     return tuple(scored[:limit])
 
 
-def wire_floor(
-    outlooks: Sequence[PlayerOutlook],
-    rostered: Iterable[int],
-    weeks: Sequence[int],
-    slot_eligibility: Mapping[int, frozenset[int]],
-    *,
-    depth: int = DEFAULT_WIRE_DEPTH,
-) -> dict[int, float]:
-    """slotId -> the weekly points an unfilled slot would stream off this wire.
-
-    See the module docstring for why this is `depth`-th best rather than best.
-
-    **The `depth`-th best is taken WEEK BY WEEK, not once for the season.** The two are
-    not the same number and the gap is not small. An empty slot is not "the one free
-    agent with the best season total, started seventeen times" -- it is "whoever is best
-    on the wire *that week*", and at a streamed position the identity changes every week.
-    Measured on the user's three leagues, the season-total reading understates the D/ST
-    floor by 1.1-1.3 points a week and the QB floor by 1.1-1.3: about 19-23 points of
-    rest-of-season score per slot, which is more than twice what the whole live board was
-    reporting for its top claim. Under the season-total floor every board came back
-    dominated by "add a second D/ST", and the entire gain was the difference between a
-    real streaming slot and a floor set at one fixed defense's season average.
-
-    The result is a per-week mean, which is what `sim/season.py` wants for `replacement=`
-    -- `_franchise_scores` carries one scalar per slot, so the week-to-week variation has
-    to be averaged out here rather than passed through. `monotone_floor` then lifts a
-    flex to at least the floors of the slots nested inside it, so the values here do not
-    have to be consistent by construction.
-    """
-    owned = {int(p) for p in rostered}
-    span = tuple(int(w) for w in weeks)
-    per_position: dict[int, list[list[float]]] = {}
-    for o in outlooks:
-        if o.player_id in owned:
-            continue
-        row = [o.weeks[w].mean if w in o.weeks else 0.0 for w in span]
-        if not row or sum(row) <= 0.0:
-            continue
-        per_position.setdefault(o.position_id, []).append(row)
-    k = max(int(depth), 1)
-    out: dict[int, float] = {}
-    for slot, eligible in slot_eligibility.items():
-        rows = [r for pos in eligible for r in per_position.get(pos, ())]
-        if not rows:
-            out[slot] = 0.0
-            continue
-        # (players, weeks) sorted best-first down each week's column independently: the
-        # streamer is chosen per week, so the k-th best is a different player each week.
-        grid = -np.sort(-np.asarray(rows, dtype=np.float64), axis=0)
-        out[slot] = float(grid[min(k, grid.shape[0]) - 1].mean())
-    return out
+#: Re-exported from `decide.wire`, which owns the one definition. Kept importable
+#: from here because this module's callers have always found it at this name.
+wire_floor = _wire_floor
 
 
 # --------------------------------------------------------------------------------------
@@ -1777,6 +1731,9 @@ def waiver_board(
     evaluator: MoveEvaluator | None = None,
     candidates: int = DEFAULT_CANDIDATES,
     drops: int = 6,
+    #: How many of the cheapest drops each add is paired against. 1 restores the old
+    #: behaviour of committing to the points-best drop before title probability is known.
+    drop_pairs: int = 3,
     confirm: int = 12,
     screen_sims: int = DEFAULT_SCREEN_SIMS,
     wire_depth: int = DEFAULT_WIRE_DEPTH,
@@ -1855,34 +1812,72 @@ def waiver_board(
     add_gain = {
         a.player_id: float(screener.marginal_points((a.player_id,), ()).mean()) for a in agents
     }
-    shortlist = sorted(agents, key=lambda a: -add_gain[a.player_id])[: max(confirm * 2, confirm)]
+    # The shortlist is the UNION of two orderings, not just the first.
+    #
+    # `add_gain` prices an add with no drop, which is ~0 for anyone who does not
+    # crack the current lineup -- so a bench receiver whose whole value is covering
+    # an injury scores zero here and was cut before he could ever be paired. That is
+    # how Josh Downs (ETR #92, the third-best body on the wire by the pool's own
+    # ranking) failed to reach a board whose top rows were the fourth-best available
+    # defense. `agents` is already ordered by points above the wire's depth at the
+    # position, which is the ordering that knows a WR5 is not a D/ST2, so take the
+    # top of both and let the paired confirm decide between them.
+    width = max(confirm * 2, confirm)
+    by_gain = sorted(agents, key=lambda a: -add_gain[a.player_id])[:width]
+    seen_ids = {a.player_id for a in by_gain}
+    shortlist = [*by_gain, *(a for a in agents[:width] if a.player_id not in seen_ids)]
 
-    screened: list[tuple[FreeAgent, int | None, float]] = []
+    # Every add is paired with each plausible drop and ALL of them go to confirm,
+    # rather than the points-best drop alone.
+    #
+    # The screen ranks on marginal POINTS and the board reports title probability,
+    # and on a live board those disagree: dropping Makai Lemon for Josh Downs COSTS
+    # 0.2 points and GAINS 0.267pp, because the pairing that loses expected points
+    # can still raise the chance of a title through its effect on the spread. A
+    # screen that committed to one drop per add therefore threw away the better
+    # pairing before the objective that matters was ever computed.
+    #
+    # Points still order the queue -- it is the cheap signal and `confirm` is the
+    # expensive one -- but the choice among drops is deferred to the confirm step.
+    pairs: dict[int, list[tuple[FreeAgent, int | None, float]]] = {}
     for agent in shortlist:
-        best: tuple[int | None, float] = (
-            (None, add_gain[agent.player_id])
-            if open_spot
-            else (
-                droppable[0],
-                float("-inf"),
-            )
-        )
-        for pid in droppable:
+        rows: list[tuple[FreeAgent, int | None, float]] = []
+        if open_spot:
+            rows.append((agent, None, add_gain[agent.player_id]))
+        for pid in droppable[:drop_pairs]:
             gain = float(screener.marginal_points((agent.player_id,), (pid,)).mean())
-            if gain > best[1]:
-                best = (pid, gain)
-        screened.append((agent, best[0], best[1]))
-    screened.sort(key=lambda row: -row[2])
+            rows.append((agent, pid, gain))
+        rows.sort(key=lambda row: -row[2])
+        pairs[agent.player_id] = rows
+
+    # EVERY shortlisted player gets at least one pairing through to confirm, and only
+    # then does points ordering decide how the remaining budget is spent.
+    #
+    # Ranking pairs by points and truncating cut exactly the players this board exists
+    # to find. Adding a bench receiver with no drop gains ~0 points because he does not
+    # crack the current lineup, so all of Josh Downs' pairings sorted below the fourth-
+    # best available defense and never reached the objective that would have shown him
+    # at +0.17pp against a 0.12pp threshold. Points are the cheap screen; they are not
+    # the thing being maximised, so they must not be the thing that decides who is
+    # allowed to be measured.
+    guaranteed = [rows[0] for rows in pairs.values() if rows]
+    guaranteed.sort(key=lambda row: -row[2])
+    extra = sorted((row for rows in pairs.values() for row in rows[1:]), key=lambda row: -row[2])
+    # `confirm` bounds how many DISTINCT players are measured; the guaranteed set is
+    # one pairing each, so the budget must clear it or the guarantee is undone by the
+    # very next slice.
+    budget = max(confirm * drop_pairs, confirm, len(guaranteed))
+    screened = [*guaranteed, *extra][:budget]
 
     # -- confirm the survivors on the full draw ----------------------------------------
     names = {p: state.pool.name(p) for p in my_roster}
     moves = [
         claim_move(state.league_id, team_id, agent.player_id, drop_id)
-        for agent, drop_id, _ in screened[:confirm]
+        for agent, drop_id, _ in screened
     ]
     confirmed = confirmer.confirm(moves)
     recs: list[Recommendation] = []
-    for (agent, drop_id, _), rec in zip(screened[:confirm], confirmed, strict=True):
+    for (agent, drop_id, _), rec in zip(screened, confirmed, strict=True):
         recs.append(
             replace(
                 rec,
@@ -1901,7 +1896,17 @@ def waiver_board(
                 ),
             )
         )
-    recs.sort(key=lambda r: -r.delta_title)
+    # One row per player: several drops were confirmed for each add, and the board
+    # should show the best of them rather than the same name three times.
+    best_by_add: dict[int, Recommendation] = {}
+    for rec in recs:
+        add_id = next((p.player_id for p in rec.move.players if p.to_team is not None), None)
+        if add_id is None:
+            continue
+        prior = best_by_add.get(add_id)
+        if prior is None or rec.delta_title > prior.delta_title:
+            best_by_add[add_id] = rec
+    recs = sorted(best_by_add.values(), key=lambda r: -r.delta_title)
 
     # -- what the claim costs ----------------------------------------------------------
     played = max(week - 1, 0)

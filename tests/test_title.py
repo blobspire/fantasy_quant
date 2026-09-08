@@ -26,6 +26,7 @@ from fantasy_quant.core import (
 )
 from fantasy_quant.core import leverage as core_leverage
 from fantasy_quant.decide import title as T
+from fantasy_quant.decide import wire
 from fantasy_quant.projections.calibration import load as load_calibration
 from fantasy_quant.sim import season as S
 from fantasy_quant.sim.distributions import InjuryModel, SimPanel, WeeklySampler
@@ -999,10 +1000,23 @@ class TestFreeAgentsCanBePriced:
             pro_team_id=31,
             weeks={w: _weekly(424242, w, 2, 16.0, 31) for w in state.weeks},
         )
+        # And some scrubs behind him. Without these he IS the wire, so the floor
+        # equals his own projection and claiming him is correctly worth nothing --
+        # a claim is only worth what it beats.
+        scrubs = [
+            PlayerOutlook(
+                player_id=424243 + i,
+                name=f"Wire body {i}",
+                position_id=2,
+                pro_team_id=31,
+                weeks={w: _weekly(424243 + i, w, 2, 3.0, 31) for w in state.weeks},
+            )
+            for i in range(3)
+        ]
         sim = _FakeSim(state=state, draw=draw, outlooks=outlooks, n_sims=400, seed=5)
-        extended = T.sim_with_free_agents(sim, [wire])
+        extended = T.sim_with_free_agents(sim, [wire, *scrubs])
         assert 424242 in extended.state.pool.player_ids
-        assert extended.state.pool.size == state.pool.size + 1
+        assert extended.state.pool.size == state.pool.size + 4
 
         engine = T.TitleEngine(extended.state, extended.draw)
         claim = Move(
@@ -1143,76 +1157,89 @@ def test_leverage_falls_off_as_the_matchup_decides():
 class TestTheFloorIsTheRealWireNotTheRosterBottom:
     """The replacement floor must come from who is actually unrostered.
 
-    Found by a user asking why a clearly better free agent was not being
-    recommended. `streaming_replacement` read the VOLS demand rank -- WR28 in a
-    12-team league -- but in a league that carries five receivers WR28 is
-    ROSTERED. Measured on the real league: the floor said an empty WR slot
-    streams 8.73/wk while the best genuinely available WR (WR55) projected
-    6.48/wk, overstating the wire by 2.25 points a week.
+    Found by a user asking why a clearly better free agent was never recommended.
+    `streaming_replacement` read the VOLS demand rank -- WR28 in a 12-team league --
+    but in a league that carries five receivers WR28 is ROSTERED. Measured on the
+    real league the floor claimed an empty WR slot streams 8.73 points a week while
+    the best genuinely available receiver (WR55) projected 6.48.
 
-    The consequence was not a small bias. Every bench receiver priced below the
-    phantom floor contributed EXACTLY zero, so swapping one for another returned
-    0.000pp +/- 0.000 on bit-identical seasons -- the option value that justifies
-    holding a bench at all was silently zero.
+    The consequence was not a small bias. Every bench receiver below the phantom
+    floor contributed EXACTLY zero, so swapping one for another returned
+    +0.000pp +/- 0.000 on bit-identical seasons -- the option value that justifies
+    carrying a bench at all was silently zero.
     """
 
-    def _state(self, rostered_rates, free_rates):
-        """A league whose roster pool is strong and whose wire is weak."""
-        import numpy as np
+    WEEKS = (1, 2, 3)
 
-        from fantasy_quant.sim import season as S
+    def _outlooks(self, rostered_means, free_means):
+        """Returns (all outlooks, rostered ids, calibrated free means best-first).
 
-        rows, rates = [], []
-        pid = 1
-        for r in rostered_rates:
-            rows.append((pid, 3, 1, f"rostered{pid}"))
-            rates.append(r)
+        The calibrated mean is what the floor actually sees -- `_weekly` puts the
+        projection through the level correction -- so the expectations are read off
+        the fixture rather than restated, which also keeps this honest if the
+        calibration is ever refit.
+        """
+        out, pid, rostered_ids, free_rates = [], 1, [], []
+        for m in rostered_means:
+            out.append(_outlook_at(pid, 3, m, self.WEEKS))
+            rostered_ids.append(pid)
             pid += 1
-        n_rostered = pid - 1
-        for r in free_rates:
-            rows.append((pid, 3, 1, f"free{pid}"))
-            rates.append(r)
+        for m in free_means:
+            o = _outlook_at(pid, 3, m, self.WEEKS)
+            out.append(o)
+            free_rates.append(sum(o.weeks[w].mean for w in self.WEEKS) / len(self.WEEKS))
             pid += 1
-        pool = S.PlayerPool.of(rows)
-        franchises = (
-            S.Franchise(team_id=1, name="me", player_ids=tuple(range(1, n_rostered + 1))),
-        )
-        state = type(
-            "St",
-            (),
-            {
-                "pool": pool,
-                "franchises": franchises,
-                "size": 12,
-                "lineup_slot_counts": {4: 2, 20: 5},
-                "slot_eligibility": {4: frozenset({3}), 20: frozenset({3})},
-            },
-        )()
-        mean = np.array([rates], dtype=np.float64)  # one week
-        draw = type("D", (), {"panel": type("P", (), {"mean": mean})()})()
-        return state, draw
+        return out, rostered_ids, sorted(free_rates, reverse=True)
 
-    def test_the_floor_tracks_the_wire_not_the_roster(self):
-        from fantasy_quant.decide.title import streaming_replacement
-
-        # Twenty strong rostered receivers, three weak free ones.
-        state, draw = self._state([12.0] * 20, [6.5, 6.0, 5.5])
-        floors = streaming_replacement(state, draw, wire_depth=2)
-        # depth 2 -> the second best AVAILABLE, 6.0, not anything off the roster.
-        assert floors[4] == pytest.approx(6.0)
-        assert floors[4] < 12.0, "the floor must not be read off rostered players"
+    def test_the_floor_reads_the_wire_not_the_roster(self):
+        """Twenty strong rostered receivers, three weak free ones."""
+        outlooks, rostered, free = self._outlooks([12.0] * 20, [6.5, 6.0, 5.5])
+        floors = wire.wire_floor(outlooks, rostered, self.WEEKS, {4: frozenset({3})}, depth=2)
+        assert floors[4] == pytest.approx(free[1])  # 2nd best AVAILABLE
+        assert floors[4] < free[0] * 1.6, "the floor must not be read off rostered players"
 
     def test_a_deeper_wire_depth_takes_a_worse_body(self):
-        from fantasy_quant.decide.title import streaming_replacement
+        outlooks, rostered, free = self._outlooks([12.0] * 20, [6.5, 6.0, 5.5])
+        el = {4: frozenset({3})}
+        got = [wire.wire_floor(outlooks, rostered, self.WEEKS, el, depth=d)[4] for d in (1, 2, 3)]
+        assert got == [pytest.approx(f) for f in free]
+        assert got[0] > got[1] > got[2], "a deeper wire must be a worse body"
 
-        state, draw = self._state([12.0] * 20, [6.5, 6.0, 5.5])
-        assert streaming_replacement(state, draw, wire_depth=1)[4] == pytest.approx(6.5)
-        assert streaming_replacement(state, draw, wire_depth=3)[4] == pytest.approx(5.5)
+    def test_an_empty_wire_floors_at_zero_so_the_caller_can_fall_back(self):
+        """`streaming_replacement` detects this and substitutes the VOLS rank; the
+        primitive itself must report honestly that it found nobody."""
+        outlooks, rostered, _ = self._outlooks([12.0] * 20, [])
+        assert wire.wire_floor(outlooks, rostered, self.WEEKS, {4: frozenset({3})})[4] == 0.0
 
-    def test_it_falls_back_when_the_panel_holds_no_free_agents(self):
-        """`pipeline.build` pools only rostered players; the old VOLS path is still
-        the best available answer there, and must not return zero."""
-        from fantasy_quant.decide.title import streaming_replacement
+    def test_the_streamer_is_chosen_per_week_not_once_for_the_season(self):
+        """Two free agents who alternate: each is best in different weeks, so the
+        week-by-week floor is strictly above either one's season average."""
+        weeks = (1, 2)
+        a = PlayerOutlook(
+            player_id=91,
+            name="a",
+            position_id=3,
+            pro_team_id=1,
+            weeks={1: _weekly(91, 1, 3, 10.0, 1), 2: _weekly(91, 2, 3, 2.0, 1)},
+        )
+        b = PlayerOutlook(
+            player_id=92,
+            name="b",
+            position_id=3,
+            pro_team_id=1,
+            weeks={1: _weekly(92, 1, 3, 2.0, 1), 2: _weekly(92, 2, 3, 10.0, 1)},
+        )
+        floor = wire.wire_floor([a, b], [], weeks, {4: frozenset({3})}, depth=1)[4]
+        season_avg = max(sum(o.weeks[w].mean for w in weeks) / len(weeks) for o in (a, b))
+        assert floor > season_avg, "the streamer is picked per week, not once for the season"
 
-        state, draw = self._state([12.0] * 20, [])
-        assert streaming_replacement(state, draw, wire_depth=2)[4] > 0.0
+
+def _outlook_at(pid: int, position_id: int, mean: float, weeks) -> PlayerOutlook:
+    """A player projected at a flat `mean` every week."""
+    return PlayerOutlook(
+        player_id=pid,
+        name=f"p{pid}",
+        position_id=position_id,
+        pro_team_id=1,
+        weeks={w: _weekly(pid, w, position_id, mean, 1) for w in weeks},
+    )
