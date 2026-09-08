@@ -211,6 +211,43 @@ def calibrated_outlooks(
     ]
 
 
+def _zeroed(player_id: int, season: int, week: int, position_id: int) -> WeeklyOutlook:
+    """A week this player will not play: no points, no variance, not startable."""
+    return WeeklyOutlook(
+        player_id=int(player_id), season=season, week=week, position_id=position_id,
+        mean=0.0, sd=0.0, p_zero=1.0, shape=1.0, scale=1.0, pro_team_id=0, playing=False,
+    )
+
+
+def _fill_weeks(
+    outlooks: Sequence[PlayerOutlook], weeks: Sequence[int], season: int
+) -> list[PlayerOutlook]:
+    """Ensure every outlook covers every remaining week, zeroing the gaps.
+
+    ESPN emits no projection row for a bye, so a defense's outlook covers 17 of 18
+    weeks. `panel_for` refuses a partial outlook rather than silently drawing the
+    gap as zero -- correctly, because a silent zero would make the whole team score
+    nothing that week -- so the gaps have to be filled explicitly as "not playing".
+    """
+    want = set(weeks)
+    out: list[PlayerOutlook] = []
+    for o in outlooks:
+        gaps = want - set(o.weeks)
+        if not gaps:
+            out.append(o)
+            continue
+        filled = dict(o.weeks)
+        for w in gaps:
+            filled[w] = _zeroed(o.player_id, season, w, o.position_id)
+        out.append(
+            PlayerOutlook(
+                player_id=o.player_id, name=o.name, position_id=o.position_id,
+                pro_team_id=o.pro_team_id, weeks=filled,
+            )
+        )
+    return out
+
+
 def _fill_unprojected(
     outlooks: Sequence[PlayerOutlook], state: S.LeagueState, season: int
 ) -> list[PlayerOutlook]:
@@ -223,10 +260,10 @@ def _fill_unprojected(
     """
     have = {o.player_id for o in outlooks}
     missing = [pid for pid in state.pool.player_ids if pid not in have]
+    weeks = tuple(state.weeks)
+    outlooks = _fill_weeks(outlooks, weeks, season)
     if not missing:
         return list(outlooks)
-
-    weeks = tuple(state.weeks)
     positions = state.pool.positions_of(missing)
     filled = list(outlooks)
     for pid, pos in zip(missing, positions, strict=True):

@@ -467,7 +467,9 @@ class ScreenAgreement:
         return 1000.0 * self.confirm_seconds / self.n if self.n else 0.0
 
 
-def streaming_replacement(state: S.LeagueState, draw: Draw) -> dict[int, float]:
+def streaming_replacement(
+    state: S.LeagueState, draw: Draw, *, wire_depth: int = 2
+) -> dict[int, float]:
     """What an unfilled starting slot streams off the wire, in points a week, per slot id.
 
     **This is the difference between a recommendation and a joke, and it is not
@@ -520,13 +522,37 @@ def streaming_replacement(state: S.LeagueState, draw: Draw) -> dict[int, float]:
     eligible = {s: frozenset(int(p) for p in state.slot_eligibility[s]) for s in slots}
     counts = {s: int(state.lineup_slot_counts[s]) for s in slots}
 
+    # Who is actually unrostered in THIS league. When the panel was built over the
+    # union of rosters and free agents (`sim_with_free_agents`), this is the real
+    # wire and is what an empty slot would truly stream.
+    on_rosters: set[int] = set()
+    for franchise in state.franchises:
+        on_rosters.update(int(p) for p in franchise.player_ids)
+    player_ids = np.asarray(state.pool.player_ids, dtype=np.int64)
+    is_free = ~np.isin(player_ids, list(on_rosters))
+
     levels: dict[int, float] = {}
     for s in slots:
         wanted = eligible[s]
+        at_slot = np.isin(positions, list(wanted))
+
+        # Preferred: the depth-th best player nobody rosters. `depth` rather than the
+        # very best because the wire is contested -- by the time the slot is empty the
+        # top name is usually gone.
+        free_here = np.sort(rate[at_slot & is_free])[::-1]
+        if free_here.size >= wire_depth:
+            levels[s] = float(free_here[wire_depth - 1])
+            continue
+
+        # Fallback for a panel that holds only rostered players: VOLS demand rank.
+        # This reads the bottom of the ROSTER rather than the top of the wire, which
+        # in a league that carries five receivers is materially too high -- measured
+        # at WR28 8.90/wk against a best-available WR55 of 6.48/wk. Use it only when
+        # the real wire is unknown.
         demand = state.size * sum(
             n * len(eligible[t] & wanted) / len(eligible[t]) for t, n in counts.items()
         )
-        candidates = np.sort(rate[np.isin(positions, list(wanted))])[::-1]
+        candidates = np.sort(rate[at_slot])[::-1]
         if candidates.size == 0:
             levels[s] = 0.0
         else:

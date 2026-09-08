@@ -1138,3 +1138,81 @@ def test_leverage_falls_off_as_the_matchup_decides():
     assert at(2.0).decided and not at(0.0).decided
     # A point is worth less the more decided the week is, which is the whole claim.
     assert at(2.0).points_per_win_pct < at(1.5).points_per_win_pct < at(0.0).points_per_win_pct
+
+
+class TestTheFloorIsTheRealWireNotTheRosterBottom:
+    """The replacement floor must come from who is actually unrostered.
+
+    Found by a user asking why a clearly better free agent was not being
+    recommended. `streaming_replacement` read the VOLS demand rank -- WR28 in a
+    12-team league -- but in a league that carries five receivers WR28 is
+    ROSTERED. Measured on the real league: the floor said an empty WR slot
+    streams 8.73/wk while the best genuinely available WR (WR55) projected
+    6.48/wk, overstating the wire by 2.25 points a week.
+
+    The consequence was not a small bias. Every bench receiver priced below the
+    phantom floor contributed EXACTLY zero, so swapping one for another returned
+    0.000pp +/- 0.000 on bit-identical seasons -- the option value that justifies
+    holding a bench at all was silently zero.
+    """
+
+    def _state(self, rostered_rates, free_rates):
+        """A league whose roster pool is strong and whose wire is weak."""
+        import numpy as np
+
+        from fantasy_quant.sim import season as S
+
+        rows, rates = [], []
+        pid = 1
+        for r in rostered_rates:
+            rows.append((pid, 3, 1, f"rostered{pid}"))
+            rates.append(r)
+            pid += 1
+        n_rostered = pid - 1
+        for r in free_rates:
+            rows.append((pid, 3, 1, f"free{pid}"))
+            rates.append(r)
+            pid += 1
+        pool = S.PlayerPool.of(rows)
+        franchises = (
+            S.Franchise(team_id=1, name="me", player_ids=tuple(range(1, n_rostered + 1))),
+        )
+        state = type(
+            "St",
+            (),
+            {
+                "pool": pool,
+                "franchises": franchises,
+                "size": 12,
+                "lineup_slot_counts": {4: 2, 20: 5},
+                "slot_eligibility": {4: frozenset({3}), 20: frozenset({3})},
+            },
+        )()
+        mean = np.array([rates], dtype=np.float64)  # one week
+        draw = type("D", (), {"panel": type("P", (), {"mean": mean})()})()
+        return state, draw
+
+    def test_the_floor_tracks_the_wire_not_the_roster(self):
+        from fantasy_quant.decide.title import streaming_replacement
+
+        # Twenty strong rostered receivers, three weak free ones.
+        state, draw = self._state([12.0] * 20, [6.5, 6.0, 5.5])
+        floors = streaming_replacement(state, draw, wire_depth=2)
+        # depth 2 -> the second best AVAILABLE, 6.0, not anything off the roster.
+        assert floors[4] == pytest.approx(6.0)
+        assert floors[4] < 12.0, "the floor must not be read off rostered players"
+
+    def test_a_deeper_wire_depth_takes_a_worse_body(self):
+        from fantasy_quant.decide.title import streaming_replacement
+
+        state, draw = self._state([12.0] * 20, [6.5, 6.0, 5.5])
+        assert streaming_replacement(state, draw, wire_depth=1)[4] == pytest.approx(6.5)
+        assert streaming_replacement(state, draw, wire_depth=3)[4] == pytest.approx(5.5)
+
+    def test_it_falls_back_when_the_panel_holds_no_free_agents(self):
+        """`pipeline.build` pools only rostered players; the old VOLS path is still
+        the best available answer there, and must not return zero."""
+        from fantasy_quant.decide.title import streaming_replacement
+
+        state, draw = self._state([12.0] * 20, [])
+        assert streaming_replacement(state, draw, wire_depth=2)[4] > 0.0
