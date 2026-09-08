@@ -479,7 +479,11 @@ class ScreenAgreement:
 
 
 def streaming_replacement(
-    state: S.LeagueState, draw: Draw, *, wire_depth: int = DEFAULT_WIRE_DEPTH
+    state: S.LeagueState,
+    draw: Draw,
+    *,
+    wire_depth: int = DEFAULT_WIRE_DEPTH,
+    outlooks: Sequence[PlayerOutlook] | None = None,
 ) -> dict[int, float]:
     """What an unfilled starting slot streams off the wire, per slot id.
 
@@ -511,12 +515,18 @@ def streaming_replacement(
     """
     return {
         slot: level.mean
-        for slot, level in streaming_levels(state, draw, wire_depth=wire_depth).items()
+        for slot, level in streaming_levels(
+            state, draw, wire_depth=wire_depth, outlooks=outlooks
+        ).items()
     }
 
 
 def streaming_levels(
-    state: S.LeagueState, draw: Draw, *, wire_depth: int = DEFAULT_WIRE_DEPTH
+    state: S.LeagueState,
+    draw: Draw,
+    *,
+    wire_depth: int = DEFAULT_WIRE_DEPTH,
+    outlooks: Sequence[PlayerOutlook] | None = None,
 ) -> dict[int, WireLevel]:
     """`streaming_replacement`, plus how much that level VARIES.
 
@@ -529,9 +539,15 @@ def streaming_levels(
     rank still gives a defensible LEVEL, so the seat keeps its floor and stays
     deterministic rather than being handed an invented spread.
     """
-    outlooks = _outlooks_from_panel(draw, state)
+    # `outlooks` is the WIRE. Without it this reads the panel, and on every production
+    # path `pipeline.build` pools only rostered players -- so the wire came back empty at
+    # every slot and fell through to the VOLS roster-bottom rank, which is the precise
+    # bug `decide/wire.py` was extracted to eliminate. Measured on the live leagues that
+    # put the RB floor at 9.22 against a true 4.55, and ranked Harrison Butker as a more
+    # costly drop than Luther Burden III. Callers holding `sim.outlooks` must pass it.
+    pool = list(outlooks) if outlooks is not None else _outlooks_from_panel(draw, state)
     levels = wire_levels(
-        outlooks, all_rostered(state), state.weeks, state.slot_eligibility, depth=wire_depth
+        pool, all_rostered(state), state.weeks, state.slot_eligibility, depth=wire_depth
     )
     missing = [slot for slot, v in levels.items() if v.mean <= 0.0]
     if missing:
@@ -698,6 +714,7 @@ class TitleEngine:
         draw: Draw,
         *,
         replacement: Mapping[int, float] | float | None = None,
+        outlooks: Sequence[PlayerOutlook] | None = None,
         efficiency: S.LineupEfficiency | np.ndarray | None = None,
         all_play: bool = False,
         surrogate_sims: int | None = None,
@@ -745,7 +762,7 @@ class TitleEngine:
             # Levels, not just means: an empty seat has to be PAID, and paying it
             # the mean gives it zero variance. `_floors` reads the means off these
             # for the solve, so the lineup decision is unchanged.
-            replacement = streaming_levels(state, draw)
+            replacement = streaming_levels(state, draw, outlooks=outlooks)
         self.replacement = replacement
         self._noise = S.FloorNoise(state, draw)
 
@@ -780,7 +797,13 @@ class TitleEngine:
 
     @classmethod
     def from_sim(cls, sim, **kwargs) -> TitleEngine:
-        """From a `pipeline.LeagueSim`, which is how a live league arrives."""
+        """From a `pipeline.LeagueSim`, which is how a live league arrives.
+
+        Passes `sim.outlooks` -- the whole wire, not just the rostered players the
+        state's pool holds -- because otherwise the floor silently falls back to the
+        VOLS roster-bottom rank on every production path.
+        """
+        kwargs.setdefault("outlooks", getattr(sim, "outlooks", None))
         return cls(sim.state, sim.draw, **kwargs)
 
     # -- the baseline ------------------------------------------------------------------

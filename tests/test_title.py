@@ -1245,3 +1245,89 @@ def _outlook_at(pid: int, position_id: int, mean: float, weeks) -> PlayerOutlook
         pro_team_id=1,
         weeks={w: _weekly(pid, w, position_id, mean, 1) for w in weeks},
     )
+
+
+class TestTheProductionPathReadsTheRealWire:
+    """`from_sim` must hand the engine the WIRE, not just the rostered pool.
+
+    This is the floor bug, found a second time in a different place. `decide/wire.py`
+    was extracted so there is exactly one answer to "what does an empty seat stream",
+    and then `streaming_levels` was given a pool with no free agents in it: on every
+    production path `pipeline.build` pools only rostered players, so the wire read
+    came back 0.00 at every slot and fell through to the VOLS roster-bottom rank --
+    the precise thing wire.py exists to prevent.
+
+    Measured on the live leagues before the fix: RB floored at 9.22 against a true
+    4.55, and dropping Harrison Butker (K) priced as MORE costly than dropping Luther
+    Burden III (WR), 0.925pp against 0.375pp. The truth is the other way round by a
+    factor of six.
+    """
+
+    def test_from_sim_passes_the_outlooks_through(self):
+        """The one-argument fix, pinned. Without it the engine never sees the wire."""
+
+        class FakeSim:
+            def __init__(self, state, draw, outlooks):
+                self.state, self.draw, self.outlooks = state, draw, outlooks
+
+        state, draw, outlooks = build_league(
+            n_teams=6,
+            playoff_team_count=4,
+            n_sims=200,
+            reg_weeks=(1, 2, 3, 4),
+            rounds=((5,), (6,)),
+            with_outlooks=True,
+        )
+        seen: dict[str, object] = {}
+        real = T.streaming_levels
+
+        def spy(st, dr, **kw):
+            seen["outlooks"] = kw.get("outlooks")
+            return real(st, dr, **kw)
+
+        T.streaming_levels = spy
+        try:
+            T.TitleEngine.from_sim(FakeSim(state, draw, outlooks))
+        finally:
+            T.streaming_levels = real
+        assert seen["outlooks"] is not None, "from_sim dropped the wire on the floor"
+        assert len(seen["outlooks"]) == len(outlooks)
+
+    def test_a_pool_with_no_free_agents_still_floors_above_zero(self):
+        """The fallback must survive: `pipeline.build` really does pool only rostered
+        players, and returning zero there reinstates the empty-seat bug."""
+        state, draw = build_league(
+            n_teams=6, playoff_team_count=4, n_sims=200, reg_weeks=(1, 2, 3, 4), rounds=((5,), (6,))
+        )
+        levels = T.streaming_levels(state, draw)
+        assert all(v.mean > 0.0 for v in levels.values())
+
+    def test_the_wire_beats_the_roster_bottom_when_both_are_available(self):
+        """The two answers differ, and the wire is the right one. If these ever agree
+        the test has stopped discriminating."""
+        state, draw, outlooks = build_league(
+            n_teams=6,
+            playoff_team_count=4,
+            n_sims=200,
+            reg_weeks=(1, 2, 3, 4),
+            rounds=((5,), (6,)),
+            with_outlooks=True,
+        )
+        # A real wire: bodies nobody rosters. Passing only the rostered outlooks leaves
+        # the wire empty, both readings fall back to VOLS, and the test proves nothing.
+        wire = [
+            PlayerOutlook(
+                player_id=900_000 + i,
+                name=f"wire{i}",
+                position_id=pos,
+                pro_team_id=31,
+                weeks={w: _weekly(900_000 + i, w, pos, 2.0, 31) for w in state.weeks},
+            )
+            for i, pos in enumerate([1, 2, 2, 3, 3, 3, 4, 5, 16] * 2)
+        ]
+        from_panel = T.streaming_levels(state, draw)
+        from_wire = T.streaming_levels(state, draw, outlooks=[*outlooks, *wire])
+        assert set(from_panel) == set(from_wire)
+        assert any(abs(from_panel[s].mean - from_wire[s].mean) > 1e-9 for s in from_panel), (
+            "the panel and the wire gave the same answer; this test proves nothing"
+        )
