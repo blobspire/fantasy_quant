@@ -91,10 +91,11 @@ import math
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from ..core import WireLevel
 from .distributions import Draw, SimPanel
 from .lineup import LineupPlan, monotone_floor, plan_from_slots
 
@@ -651,6 +652,7 @@ def _franchise_scores(
     points: np.ndarray,
     rank_source: np.ndarray,
     replacement: Mapping[int, float] | float | None = None,
+    floor_noise: np.ndarray | None = None,
 ) -> np.ndarray:
     """One franchise's `(sims, weeks)` starting-lineup totals.
 
@@ -658,18 +660,127 @@ def _franchise_scores(
     array unless the caller asked for hindsight. `allow_empty=True` floors every slot at
     zero, so a projected-zero or unavailable player is left on the bench rather than
     started for a guaranteed nothing.
+
+    `floor_noise` is `(sims, weeks, n_slots)` uniforms ALREADY GATHERED INTO
+    `plan.slot_ids` ORDER by the caller. That ordering is a per-roster lexsort -- seat 1
+    is the D/ST on one roster and the TE on another -- so a tensor indexed by raw seat
+    position is the 3-D version of the transposition this module warns about below, and
+    no existing test would catch it. Passing `None` reproduces the deterministic floor
+    exactly, which is what every scalar and mean-only caller still gets.
     """
     n_sims, n_weeks = points.shape[0], points.shape[1]
     if not franchise.player_ids:
         return np.zeros((n_sims, n_weeks), dtype=np.float32)
     cols = pool.columns(franchise.player_ids)
-    floor, per_slot = _floors(plan, replacement)
+    floor, per_slot, credit = _floors(plan, replacement)
     chosen = plan.solve(rank_source[:, :, cols], floor=floor, assignment=True).assignment
     assert chosen is not None  # assignment=True always populates it
     started = np.broadcast_to(chosen, (n_sims, n_weeks, chosen.shape[-1]))
     got = np.take_along_axis(points[:, :, cols], np.where(started < 0, 0, started), axis=-1)
-    filled = np.where(started < 0, per_slot, got)
+
+    # An empty seat is paid what a streamer would actually have scored, not the mean of
+    # what a streamer scores. Same distinction the rest of this function already makes:
+    # the lineup is CHOSEN on projections and SCORED on the realisation. Without the
+    # draw, 15.7% of slot-weeks on a live league contributed a constant with no variance.
+    empty = started < 0
+    if credit is None or floor_noise is None:
+        filled = np.where(empty, per_slot, got)
+    else:
+        filled = np.where(empty, credit.credit(floor_noise), got)
     return filled.sum(axis=-1, dtype=np.float32)
+
+
+class FloorNoise:
+    """Uniforms for what each empty seat streams, stable across candidate rosters.
+
+    Two properties do all the work here.
+
+    **Independent per team and per seat.** A single shared body would cancel in
+    `Var(A) + Var(B) - 2Cov(A,B)`, and empties are strongly correlated across teams
+    because byes are league-wide. Measured on the fixture, sharing one body recovers
+    only 7.5% of the spread against 12.6% for independent seats -- 40% of the fix
+    thrown away.
+
+    **Keyed on a CANONICAL seat, not a positional index.** `plan.slot_ids` is a
+    per-roster lexsort: seat 1 is the D/ST on one roster and the TE on another. A
+    tensor indexed by raw position would silently pay the kicker's draw to the tight
+    end the moment a roster changed shape, which is exactly the transposition
+    `_floors` warns about, one dimension up. The canonical key is
+    `(slot_id, occurrence)` derived from the league's own `lineup_slot_counts`, so it
+    is fixed for the league and survives any roster change.
+
+    Fixed per `(seed, n_sims)` so common random numbers hold: two candidate rosters
+    meet the same football AND the same wire.
+    """
+
+    __slots__ = ("_canonical", "_u")
+
+    def __init__(self, state: LeagueState, draw: Draw) -> None:
+        seats: list[tuple[int, int]] = []
+        for slot, count in sorted(state.lineup_slot_counts.items()):
+            seats.extend((int(slot), i) for i in range(int(count)))
+        self._canonical = {seat: i for i, seat in enumerate(seats)}
+        rng = np.random.default_rng(np.random.SeedSequence(draw.seed, spawn_key=(0xF100_0000,)))
+        n_teams = max(len(state.franchises), 1)
+        self._u = rng.random(
+            (draw.n_sims, len(state.weeks), n_teams, max(len(seats), 1)), dtype=np.float64
+        )
+
+    def for_plan(self, plan: LineupPlan, team_index: int) -> np.ndarray:
+        """`(sims, weeks, n_slots)` uniforms in this plan's own seat order."""
+        seen: dict[int, int] = {}
+        cols = []
+        for slot in plan.slot_ids:
+            occurrence = seen.get(slot, 0)
+            seen[slot] = occurrence + 1
+            cols.append(self._canonical.get((int(slot), occurrence), 0))
+        return self._u[:, :, team_index, :][:, :, np.asarray(cols, dtype=np.intp)]
+
+
+@dataclass(frozen=True, slots=True)
+class _CreditParams:
+    """Per-slot hurdle-gamma parameters for what an empty seat is paid.
+
+    Solved so the credit's expectation is EXACTLY the floor the solver committed to.
+    Anything else and the lineup decision and the payoff price different rosters.
+    """
+
+    p_zero: np.ndarray
+    shape: np.ndarray
+    scale: np.ndarray
+
+    @classmethod
+    def solve(cls, mean: np.ndarray, sd: np.ndarray, p_zero: np.ndarray) -> _CreditParams:
+        from ..projections.calibration import hurdle_gamma_from_moments
+
+        p, sh, sc = [], [], []
+        for m, s_, z in zip(mean, sd, p_zero, strict=True):
+            g = hurdle_gamma_from_moments(float(m), float(s_), float(z))
+            p.append(g.p_zero)
+            sh.append(g.shape)
+            sc.append(g.scale)
+        return cls(np.asarray(p), np.asarray(sh), np.asarray(sc))
+
+    def credit(self, u: np.ndarray) -> np.ndarray:
+        """`(sims, weeks, slots)` payouts from `(sims, weeks, slots)` uniforms."""
+        from .distributions import hurdle_gamma_quantile
+
+        return hurdle_gamma_quantile(
+            u, self.p_zero[None, None, :], self.shape[None, None, :], self.scale[None, None, :]
+        )
+
+
+def _as_levels(replacement: Mapping[int, Any]) -> dict[int, WireLevel]:
+    """Normalise a mean-only mapping or a full `WireLevel` mapping to WireLevels.
+
+    A mean-only mapping is the historical spelling and stays deterministic: a caller
+    who passes `replacement={17: 8.0}` is asserting a number, not a distribution, and
+    every test that reasons about that number must keep getting it back exactly.
+    """
+    return {
+        int(k): (v if isinstance(v, WireLevel) else WireLevel(float(v), 0.0, 0.0))
+        for k, v in replacement.items()
+    }
 
 
 def _floors(
@@ -699,11 +810,31 @@ def _floors(
     is reporting.
     """
     if replacement is None:
-        return None, np.zeros(plan.n_slots, dtype=np.float32)
-    groups = monotone_floor(plan, replacement)[0]
+        zeros = np.zeros(plan.n_slots, dtype=np.float32)
+        return None, zeros, None
+
+    # The solve sees MEANS only. The lift is a statement about which body a wider slot
+    # could reach, so applying it to a draw would let a manager gain points by leaving
+    # the FLEX empty -- hindsight through the back door. Lift the mean; sample around it.
+    if not isinstance(replacement, Mapping):
+        # A bare scalar asserts a number, not a distribution. Unchanged path.
+        groups = monotone_floor(plan, replacement)[0]
+        index = {slot: g for g, slot in enumerate(plan.floor_slot_ids)}
+        return groups, np.array([groups[index[s]] for s in plan.slot_ids], dtype=np.float32), None
+
+    levels = _as_levels(replacement)
+    means = {slot: level.mean for slot, level in levels.items()}
+    groups = monotone_floor(plan, means)[0]
     index = {slot: g for g, slot in enumerate(plan.floor_slot_ids)}
     per_slot = np.array([groups[index[s]] for s in plan.slot_ids], dtype=np.float32)
-    return groups, per_slot
+
+    if not any(level.sd > 0.0 for level in levels.values()):
+        return groups, per_slot, None
+    # `per_slot` is the LIFTED mean, so the credit must be re-solved against it rather
+    # than against the slot's own unlifted mean, or E[credit] != the solve floor.
+    spread = np.array([levels[s].sd for s in plan.slot_ids], dtype=np.float64)
+    hurdle = np.array([levels[s].p_zero for s in plan.slot_ids], dtype=np.float64)
+    return groups, per_slot, _CreditParams.solve(per_slot.astype(np.float64), spread, hurdle)
 
 
 def measure_hindsight_ratio(state: LeagueState, draw: Draw) -> float:

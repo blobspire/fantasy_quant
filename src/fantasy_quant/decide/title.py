@@ -1027,7 +1027,7 @@ class TitleEngine:
 
         plan = self._plan_for(self._positions[cols])
         floors, omitted = self._floors_for(plan)
-        groups, per_slot = S._floors(plan, floors)
+        groups, per_slot, _credit = S._floors(plan, floors)
         rank = np.where(avail > 0.0, mu, -np.inf)
         assignment = plan.solve(rank, floor=groups, assignment=True).assignment
         assert assignment is not None
@@ -1099,7 +1099,7 @@ class TitleEngine:
         cols = self._columns(player_ids)
         mu, sd = self._mu[:, cols], self._sd[:, cols]
         plan = self._plan_for(self._positions[cols])
-        groups, per_slot = S._floors(plan, self.replacement)
+        groups, per_slot, _credit = S._floors(plan, self.replacement)
         rank = np.where(self._avail[:, cols] > 0.0, mu, -np.inf)
         assignment = plan.solve(rank, floor=groups, assignment=True).assignment
         assert assignment is not None

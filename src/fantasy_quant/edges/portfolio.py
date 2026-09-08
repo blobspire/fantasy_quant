@@ -396,7 +396,7 @@ def _starting_shares(
     positions = state.pool.positions_of(franchise.player_ids)
     plan = plan_from_slots(state.lineup_slot_counts, state.slot_eligibility, positions)
     floors, _ = _floors_for(plan, replacement)
-    groups, _ = S._floors(plan, floors)
+    groups, _per_slot, _credit = S._floors(plan, floors)
     mean = np.asarray(draw.panel.mean, dtype=np.float64)[:, cols]
     playing = np.asarray(draw.panel.has_game)[:, cols]
     rank = np.where(playing, mean, -np.inf)

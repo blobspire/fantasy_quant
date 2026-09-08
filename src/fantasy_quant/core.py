@@ -289,6 +289,27 @@ class Recommendation:
         return self.delta_title < other.delta_title
 
 
+@dataclass(frozen=True, slots=True)
+class WireLevel:
+    """What an unfilled starting slot streams off the wire, as a DISTRIBUTION.
+
+    Lives here rather than in `decide/wire.py` because it is a contract between the
+    layer that measures the wire (decide) and the layer that credits an empty seat
+    (sim), and `sim` must not import `decide`.
+
+    All three moments are read off the same body -- the player who is k-th best by
+    projection in a given week -- so the triple is internally consistent and
+    `calibration.hurdle_gamma_from_moments` reproduces it exactly. That is what lets
+    the credited value have the solve floor as its mean by construction: the lineup
+    decision is made on `mean`, and the seat is then paid a draw whose expectation is
+    that same `mean`.
+    """
+
+    mean: float
+    sd: float
+    p_zero: float
+
+
 class MoveEvaluator(Protocol):
     """Scores candidate moves in championship probability.
 

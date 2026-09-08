@@ -23,29 +23,14 @@ different questions and the bug was using one where the other belongs.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
 
 import numpy as np
 
-from ..core import PlayerOutlook
+from ..core import PlayerOutlook, WireLevel
 
 #: Second-best rather than best, because the wire is contested: by the time the
 #: seat is empty the obvious name is usually gone.
 DEFAULT_WIRE_DEPTH = 2
-
-
-@dataclass(frozen=True, slots=True)
-class WireLevel:
-    """What an empty seat streams, as a DISTRIBUTION rather than a number.
-
-    All three moments are read off the SAME body -- the player who is k-th best by
-    projection in a given week -- so the triple is internally consistent and
-    `calibration.hurdle_gamma_from_moments` can reproduce it exactly.
-    """
-
-    mean: float
-    sd: float
-    p_zero: float
 
 
 def wire_floor(
@@ -155,3 +140,7 @@ def all_rostered(state) -> set[int]:
     for franchise in state.franchises:
         owned.update(int(p) for p in franchise.player_ids)
     return owned
+
+
+#: Re-exported: `WireLevel` is defined in core.py so `sim` can use it too.
+__all__ = ["DEFAULT_WIRE_DEPTH", "WireLevel", "all_rostered", "wire_floor", "wire_levels"]
