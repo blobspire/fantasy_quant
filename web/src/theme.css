@@ -1,0 +1,1088 @@
+/* ==========================================================================
+   fq design system
+   --------------------------------------------------------------------------
+   A dark, dense instrument panel for someone reading measured numbers with
+   money on them. Three rules the whole sheet exists to enforce:
+
+   1. NUMBERS ARE THE CONTENT. Every figure is set in a monospaced face with
+      `font-variant-numeric: tabular-nums`, so a column of probabilities lines
+      up on the decimal point and a changed digit is visible without reading.
+      Prose is the system UI face and is deliberately smaller and dimmer than
+      the numbers it annotates.
+
+   2. UNCERTAINTY IS PART OF THE NUMBER. `--fg` is for measurements that
+      cleared their own error. `--fg-noise` is for measurements that did not.
+      An insignificant figure recedes -- it never disappears, because a reader
+      told nothing was found goes looking on his own (see report.Verdict).
+
+   3. COLOUR MEANS DIRECTION, NOT DECORATION. Green is a measured gain, red is
+      a measured loss, amber is "inside its own error", grey is "nothing was
+      measured". Nothing else in the UI is allowed those hues.
+
+   Everything is a custom property so a view can compose without hard-coding a
+   hex value. Do not introduce colours outside this block.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* --- surfaces ------------------------------------------------------- */
+  --bg: #0a0c10;              /* page */
+  --bg-panel: #10141a;        /* cards, tables */
+  --bg-raised: #161b23;       /* header, controls */
+  --bg-hover: #1c222c;
+  --bg-active: #232b37;
+  --bg-inset: #080a0d;        /* wells, code */
+
+  /* --- lines ---------------------------------------------------------- */
+  --line: #222a35;            /* default border */
+  --line-soft: #191f28;       /* row rules inside a table */
+  --line-strong: #33404f;     /* header underline, focus ring base */
+
+  /* --- text ----------------------------------------------------------- */
+  --fg: #e7ecf3;              /* primary: significant numbers, headings */
+  --fg-body: #c3ccd8;         /* prose */
+  --fg-dim: #8593a3;          /* labels, units, secondary prose */
+  --fg-faint: #5d6a7a;        /* scaffolding: axis text, empty cells */
+  --fg-noise: #7f8a99;        /* a measurement inside its own error */
+
+  /* --- direction ------------------------------------------------------ */
+  --up: #3ecf8e;              /* measured gain */
+  --up-dim: #2a7d5a;          /* gain that is not significant */
+  --down: #ff6b63;            /* measured loss */
+  --down-dim: #9c4a46;
+  --noise: #d0a340;           /* real measurement, inside its own error */
+  --null: #6b7684;            /* nothing was measured */
+  --accent: #5aa2ff;          /* interactive: links, active nav, focus */
+  --accent-dim: #2b4d78;
+  --warn: #e0913a;
+  --bad: #ff6b63;
+
+  /* --- typography ----------------------------------------------------- */
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+
+  /* A real scale, 1.25-ish, floored at 10px so a dense table stays legible. */
+  --fs-micro: 10px;   /* column units, tag chips */
+  --fs-xs: 11px;      /* labels, captions */
+  --fs-sm: 12px;      /* table body, secondary prose */
+  --fs-base: 13px;    /* body */
+  --fs-md: 15px;      /* section headings, small stat values */
+  --fs-lg: 19px;      /* stat value, medium */
+  --fs-xl: 26px;      /* stat value, large */
+  --fs-2xl: 38px;     /* the one number on the page */
+
+  --lh-tight: 1.1;
+  --lh-snug: 1.35;
+  --lh-body: 1.5;
+
+  --ls-label: 0.07em;  /* tracked-out uppercase labels */
+
+  /* --- metrics -------------------------------------------------------- */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 24px;
+  --sp-8: 32px;
+
+  --radius: 4px;
+  --radius-lg: 6px;
+
+  --row-h: 26px;          /* dense table row */
+  --header-h: 46px;       /* app chrome */
+  --content-max: 1600px;  /* wide: this is a table tool, not an article */
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.02) inset,
+    0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ==========================================================================
+   Reset
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg-body);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+ul,
+ol {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding-left: 1.1em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--fg);
+}
+
+/* Scrollbars that do not shout. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 6px;
+  border: 2px solid var(--bg);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.boot {
+  padding: var(--sp-8);
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+/* ==========================================================================
+   Numerals
+   Anything that is a measurement gets `.num`. Tabular figures are not a
+   nicety here: two probabilities that differ in the third decimal have to be
+   comparable by eye, down a column, without reading either of them.
+   ========================================================================== */
+
+.num,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1, "ss01" 1;
+  letter-spacing: -0.01em;
+}
+
+.num {
+  color: var(--fg);
+}
+
+/* ==========================================================================
+   Text utilities
+   ========================================================================== */
+
+.label {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.caption {
+  font-size: var(--fs-xs);
+  color: var(--fg-faint);
+  line-height: var(--lh-snug);
+}
+
+.prose {
+  font-size: var(--fs-sm);
+  color: var(--fg-body);
+  line-height: var(--lh-body);
+  max-width: 78ch;
+}
+
+.dim {
+  color: var(--fg-dim);
+}
+
+.faint {
+  color: var(--fg-faint);
+}
+
+.up {
+  color: var(--up);
+}
+
+.down {
+  color: var(--down);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.tnum-right {
+  text-align: right;
+}
+
+/* ==========================================================================
+   Panels and section furniture
+   ========================================================================== */
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.panel__title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+
+.panel__body {
+  padding: var(--sp-5);
+}
+
+.panel__body--flush {
+  padding: 0;
+}
+
+.grid {
+  display: grid;
+  gap: var(--sp-5);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.row--wrap {
+  flex-wrap: wrap;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* ==========================================================================
+   Chips, tags, notes
+   ========================================================================== */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 1px var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--fg-dim);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip--warn {
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+  color: var(--warn);
+}
+
+.chip--bad {
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--line));
+  color: var(--bad);
+}
+
+.chip--ok {
+  border-color: color-mix(in srgb, var(--up) 35%, var(--line));
+  color: var(--up);
+}
+
+.note {
+  border-left: 2px solid var(--line-strong);
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-5);
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+  line-height: var(--lh-snug);
+}
+
+.note--warn {
+  border-left-color: var(--warn);
+  color: color-mix(in srgb, var(--warn) 70%, var(--fg-body));
+}
+
+.note--bad {
+  border-left-color: var(--bad);
+  color: color-mix(in srgb, var(--bad) 70%, var(--fg-body));
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--fg-body);
+  font-size: var(--fs-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: background 90ms linear, border-color 90ms linear, color 90ms linear;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.btn:active:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--ghost {
+  background: transparent;
+}
+
+.btn--sm {
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-xs);
+}
+
+/* ==========================================================================
+   App shell (Layout.tsx)
+   ========================================================================== */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.shell__header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+
+.shell__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  height: var(--header-h);
+  padding: 0 var(--sp-6);
+  max-width: var(--content-max);
+  margin: 0 auto;
+  width: 100%;
+}
+
+.shell__mark {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--fg);
+}
+
+.shell__mark span {
+  color: var(--accent);
+}
+
+.shell__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.shell__nav::-webkit-scrollbar {
+  display: none;
+}
+
+.navlink {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.navlink:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.navlink--active {
+  background: var(--bg-active);
+  color: var(--fg);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* --- league switcher ------------------------------------------------- */
+
+.leagues {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.leagues::-webkit-scrollbar {
+  display: none;
+}
+
+.league {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--sp-2) var(--sp-4);
+  min-width: 108px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  text-align: left;
+  cursor: pointer;
+}
+
+.league:hover {
+  background: var(--bg-hover);
+}
+
+.league--active {
+  background: var(--bg-active);
+  border-color: var(--line-strong);
+}
+
+.league__name {
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.league--active .league__name {
+  color: var(--fg);
+}
+
+.league__odds {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg);
+}
+
+.league__odds .err {
+  color: var(--fg-faint);
+  font-size: var(--fs-micro);
+  margin-left: var(--sp-2);
+}
+
+.league--errored .league__odds {
+  color: var(--bad);
+  font-size: var(--fs-xs);
+}
+
+.league--skeleton {
+  opacity: 0.5;
+}
+
+/* --- staleness / refresh --------------------------------------------- */
+
+.staleness {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.staleness__age {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-body);
+}
+
+.staleness--stale .staleness__age {
+  color: var(--warn);
+}
+
+.staleness--computing .staleness__age {
+  color: var(--accent);
+}
+
+.spin {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 620ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 3s;
+  }
+}
+
+.shell__banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-6);
+  background: color-mix(in srgb, var(--bad) 12%, var(--bg));
+  border-bottom: 1px solid color-mix(in srgb, var(--bad) 35%, var(--line));
+  color: color-mix(in srgb, var(--bad) 75%, var(--fg));
+  font-size: var(--fs-sm);
+}
+
+.shell__main {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--sp-6);
+}
+
+.shell__footer {
+  max-width: var(--content-max);
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--sp-5) var(--sp-6) var(--sp-7);
+  color: var(--fg-faint);
+  font-size: var(--fs-xs);
+  display: flex;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Stat (Stat.tsx)
+   ========================================================================== */
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.stat--right {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.stat__label {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.stat__figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.stat__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: var(--lh-tight);
+  color: var(--fg);
+}
+
+.stat--lg .stat__value {
+  font-size: var(--fs-2xl);
+}
+
+.stat--md .stat__value {
+  font-size: var(--fs-xl);
+}
+
+.stat--sm .stat__value {
+  font-size: var(--fs-lg);
+}
+
+.stat--xs .stat__value {
+  font-size: var(--fs-md);
+}
+
+.stat__unit {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  font-weight: 500;
+}
+
+/* The +/- is set at the same weight as the value it qualifies, one step down
+   in size and one step down in contrast. It is never smaller than the label:
+   an error bar the reader has to hunt for is an error bar that gets ignored. */
+.stat__err {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.stat__sub {
+  font-size: var(--fs-xs);
+  color: var(--fg-faint);
+  line-height: var(--lh-snug);
+}
+
+/* The insignificant variant: everything recedes one contrast step and the row
+   is marked `~`. Legible, plainly de-emphasised, never hidden. */
+.stat--insignificant .stat__value {
+  color: var(--fg-noise);
+  font-weight: 500;
+}
+
+.stat--insignificant .stat__label {
+  color: var(--fg-faint);
+}
+
+.stat--insignificant .stat__err {
+  color: var(--noise);
+}
+
+.stat__marker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--noise);
+  font-weight: 600;
+}
+
+.stat__marker--null {
+  color: var(--null);
+}
+
+.stat__marker--harm {
+  color: var(--down);
+}
+
+/* A row of stats with hairline separators. The standard header of a view. */
+.statrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-6) var(--sp-8);
+  padding: var(--sp-5) 0;
+}
+
+.statrow > .stat {
+  position: relative;
+  padding-right: var(--sp-8);
+}
+
+.statrow > .stat:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: var(--sp-6);
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--line-soft);
+}
+
+/* ==========================================================================
+   Delta (Delta.tsx)
+   ========================================================================== */
+
+.delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  white-space: nowrap;
+  line-height: var(--lh-tight);
+}
+
+.delta__value {
+  font-weight: 600;
+}
+
+.delta__err {
+  font-size: 0.85em;
+  color: var(--fg-dim);
+  font-weight: 400;
+}
+
+.delta__mark {
+  font-size: 0.85em;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+/* act: cleared its own error, in the direction that helps. */
+.delta--act .delta__value {
+  color: var(--up);
+}
+
+.delta--act.delta--negative .delta__value {
+  color: var(--down);
+}
+
+/* noise: a real measurement that did not clear its error. Amber, lighter
+   weight, and the +/- is mandatory -- see Delta.tsx. */
+.delta--noise .delta__value {
+  color: var(--noise);
+  font-weight: 500;
+}
+
+.delta--noise .delta__err {
+  color: color-mix(in srgb, var(--noise) 55%, var(--fg-dim));
+}
+
+/* harm: resolved, and in the wrong direction. Not the same fact as noise. */
+.delta--harm .delta__value {
+  color: var(--down);
+  font-weight: 600;
+}
+
+.delta--harm .delta__mark {
+  color: var(--down);
+}
+
+/* null: nothing was measured. Not a small effect -- no effect to measure. */
+.delta--null .delta__value {
+  color: var(--null);
+  font-weight: 400;
+}
+
+.delta--sm {
+  font-size: var(--fs-sm);
+}
+
+.delta--md {
+  font-size: var(--fs-base);
+}
+
+.delta--lg {
+  font-size: var(--fs-lg);
+}
+
+/* ==========================================================================
+   Table (Table.tsx)
+   ========================================================================== */
+
+.tbl-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  border-radius: var(--radius);
+}
+
+.tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--fs-sm);
+}
+
+.tbl th,
+.tbl td {
+  padding: 0 var(--sp-5);
+  height: var(--row-h);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.tbl thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--line-strong);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  user-select: none;
+  vertical-align: middle;
+}
+
+.tbl thead th.is-sortable {
+  cursor: pointer;
+}
+
+.tbl thead th.is-sortable:hover {
+  color: var(--fg);
+  background: var(--bg-hover);
+}
+
+.tbl thead th.is-sorted {
+  color: var(--fg);
+}
+
+.tbl__sort {
+  margin-left: var(--sp-2);
+  color: var(--accent);
+  font-size: 9px;
+}
+
+.tbl__sort--idle {
+  color: transparent;
+}
+
+.tbl thead th.is-sortable:hover .tbl__sort--idle {
+  color: var(--fg-faint);
+}
+
+.tbl td {
+  color: var(--fg-body);
+  vertical-align: middle;
+}
+
+.tbl td.num,
+.tbl th.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--fg);
+}
+
+.tbl .ta-right {
+  text-align: right;
+}
+
+.tbl .ta-center {
+  text-align: center;
+}
+
+.tbl tbody tr:hover td {
+  background: var(--bg-hover);
+}
+
+.tbl tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* An insignificant row: every cell recedes, including its numbers. Same rule
+   as Stat -- present, readable, obviously not load-bearing. */
+.tbl tbody tr.is-dim td,
+.tbl tbody tr.is-dim td.num {
+  color: var(--fg-noise);
+}
+
+.tbl tbody tr.is-dim:hover td {
+  color: var(--fg-body);
+}
+
+/* The user's own team, or the row a view wants read first. */
+.tbl tbody tr.is-highlight td {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tbl tbody tr.is-highlight td:first-child {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.tbl tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+.tbl__empty {
+  padding: var(--sp-7) var(--sp-5);
+  text-align: center;
+  color: var(--fg-faint);
+  font-size: var(--fs-sm);
+}
+
+.tbl__rule td {
+  height: 1px;
+  padding: 0;
+  background: var(--line-strong);
+  border-bottom: none;
+}
+
+/* Compact variant for tables that sit inside a panel beside other content. */
+.tbl--compact th,
+.tbl--compact td {
+  padding: 0 var(--sp-4);
+  height: 22px;
+}
+
+/* ==========================================================================
+   Loading / empty / error states
+   ========================================================================== */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-raised) 0%,
+    var(--bg-hover) 50%,
+    var(--bg-raised) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 3px;
+  color: transparent;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  padding: var(--sp-7);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+}
+
+.state__title {
+  font-size: var(--fs-md);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.state__detail {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-faint);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.state--error {
+  border-color: color-mix(in srgb, var(--bad) 35%, var(--line));
+}
+
+/* ==========================================================================
+   Narrow screens: this is a desktop tool, but it must not break on a phone.
+   ========================================================================== */
+
+@media (max-width: 860px) {
+  .shell__bar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: var(--sp-4);
+    gap: var(--sp-4);
+  }
+
+  .shell__main {
+    padding: var(--sp-5) var(--sp-4);
+  }
+
+  :root {
+    --fs-2xl: 30px;
+    --fs-xl: 22px;
+  }
+}

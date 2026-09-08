@@ -106,9 +106,11 @@ def status() -> None:
 # than `fq report odds`. Imported at the bottom to keep the data-plane commands
 # above independent of the analytics stack -- `fq snapshot` must keep working even
 # if a decision surface fails to import.
+from .api.server import mount as _mount_api  # noqa: E402
 from .report import mount as _mount_report  # noqa: E402
 
 _mount_report(app)
+_mount_api(app)
 
 
 if __name__ == "__main__":
