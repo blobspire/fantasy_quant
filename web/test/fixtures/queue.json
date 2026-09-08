@@ -1,0 +1,694 @@
+{
+ "ok": true,
+ "endpoint": "queue",
+ "league_id": null,
+ "season": null,
+ "sims": 4000,
+ "schema_version": 1,
+ "cached": false,
+ "computed_at": "2026-09-08T15:28:37.263+00:00",
+ "stale_seconds": 0.0,
+ "compute_seconds": 78.747,
+ "data": {
+  "schema_version": 1,
+  "command": "queue",
+  "generated_at": "2026-09-08T15:28:37+00:00",
+  "leagues": [
+   {
+    "ok": true,
+    "league_id": 161496047,
+    "season": 2026,
+    "name": "League Bravo (12, half PPR)"
+   },
+   {
+    "ok": true,
+    "league_id": 272150391,
+    "season": 2026,
+    "name": "League Alpha (14, full PPR)"
+   },
+   {
+    "ok": true,
+    "league_id": 634537479,
+    "season": 2026,
+    "name": "League Charlie (12, half PPR)"
+   }
+  ],
+  "actions": [
+   {
+    "league_id": 634537479,
+    "league_name": "League Charlie (12, half PPR)",
+    "season": 2026,
+    "team_id": 2,
+    "surface": "streaming",
+    "headline": "Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today.",
+    "delta_title": 0.03825,
+    "stderr": 0.004698643813742653,
+    "z": 8.140646858169141,
+    "leverage": 0.9987190881116903,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "medium",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "streaming",
+     "dst",
+     "waiver-priority",
+     "partially-unpriced",
+     "no-action-this-week"
+    ],
+    "rationale": "Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today. w1 Chargers D/ST -> w2 Buccaneers D/ST -> w3 49ers D/ST -> w4 Bears D/ST -> w5 Jets D/ST -> w6 Bills D/ST -> w7 Titans D/ST* -> w8 Jets D/ST* -> w9 Chiefs D/ST* -> w10 Bills D/ST* -> w11 Chiefs D/ST* -> w12 Buccaneers D/ST* -> w13 Vikings D/ST* -> w14 Falcons D/ST* -> w15 Giants D/ST* -> w16 Titans D/ST* -> w17 Vikings D/ST* * no closing line posted yet for weeks 7-17; those weeks use the projection-only fit and will move as the market opens. Adopting the WHOLE plan -- 16 acquisitions over 17 weeks -- is worth +39.2 model points (+7.1 from covering the bye, +32.1 from matchups; +13.4 in weeks with a posted line, +25.8 without), +39.2 simulated points-for, +3.82pp of title (+/-0.47). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do.",
+    "actionable": false,
+    "blockers": [
+     "no-action-this-week",
+     "partially-unpriced"
+    ],
+    "caveats": [
+     "later weeks have no closing line yet and use the projection-only fit; those numbers will move",
+     "best of 2 candidates: the point estimate is the maximum of 2 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "streaming",
+    "headline": "Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today.",
+    "delta_title": 0.02925,
+    "stderr": 0.0039815289171535005,
+    "z": 7.346424102053639,
+    "leverage": 0.9946013637576746,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "medium",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "streaming",
+     "dst",
+     "waiver-priority",
+     "partially-unpriced",
+     "no-action-this-week"
+    ],
+    "rationale": "Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today. w1 Chargers D/ST -> w2 Buccaneers D/ST -> w3 49ers D/ST -> w4 Bears D/ST -> w5 Jets D/ST -> w6 Bills D/ST -> w7 Titans D/ST* -> w8 Jets D/ST* -> w9 Chiefs D/ST* -> w10 Bills D/ST* -> w11 Chiefs D/ST* -> w12 Buccaneers D/ST* -> w13 Vikings D/ST* -> w14 Falcons D/ST* -> w15 Giants D/ST* -> w16 Titans D/ST* -> w17 Vikings D/ST* * no closing line posted yet for weeks 7-17; those weeks use the projection-only fit and will move as the market opens. Adopting the WHOLE plan -- 16 acquisitions over 17 weeks -- is worth +39.2 model points (+7.0 from covering the bye, +32.1 from matchups; +13.4 in weeks with a posted line, +25.8 without), +39.1 simulated points-for, +2.93pp of title (+/-0.40). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do.",
+    "actionable": false,
+    "blockers": [
+     "no-action-this-week",
+     "partially-unpriced"
+    ],
+    "caveats": [
+     "later weeks have no closing line yet and use the projection-only fit; those numbers will move",
+     "best of 2 candidates: the point estimate is the maximum of 2 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 272150391,
+    "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "streaming",
+    "headline": "Week 1: hold Jaguars D/ST -- the move is in the weeks after it, so there is nothing to execute today.",
+    "delta_title": 0.02775,
+    "stderr": 0.003499720901242933,
+    "z": 7.929203723115329,
+    "leverage": 0.9992541871835099,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "medium",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "streaming",
+     "dst",
+     "waiver-priority",
+     "partially-unpriced",
+     "no-action-this-week"
+    ],
+    "rationale": "Week 1: hold Jaguars D/ST -- the move is in the weeks after it, so there is nothing to execute today. w1 Jaguars D/ST -> w2 49ers D/ST -> w3 49ers D/ST -> w4 Bears D/ST -> w5 Jets D/ST -> w6 Bills D/ST -> w7 Titans D/ST* -> w8 Jets D/ST* -> w9 49ers D/ST* -> w10 Bills D/ST* -> w11 Cowboys D/ST* -> w12 Raiders D/ST* -> w13 Vikings D/ST* -> w14 Falcons D/ST* -> w15 Giants D/ST* -> w16 Titans D/ST* -> w17 Vikings D/ST* * no closing line posted yet for weeks 7-17; those weeks use the projection-only fit and will move as the market opens. Adopting the WHOLE plan -- 15 acquisitions over 17 weeks -- is worth +43.4 model points (+7.1 from covering the bye, +36.4 from matchups; +14.9 in weeks with a posted line, +28.5 without), +42.5 simulated points-for, +2.77pp of title (+/-0.35). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do.",
+    "actionable": false,
+    "blockers": [
+     "no-action-this-week",
+     "partially-unpriced"
+    ],
+    "caveats": [
+     "later weeks have no closing line yet and use the projection-only fit; those numbers will move",
+     "best of 2 candidates: the point estimate is the maximum of 2 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "trades",
+    "headline": "Team 03 gets Jordan Mason, Blake Corum (+0.6 pts) for Trevor Lawrence; Team 14 gets Trevor Lawrence (+7.7 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts).",
+    "delta_title": 0.014,
+    "stderr": 0.0048043491174778975,
+    "z": 2.9140263660417487,
+    "leverage": 0.9676685601169469,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason, Blake Corum (+0.6 pts) for Trevor Lawrence; Team 14 gets Trevor Lawrence (+7.7 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +0.6 playoff-weighted pts). Your title odds 6.8% -> 8.2% (+1.40pp +/- 0.48), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.95pp +/- 0.36) even though its starting lineup gains points.",
+    "actionable": true,
+    "blockers": [
+     "counterparty-loses"
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test",
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 634537479,
+    "league_name": "League Charlie (12, half PPR)",
+    "season": 2026,
+    "team_id": 2,
+    "surface": "trades",
+    "headline": "Sean 's Smart Team gets Kenneth Walker III, Jordyn Tyson (+6.3 pts) for Javonte Williams, Kyle Monangai; casa bonitto gets Javonte Williams, Kyle Monangai (+3.0 pts) for Saquon Barkley, Broncos D/ST. You get Saquon Bark\u2026",
+    "delta_title": 0.013,
+    "stderr": 0.005485460105418874,
+    "z": 2.369901475932311,
+    "leverage": 0.9469285498685422,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Sean 's Smart Team gets Kenneth Walker III, Jordyn Tyson (+6.3 pts) for Javonte Williams, Kyle Monangai; casa bonitto gets Javonte Williams, Kyle Monangai (+3.0 pts) for Saquon Barkley, Broncos D/ST. You get Saquon Barkley, Broncos D/ST (+12.4 pts). Every side gains on its own starting lineup (weakest +3.0 playoff-weighted pts). Your title odds 8.8% -> 10.1% (+1.30pp +/- 0.55), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Sean 's Smart Team (-0.62pp +/- 0.56) even though its starting lineup gains points.",
+    "actionable": true,
+    "blockers": [
+     "counterparty-loses"
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test",
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "trades",
+    "headline": "Team 03 gets Jordan Mason (+2.3 pts) for Tyler Shough; Team 14 gets Tyler Shough (+2.7 pts) for Jaylen Waddle. You get Jaylen Waddle (+10.3 pts).",
+    "delta_title": 0.0115,
+    "stderr": 0.0043984968106784384,
+    "z": 2.6145295756679663,
+    "leverage": 0.9676685601169469,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason (+2.3 pts) for Tyler Shough; Team 14 gets Tyler Shough (+2.7 pts) for Jaylen Waddle. You get Jaylen Waddle (+10.3 pts). Every side gains on its own starting lineup (weakest +2.3 playoff-weighted pts). Your title odds 6.8% -> 8.0% (+1.15pp +/- 0.44), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.20pp +/- 0.33), Team 14 (-0.45pp +/- 0.48) even though its starting lineup gains points.",
+    "actionable": true,
+    "blockers": [
+     "counterparty-loses"
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test",
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "trades",
+    "headline": "Team 03 gets Jordan Mason, Blake Corum (+1.9 pts) for Tyler Shough, Harrison Mevis; Team 14 gets Tyler Shough, Harrison Mevis (+9.9 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jay\u2026",
+    "delta_title": 0.011,
+    "stderr": 0.004579846476513935,
+    "z": 2.4018272351288346,
+    "leverage": 0.9676685601169469,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason, Blake Corum (+1.9 pts) for Tyler Shough, Harrison Mevis; Team 14 gets Tyler Shough, Harrison Mevis (+9.9 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +1.9 playoff-weighted pts). Your title odds 6.8% -> 7.9% (+1.10pp +/- 0.46), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 14 (-0.38pp +/- 0.53) even though its starting lineup gains points.",
+    "actionable": true,
+    "blockers": [
+     "counterparty-loses"
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test",
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 272150391,
+    "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "trades",
+    "headline": "Rob gets Chase Brown, Brian Thomas Jr. (+0.4 pts) for Breece Hall, Patriots D/ST.",
+    "delta_title": 0.01025,
+    "stderr": 0.004143129946844427,
+    "z": 2.4739750216637084,
+    "leverage": 0.9820176640917602,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "2-team",
+     "confirmed",
+     "title-pareto"
+    ],
+    "rationale": "Rob gets Chase Brown, Brian Thomas Jr. (+0.4 pts) for Breece Hall, Patriots D/ST. You get Breece Hall, Patriots D/ST (+8.2 pts). Every side gains on its own starting lineup (weakest +0.4 playoff-weighted pts). Your title odds 4.1% -> 5.1% (+1.03pp +/- 0.41), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 634537479,
+    "league_name": "League Charlie (12, half PPR)",
+    "season": 2026,
+    "team_id": 2,
+    "surface": "trades",
+    "headline": "Sean 's Smart Team gets Kenneth Walker III, De'Zhaun Stribling (+6.1 pts) for Javonte Williams, Kyle Monangai; casa bonitto gets Javonte Williams, Kyle Monangai (+3.0 pts) for Saquon Barkley, Broncos D/ST. You get Saquo\u2026",
+    "delta_title": 0.01025,
+    "stderr": 0.00549261108846624,
+    "z": 1.866143412469827,
+    "leverage": 0.9469285498685422,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Sean 's Smart Team gets Kenneth Walker III, De'Zhaun Stribling (+6.1 pts) for Javonte Williams, Kyle Monangai; casa bonitto gets Javonte Williams, Kyle Monangai (+3.0 pts) for Saquon Barkley, Broncos D/ST. You get Saquon Barkley, Broncos D/ST (+12.4 pts). Every side gains on its own starting lineup (weakest +3.0 playoff-weighted pts). Your title odds 8.8% -> 9.8% (+1.03pp +/- 0.55), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Sean 's Smart Team (-0.83pp +/- 0.56) even though its starting lineup gains points.",
+    "actionable": true,
+    "blockers": [
+     "counterparty-loses"
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test",
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 634537479,
+    "league_name": "League Charlie (12, half PPR)",
+    "season": 2026,
+    "team_id": 2,
+    "surface": "streaming",
+    "headline": "Week 1: hold Evan McPherson.",
+    "delta_title": 0.00975,
+    "stderr": 0.0045600364974651844,
+    "z": 2.138140781421331,
+    "leverage": 0.997400164701348,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "streaming",
+     "k",
+     "waiver-priority",
+     "not-streamable",
+     "no-action-this-week",
+     "action-suppressed"
+    ],
+    "rationale": "Week 1: hold Evan McPherson. The plan's week-one swap to Jake Elliott is worth +0.02 points against a fitted within-week spread of 0.68 for K, which the model cannot resolve, so it is not recommended. w1 Jake Elliott* -> w2 Cairo Santos* -> w3 Trey Smack* -> w4 Cairo Santos* -> w5 Trey Smack* -> w6 Nick Folk* -> w7 Nick Folk* -> w8 Chase McLaughlin* -> w9 Cairo Santos* -> w10 Spencer Shrader* -> w11 Tyler Bass* -> w12 Chase McLaughlin* -> w13 Cairo Santos* -> w14 Trey Smack* -> w15 Trey Smack* -> w16 Daniel Carlson* -> w17 Nick Folk* * the fitted Vegas terms for K were indistinguishable from zero, so every week here is the projection-only model; no line is used. Adopting the WHOLE plan -- 15 acquisitions over 17 weeks -- is worth +14.0 model points (+8.3 from covering the bye, +5.7 from matchups; +0.0 in weeks with a posted line, +14.0 without), +13.4 simulated points-for, +0.97pp of title (+/-0.46). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth -0.20pp (+/-0.43); the rest is the value of re-solving every week, which you only collect if you actually do. Note: the fitted within-week spread for K is only 0.68 points (R^2 0.022), so this position is not meaningfully streamable and the plan should be treated as a tie-break.",
+    "actionable": false,
+    "blockers": [
+     "action-suppressed",
+     "no-action-this-week"
+    ],
+    "caveats": [
+     "a week-one transaction was suppressed because the position is not streamable",
+     "the fitted within-week spread at this position is below the streamable floor -- treat this as a tie-break, not an edge",
+     "best of 2 candidates: the point estimate is the maximum of 2 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 634537479,
+    "league_name": "League Charlie (12, half PPR)",
+    "season": 2026,
+    "team_id": 2,
+    "surface": "trades",
+    "headline": "Sean 's Smart Team gets Kenneth Walker III (+5.6 pts) for Javonte Williams, Kyle Monangai; casa bonitto gets Javonte Williams, Kyle Monangai (+3.0 pts) for Saquon Barkley, Broncos D/ST. You get Saquon Barkley, Broncos D\u2026",
+    "delta_title": 0.0095,
+    "stderr": 0.005452969027768675,
+    "z": 1.7421701740138709,
+    "leverage": 0.9469285498685422,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "expanding",
+     "counterparty-loses"
+    ],
+    "rationale": "Sean 's Smart Team gets Kenneth Walker III (+5.6 pts) for Javonte Williams, Kyle Monangai; casa bonitto gets Javonte Williams, Kyle Monangai (+3.0 pts) for Saquon Barkley, Broncos D/ST. You get Saquon Barkley, Broncos D/ST (+12.4 pts). Every side gains on its own starting lineup (weakest +3.0 playoff-weighted pts). Your title odds 8.8% -> 9.7% (+0.95pp +/- 0.55), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Sean 's Smart Team (-0.85pp +/- 0.55) even though its starting lineup gains points. You would have to cut De'Zhaun Stribling.",
+    "actionable": true,
+    "blockers": [
+     "counterparty-loses"
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test",
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 272150391,
+    "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "trades",
+    "headline": "Rob gets Chase Brown, Quentin Johnston (+1.4 pts) for Breece Hall, Daniel Jones. You get Breece Hall, Daniel Jones (+7.1 pts).",
+    "delta_title": 0.008,
+    "stderr": 0.0041669342249678965,
+    "z": 1.9198767170512836,
+    "leverage": 0.9820176640917602,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "2-team",
+     "confirmed",
+     "title-pareto"
+    ],
+    "rationale": "Rob gets Chase Brown, Quentin Johnston (+1.4 pts) for Breece Hall, Daniel Jones. You get Breece Hall, Daniel Jones (+7.1 pts). Every side gains on its own starting lineup (weakest +1.4 playoff-weighted pts). Your title odds 4.1% -> 4.9% (+0.80pp +/- 0.42), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 272150391,
+    "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "trades",
+    "headline": "Rob gets Chase Brown, Brian Thomas Jr. (+5.5 pts) for Breece Hall, Daniel Jones.",
+    "delta_title": 0.00525,
+    "stderr": 0.004069367188191313,
+    "z": 1.290126881455845,
+    "leverage": 0.9820176640917602,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "2-team",
+     "confirmed",
+     "title-pareto"
+    ],
+    "rationale": "Rob gets Chase Brown, Brian Thomas Jr. (+5.5 pts) for Breece Hall, Daniel Jones. You get Breece Hall, Daniel Jones (+4.6 pts). Every side gains on its own starting lineup (weakest +4.6 playoff-weighted pts). Your title odds 4.1% -> 4.6% (+0.53pp +/- 0.41), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 40 candidates: the point estimate is the maximum of 40 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "streaming",
+    "headline": "Week 1: hold Harrison Butker -- the move is in the weeks after it, so there is nothing to execute today.",
+    "delta_title": 0.00375,
+    "stderr": 0.0034909928577387833,
+    "z": 1.0741929739807554,
+    "leverage": 0.9964864634416895,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "streaming",
+     "k",
+     "waiver-priority",
+     "not-streamable",
+     "no-action-this-week"
+    ],
+    "rationale": "Week 1: hold Harrison Butker -- the move is in the weeks after it, so there is nothing to execute today. w1 Harrison Butker* -> w2 Harrison Butker* -> w3 Harrison Butker* -> w4 Harrison Butker* -> w5 Trey Smack* -> w6 Nick Folk* -> w7 Nick Folk* -> w8 Chase McLaughlin* -> w9 Evan McPherson* -> w10 Trey Smack* -> w11 Tyler Bass* -> w12 Evan McPherson* -> w13 Wil Lutz* -> w14 Trey Smack* -> w15 Trey Smack* -> w16 Daniel Carlson* -> w17 Nick Folk* * the fitted Vegas terms for K were indistinguishable from zero, so every week here is the projection-only model; no line is used. Adopting the WHOLE plan -- 11 acquisitions over 17 weeks -- is worth +9.2 model points (+8.4 from covering the bye, +0.8 from matchups; +0.0 in weeks with a posted line, +9.2 without), +8.5 simulated points-for, +0.38pp of title (+/-0.35). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do. Note: the fitted within-week spread for K is only 0.68 points (R^2 0.022), so this position is not meaningfully streamable and the plan should be treated as a tie-break.",
+    "actionable": false,
+    "blockers": [
+     "no-action-this-week"
+    ],
+    "caveats": [
+     "the fitted within-week spread at this position is below the streamable floor -- treat this as a tie-break, not an edge",
+     "best of 2 candidates: the point estimate is the maximum of 2 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 272150391,
+    "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "streaming",
+    "headline": "Week 1: hold Chris Boswell -- the move is in the weeks after it, so there is nothing to execute today.",
+    "delta_title": 0.0035,
+    "stderr": 0.0029366806982341217,
+    "z": 1.191821774190368,
+    "leverage": 0.9999882504939515,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "streaming",
+     "k",
+     "waiver-priority",
+     "not-streamable",
+     "no-action-this-week"
+    ],
+    "rationale": "Week 1: hold Chris Boswell -- the move is in the weeks after it, so there is nothing to execute today. w1 Chris Boswell* -> w2 Nick Folk* -> w3 Trey Smack* -> w4 Spencer Shrader* -> w5 Trey Smack* -> w6 Nick Folk* -> w7 Nick Folk* -> w8 Trey Smack* -> w9 Nick Folk* -> w10 Spencer Shrader* -> w11 Wil Lutz* -> w12 Spencer Shrader* -> w13 Wil Lutz* -> w14 Trey Smack* -> w15 Trey Smack* -> w16 Daniel Carlson* -> w17 Nick Folk* * the fitted Vegas terms for K were indistinguishable from zero, so every week here is the projection-only model; no line is used. Adopting the WHOLE plan -- 14 acquisitions over 17 weeks -- is worth +12.4 model points (+8.1 from covering the bye, +4.3 from matchups; +0.0 in weeks with a posted line, +12.4 without), +12.2 simulated points-for, +0.35pp of title (+/-0.29). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do. Note: the fitted within-week spread for K is only 0.68 points (R^2 0.022), so this position is not meaningfully streamable and the plan should be treated as a tie-break.",
+    "actionable": false,
+    "blockers": [
+     "no-action-this-week"
+    ],
+    "caveats": [
+     "the fitted within-week spread at this position is below the streamable floor -- treat this as a tie-break, not an edge",
+     "best of 2 candidates: the point estimate is the maximum of 2 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "waivers",
+    "headline": "Claim Kenyon Sadiq (TE), drop Woody Marks.",
+    "delta_title": 0.0020092814606428146,
+    "stderr": 0.00015579814365991384,
+    "z": 12.89669705583144,
+    "leverage": 0.9978262311488838,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "high",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001750",
+     "bracket_se:0.001561",
+     "add:Kenyon Sadiq",
+     "pos:TE",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 12 candidates: the point estimate is the maximum of 12 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 272150391,
+    "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "waivers",
+    "headline": "Claim Chris Brooks (RB), drop Mike Washington Jr.",
+    "delta_title": 0.0016802309844073126,
+    "stderr": 0.00012260872930192272,
+    "z": 13.704007813911531,
+    "leverage": 0.9998019906744643,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "high",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.002500",
+     "bracket_se:0.001224",
+     "add:Chris Brooks",
+     "pos:RB",
+     "drop:Mike Washington Jr."
+    ],
+    "rationale": "Claim Chris Brooks (RB), drop Mike Washington Jr.. +3.0 starting-lineup points over the rest of the season, which is +0.17pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.25pp +/-0.12pp, consistent, and too noisy at this simulation count to rank on. Above the 0.108pp continuation value of holding priority 1, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 12 candidates: the point estimate is the maximum of 12 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "waivers",
+    "headline": "Claim Jets D/ST (DST), drop Woody Marks.",
+    "delta_title": 0.001642888604223728,
+    "stderr": 0.00014076667144059923,
+    "z": 11.671005554159137,
+    "leverage": 0.9978262311488838,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "high",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.003250",
+     "bracket_se:0.001676",
+     "add:Jets D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Jets D/ST (DST), drop Woody Marks. +2.0 starting-lineup points over the rest of the season, which is +0.16pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.33pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 12 candidates: the point estimate is the maximum of 12 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "waivers",
+    "headline": "Claim Buccaneers D/ST (DST), drop Woody Marks.",
+    "delta_title": 0.0015225248198509215,
+    "stderr": 0.00015388607278836499,
+    "z": 9.893844142379313,
+    "leverage": 0.9978262311488838,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "high",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.004500",
+     "bracket_se:0.001802",
+     "add:Buccaneers D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Buccaneers D/ST (DST), drop Woody Marks. +1.9 starting-lineup points over the rest of the season, which is +0.15pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.45pp +/-0.18pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 12 candidates: the point estimate is the maximum of 12 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 272150391,
+    "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "waivers",
+    "headline": "Claim Jets D/ST (DST), drop Tank Bigsby.",
+    "delta_title": 0.0013413740060978074,
+    "stderr": 0.00011105260025677276,
+    "z": 12.0787266844389,
+    "leverage": 0.9998019906744643,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "high",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001000",
+     "bracket_se:0.001620",
+     "add:Jets D/ST",
+     "pos:DST",
+     "drop:Tank Bigsby"
+    ],
+    "rationale": "Claim Jets D/ST (DST), drop Tank Bigsby. +2.4 starting-lineup points over the rest of the season, which is +0.13pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.10pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.108pp continuation value of holding priority 1, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "best of 12 candidates: the point estimate is the maximum of 12 noisy paired draws and is biased upward"
+    ]
+   }
+  ],
+  "holds": [
+   "League Charlie (12, half PPR): nothing clears its own error and is executable today. Best found: Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today. at +3.82pp."
+  ],
+  "errors": [],
+  "ranked_by": "edges.portfolio.action_queue",
+  "n_actions": 20,
+  "first_actionable": 15,
+  "selection_note": "  clears its own field: streaming, waivers; passes a two-sigma test and FAILS the selection-adjusted one: streaming, trades",
+  "n_significant": 8,
+  "n_actionable": 14
+ },
+ "error": null
+}

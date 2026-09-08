@@ -1,0 +1,178 @@
+{
+ "ok": true,
+ "endpoint": "stream",
+ "league_id": 161496047,
+ "season": 2026,
+ "sims": 4000,
+ "schema_version": 1,
+ "cached": false,
+ "computed_at": "2026-09-08T15:30:44.152+00:00",
+ "stale_seconds": 0.0,
+ "compute_seconds": 3.247,
+ "data": {
+  "league_id": 161496047,
+  "name": "League Bravo (12, half PPR) \ud83e\udd75",
+  "team_id": 1,
+  "stream": {
+   "kind": "hold",
+   "league_id": 161496047,
+   "delta_title": 0.029,
+   "delta_points": 39.150390625,
+   "stderr": 0.0039898282773097645,
+   "z": 7.268483248996855,
+   "significant": true,
+   "verdict": "act",
+   "verdict_note": "clears two standard errors",
+   "leverage": 0.9946017781544323,
+   "confidence": "medium",
+   "tags": [
+    "streaming",
+    "dst",
+    "waiver-priority",
+    "partially-unpriced",
+    "no-action-this-week"
+   ],
+   "rationale": "Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today. w1 Chargers D/ST -> w2 Buccaneers D/ST -> w3 49ers D/ST -> w4 Bears D/ST -> w5 Jets D/ST -> w6 Bills D/ST -> w7 Titans D/ST* -> w8 Jets D/ST* -> w9 Chiefs D/ST* -> w10 Bills D/ST* -> w11 Chiefs D/ST* -> w12 Buccaneers D/ST* -> w13 Vikings D/ST* -> w14 Falcons D/ST* -> w15 Giants D/ST* -> w16 Titans D/ST* -> w17 Vikings D/ST* * no closing line posted yet for weeks 7-17; those weeks use the projection-only fit and will move as the market opens. Adopting the WHOLE plan -- 16 acquisitions over 17 weeks -- is worth +39.2 model points (+7.0 from covering the bye, +32.1 from matchups; +13.4 in weeks with a posted line, +25.8 without), +39.2 simulated points-for, +2.90pp of title (+/-0.40). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do.",
+   "receive": [],
+   "send": [],
+   "players": [],
+   "position": "DST",
+   "caveats": [
+    "later weeks have no closing line yet and use the projection-only fit; those numbers will move"
+   ],
+   "plan": [
+    {
+     "week": 1,
+     "start": "Chargers D/ST",
+     "opponent_priced": true,
+     "value": 7.687014948990771,
+     "hold": "Chargers D/ST",
+     "hold_value": 7.687014948990771,
+     "gain": 0.0,
+     "add": [],
+     "drop": []
+    },
+    {
+     "week": 2,
+     "start": "Buccaneers D/ST",
+     "opponent_priced": true,
+     "value": 8.487425394584198,
+     "hold": "Chargers D/ST",
+     "hold_value": 8.30339641350317,
+     "gain": 0.1840289810810276,
+     "add": [
+      "Buccaneers D/ST"
+     ],
+     "drop": [
+      "Chargers D/ST"
+     ]
+    },
+    {
+     "week": 3,
+     "start": "49ers D/ST",
+     "opponent_priced": true,
+     "value": 8.119678893421867,
+     "hold": "Chargers D/ST",
+     "hold_value": 2.9988010041850317,
+     "gain": 5.120877889236835,
+     "add": [
+      "49ers D/ST"
+     ],
+     "drop": [
+      "Buccaneers D/ST"
+     ]
+    },
+    {
+     "week": 4,
+     "start": "Bears D/ST",
+     "opponent_priced": true,
+     "value": 8.004271583631231,
+     "hold": "Chargers D/ST",
+     "hold_value": 4.422811145290983,
+     "gain": 3.5814604383402484,
+     "add": [
+      "Bears D/ST"
+     ],
+     "drop": [
+      "49ers D/ST"
+     ]
+    },
+    {
+     "week": 5,
+     "start": "Jets D/ST",
+     "opponent_priced": true,
+     "value": 8.387747161845079,
+     "hold": "Chargers D/ST",
+     "hold_value": 6.123021496133233,
+     "gain": 2.264725665711846,
+     "add": [
+      "Jets D/ST"
+     ],
+     "drop": [
+      "Bears D/ST"
+     ]
+    },
+    {
+     "week": 6,
+     "start": "Bills D/ST",
+     "opponent_priced": true,
+     "value": 6.41097522563425,
+     "hold": "Chargers D/ST",
+     "hold_value": 4.140676961518067,
+     "gain": 2.2702982641161826,
+     "add": [
+      "Bills D/ST"
+     ],
+     "drop": [
+      "Jets D/ST"
+     ]
+    },
+    {
+     "week": 7,
+     "start": "Titans D/ST",
+     "opponent_priced": false,
+     "value": 7.0412999931176845,
+     "hold": "(empty)",
+     "hold_value": 0.0,
+     "gain": 7.0412999931176845,
+     "add": [
+      "Titans D/ST"
+     ],
+     "drop": [
+      "Bills D/ST"
+     ]
+    },
+    {
+     "week": 8,
+     "start": "Jets D/ST",
+     "opponent_priced": false,
+     "value": 7.469483460693256,
+     "hold": "Chargers D/ST",
+     "hold_value": 2.2706312764917547,
+     "gain": 5.198852184201502,
+     "add": [
+      "Jets D/ST"
+     ],
+     "drop": [
+      "Titans D/ST"
+     ]
+    }
+   ],
+   "plan_source": "rederived",
+   "plan_summary": {
+    "weeks": 17,
+    "weeks_shown": 8,
+    "total_gain_points": 39.183367523786096,
+    "priced_gain_points": 13.421391238486141,
+    "unpriced_gain_points": 25.761976285299955,
+    "unpriced_share": 0.6574722366489112,
+    "week_one_gain_points": 0.0,
+    "n_acquisitions": 16
+   },
+   "action": "hold"
+  }
+ },
+ "error": null,
+ "name": "League Bravo (12, half PPR)",
+ "team_id": 1
+}

@@ -1,0 +1,211 @@
+{
+ "ok": true,
+ "endpoint": "lineup",
+ "league_id": 161496047,
+ "season": 2026,
+ "sims": 4000,
+ "schema_version": 1,
+ "cached": false,
+ "computed_at": "2026-09-08T15:28:55.672+00:00",
+ "stale_seconds": 0.0,
+ "compute_seconds": 0.718,
+ "data": {
+  "league_id": 161496047,
+  "name": "League Bravo (12, half PPR) \ud83e\udd75",
+  "team_id": 1,
+  "team_name": "Team 01",
+  "week": 1,
+  "threshold_kind": "opponent",
+  "target": "this week's matchup",
+  "margin": 1.177433539154008,
+  "sd_diff": 29.639338592071944,
+  "z": 0.039725364838908823,
+  "leverage": 0.9992112589141169,
+  "current_known": true,
+  "unpriced_current": [],
+  "opponent": {
+   "team_id": 15,
+   "name": "Team 15",
+   "mean": 102.63198278487042,
+   "sd": 21.471863462676133
+  },
+  "recommended": [
+   {
+    "slot_id": 0,
+    "slot": "QB",
+    "player_id": 4040715,
+    "name": "Jalen Hurts"
+   },
+   {
+    "slot_id": 6,
+    "slot": "TE",
+    "player_id": 4723086,
+    "name": "Colston Loveland"
+   },
+   {
+    "slot_id": 16,
+    "slot": "DST",
+    "player_id": -16024,
+    "name": "Chargers D/ST"
+   },
+   {
+    "slot_id": 17,
+    "slot": "K",
+    "player_id": 3055899,
+    "name": "Harrison Butker"
+   },
+   {
+    "slot_id": 4,
+    "slot": "WR",
+    "player_id": 4262921,
+    "name": "Justin Jefferson"
+   },
+   {
+    "slot_id": 4,
+    "slot": "WR",
+    "player_id": 4685278,
+    "name": "Luther Burden III"
+   },
+   {
+    "slot_id": 2,
+    "slot": "RB",
+    "player_id": 4362238,
+    "name": "Chase Brown"
+   },
+   {
+    "slot_id": 2,
+    "slot": "RB",
+    "player_id": 4239996,
+    "name": "Travis Etienne Jr."
+   },
+   {
+    "slot_id": 23,
+    "slot": "FLEX",
+    "player_id": 4429023,
+    "name": "MarShawn Lloyd"
+   }
+  ],
+  "baseline": [
+   {
+    "slot_id": 0,
+    "slot": "QB",
+    "player_id": 4040715,
+    "name": "Jalen Hurts"
+   },
+   {
+    "slot_id": 6,
+    "slot": "TE",
+    "player_id": 4723086,
+    "name": "Colston Loveland"
+   },
+   {
+    "slot_id": 16,
+    "slot": "DST",
+    "player_id": -16024,
+    "name": "Chargers D/ST"
+   },
+   {
+    "slot_id": 17,
+    "slot": "K",
+    "player_id": 3055899,
+    "name": "Harrison Butker"
+   },
+   {
+    "slot_id": 4,
+    "slot": "WR",
+    "player_id": 4262921,
+    "name": "Justin Jefferson"
+   },
+   {
+    "slot_id": 4,
+    "slot": "WR",
+    "player_id": 4685278,
+    "name": "Luther Burden III"
+   },
+   {
+    "slot_id": 2,
+    "slot": "RB",
+    "player_id": 4362238,
+    "name": "Chase Brown"
+   },
+   {
+    "slot_id": 2,
+    "slot": "RB",
+    "player_id": 4239996,
+    "name": "Travis Etienne Jr."
+   },
+   {
+    "slot_id": 23,
+    "slot": "FLEX",
+    "player_id": 4429023,
+    "name": "MarShawn Lloyd"
+   }
+  ],
+  "changes": [],
+  "n_changes": 0,
+  "points_lineup_mean": 104.9318608455003,
+  "win_prob_lineup_mean": 104.9318608455003,
+  "delta_win_prob": 0.0,
+  "delta_win_prob_stderr": 0.0,
+  "noise_floor": 0.0,
+  "points_sacrifice": 0.0,
+  "guard": "",
+  "differ": false,
+  "significant": false,
+  "n_lineups": 48,
+  "sd_independent": 30.355095657479154,
+  "stacks": [
+   {
+    "name": "Luther Burden III",
+    "opponent_name": "Caleb Williams",
+    "rho": 0.3,
+    "modelled": true
+   },
+   {
+    "name": "Colston Loveland",
+    "opponent_name": "Caleb Williams",
+    "rho": 0.2,
+    "modelled": true
+   },
+   {
+    "name": "Chargers D/ST",
+    "opponent_name": "Omarion Hampton",
+    "rho": 0.0,
+    "modelled": false
+   },
+   {
+    "name": "Harrison Butker",
+    "opponent_name": "Travis Kelce",
+    "rho": 0.0,
+    "modelled": false
+   }
+  ],
+  "recommendation": {
+   "kind": "hold",
+   "league_id": 161496047,
+   "delta_title": 0.0,
+   "delta_points": 0.0,
+   "stderr": 0.0,
+   "z": null,
+   "significant": false,
+   "verdict": "null",
+   "verdict_note": "nothing measured: this move changes no roster",
+   "leverage": 0.9992112589141169,
+   "confidence": "medium",
+   "tags": [
+    "start_sit",
+    "opponent",
+    "favorite",
+    "no_change",
+    "not_significant"
+   ],
+   "rationale": "Start the projected-best lineup; nothing to change. You are a 0.04-sigma favorite against Team 15 (+1.2 +/- 29.6 points). Leverage 1.00 against an even matchup. Worth +0.000pp of championship probability, inside its own 0.000pp Monte Carlo error.",
+   "receive": [],
+   "send": [],
+   "players": []
+  }
+ },
+ "error": null,
+ "name": "League Bravo (12, half PPR)",
+ "team_id": 1
+}

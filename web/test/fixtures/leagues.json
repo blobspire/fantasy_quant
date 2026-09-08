@@ -1,0 +1,118 @@
+{
+ "ok": true,
+ "endpoint": "leagues",
+ "schema_version": 1,
+ "season": null,
+ "sims": 4000,
+ "seed": 1,
+ "generated_at": "2026-09-08T15:27:18.503+00:00",
+ "n_leagues": 3,
+ "n_reachable": 3,
+ "leagues": [
+  {
+   "league_id": 161496047,
+   "season": 2026,
+   "name": "League Bravo (12, half PPR)",
+   "objective": "championship",
+   "scoring_variant": "half_ppr",
+   "enabled": true,
+   "team_id": 1,
+   "notes": "12 teams, half PPR (0.5/rec). Snake, redraft, waiver priority (no FAAB). 6 playoff teams.",
+   "tags": [
+    "redraft",
+    "half-ppr",
+    "12team",
+    "waiver-priority"
+   ],
+   "reachable": true,
+   "error": null,
+   "checked_at": null,
+   "stale_seconds": 0.0,
+   "espn_name": "League Bravo (12, half PPR) \ud83e\udd75",
+   "size": 12,
+   "is_public": false,
+   "current_week": 1,
+   "final_week": 17,
+   "playoff_team_count": 6,
+   "uses_faab": false,
+   "faab_budget": 100,
+   "format_tags": [
+    "redraft",
+    "snake",
+    "waivers"
+   ],
+   "computed_at": "2026-09-08T15:27:18.503+00:00",
+   "compute_seconds": 0.196
+  },
+  {
+   "league_id": 272150391,
+   "season": 2026,
+   "name": "League Alpha (14, full PPR)",
+   "objective": "championship",
+   "scoring_variant": "ppr",
+   "enabled": true,
+   "team_id": 1,
+   "notes": "14 teams, full PPR (1.0/rec). Snake, redraft, waiver priority (no FAAB). 6 playoff teams.",
+   "tags": [
+    "redraft",
+    "ppr",
+    "14team",
+    "waiver-priority"
+   ],
+   "reachable": true,
+   "error": null,
+   "checked_at": null,
+   "stale_seconds": 0.0,
+   "espn_name": "League Alpha (14, full PPR) \ud83c\udf77",
+   "size": 14,
+   "is_public": false,
+   "current_week": 1,
+   "final_week": 17,
+   "playoff_team_count": 6,
+   "uses_faab": false,
+   "faab_budget": 100,
+   "format_tags": [
+    "redraft",
+    "snake",
+    "waivers"
+   ],
+   "computed_at": "2026-09-08T15:27:18.449+00:00",
+   "compute_seconds": 0.142
+  },
+  {
+   "league_id": 634537479,
+   "season": 2026,
+   "name": "League Charlie (12, half PPR)",
+   "objective": "championship",
+   "scoring_variant": "half_ppr",
+   "enabled": true,
+   "team_id": 2,
+   "notes": "12 teams, half PPR (0.5/rec). Snake, redraft, waiver priority (no FAAB). 6 playoff teams.",
+   "tags": [
+    "redraft",
+    "half-ppr",
+    "12team",
+    "waiver-priority"
+   ],
+   "reachable": true,
+   "error": null,
+   "checked_at": null,
+   "stale_seconds": 0.0,
+   "espn_name": "League Charlie (12, half PPR)",
+   "size": 12,
+   "is_public": false,
+   "current_week": 1,
+   "final_week": 17,
+   "playoff_team_count": 6,
+   "uses_faab": false,
+   "faab_budget": 100,
+   "format_tags": [
+    "redraft",
+    "snake",
+    "waivers"
+   ],
+   "computed_at": "2026-09-08T15:27:18.457+00:00",
+   "compute_seconds": 0.15
+  }
+ ]
+}

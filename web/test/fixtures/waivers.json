@@ -1,0 +1,1056 @@
+{
+ "ok": true,
+ "endpoint": "waivers",
+ "league_id": 161496047,
+ "season": 2026,
+ "sims": 4000,
+ "schema_version": 1,
+ "cached": false,
+ "computed_at": "2026-09-08T15:28:54.943+00:00",
+ "stale_seconds": 0.0,
+ "compute_seconds": 6.134,
+ "data": {
+  "league_id": 161496047,
+  "name": "League Bravo (12, half PPR) \ud83e\udd75",
+  "team_id": 1,
+  "team_name": "Team 01",
+  "week": 1,
+  "uses_faab": false,
+  "priority": 2,
+  "priority_known": true,
+  "budget": 100,
+  "threshold": 0.0011549247226075691,
+  "baseline_title": 0.06175,
+  "baseline": "waiver board (unfilled slot streams a replacement)",
+  "title_per_point": 0.0008125,
+  "title_per_point_stderr": 3.904992522316631e-05,
+  "week_leverage": 0.9978265243478915,
+  "sd_diff": 27.453343440404335,
+  "n_free_agents": 60,
+  "board": [
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0020093210467100144,
+    "delta_points": 2.47301051902771,
+    "stderr": 0.0001558059690313548,
+    "z": 12.896303390697781,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001750",
+     "bracket_se:0.001561",
+     "add:Kenyon Sadiq",
+     "pos:TE",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Kenyon Sadiq",
+    "position": "TE",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00175,
+    "bracket_stderr": 0.001561,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.0008543963241024453,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0016429039201140403,
+    "delta_points": 2.0220355939865113,
+    "stderr": 0.0001407624845462236,
+    "z": 11.671461507732506,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.003250",
+     "bracket_se:0.001676",
+     "add:Jets D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Jets D/ST (DST), drop Woody Marks. +2.0 starting-lineup points over the rest of the season, which is +0.16pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.33pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16020,
+      "name": "Jets D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16020,
+      "name": "Jets D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Jets D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00325,
+    "bracket_stderr": 0.001676,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.0004879791975064712,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0015225382753014563,
+    "delta_points": 1.8738932619094848,
+    "stderr": 0.0001538806316261732,
+    "z": 9.894281425879534,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.004500",
+     "bracket_se:0.001802",
+     "add:Buccaneers D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Buccaneers D/ST (DST), drop Woody Marks. +1.9 starting-lineup points over the rest of the season, which is +0.15pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.45pp +/-0.18pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16027,
+      "name": "Buccaneers D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16027,
+      "name": "Buccaneers D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Buccaneers D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.0045,
+    "bracket_stderr": 0.001802,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.0003676135526938871,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0013856514533758162,
+    "delta_points": 1.70541717338562,
+    "stderr": 0.00012235837644156416,
+    "z": 11.324532849106369,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.002750",
+     "bracket_se:0.001714",
+     "add:Chiefs D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Chiefs D/ST (DST), drop Woody Marks. +1.7 starting-lineup points over the rest of the season, which is +0.14pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.27pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16012,
+      "name": "Chiefs D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16012,
+      "name": "Chiefs D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Chiefs D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00275,
+    "bracket_stderr": 0.001714,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.00023072673076824702,
+    "clears_certain": false
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0010120410653948785,
+    "delta_points": 1.2455890035629273,
+    "stderr": 0.0001251139711663587,
+    "z": 8.08895326365439,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.002250",
+     "bracket_se:0.001714",
+     "add:Giants D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Giants D/ST (DST), drop Woody Marks. +1.2 starting-lineup points over the rest of the season, which is +0.10pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.22pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16019,
+      "name": "Giants D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16019,
+      "name": "Giants D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Giants D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00225,
+    "bracket_stderr": 0.001714,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.00014288365721269063,
+    "clears_certain": false
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0009059981467723845,
+    "delta_points": 1.1150746421813964,
+    "stderr": 0.00010705336816929252,
+    "z": 8.463051301101085,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001750",
+     "bracket_se:0.001479",
+     "add:49ers D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim 49ers D/ST (DST), drop Woody Marks. +1.1 starting-lineup points over the rest of the season, which is +0.09pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.18pp +/-0.15pp, consistent, and too noisy at this simulation count to rank on. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16025,
+      "name": "49ers D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16025,
+      "name": "49ers D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "49ers D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00175,
+    "bracket_stderr": 0.001479,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.00024892657583518467,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0007216705901622771,
+    "delta_points": 0.8882099571228027,
+    "stderr": 8.272667868312667e-05,
+    "z": 8.723553291998321,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.000500",
+     "bracket_se:0.001118",
+     "add:Bears D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Bears D/ST (DST), drop Woody Marks. +0.9 starting-lineup points over the rest of the season, which is +0.07pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.05pp +/-0.11pp, consistent, and too noisy at this simulation count to rank on. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16003,
+      "name": "Bears D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16003,
+      "name": "Bears D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Bears D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.0005,
+    "bracket_stderr": 0.001118,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.00043325413244529203,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0006561657322049141,
+    "delta_points": 0.8075885934829712,
+    "stderr": 0.00011406441636248942,
+    "z": 5.752589222213362,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "medium",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.004000",
+     "bracket_se:0.001457",
+     "add:Geno Smith",
+     "pos:QB",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Geno Smith (QB), drop Woody Marks. +0.8 starting-lineup points over the rest of the season, which is +0.07pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.40pp +/-0.15pp -- more than two combined standard errors away. Either the title response is not linear over a claim this size or the bracket drew a tail, which it does often enough across a board this wide. Read the points. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": 15864,
+      "name": "Geno Smith"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 15864,
+      "name": "Geno Smith",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Geno Smith",
+    "position": "QB",
+    "drop": "Woody Marks",
+    "bracket_title": 0.004,
+    "bracket_stderr": 0.001457,
+    "agrees": false,
+    "clears_threshold": false,
+    "clears_margin": -0.000498758990402655,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0006105488204956054,
+    "delta_points": 0.7514447021484375,
+    "stderr": 8.113008256046784e-05,
+    "z": 7.525554038978716,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001250",
+     "bracket_se:0.001346",
+     "add:Panthers D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Panthers D/ST (DST), drop Woody Marks. +0.8 starting-lineup points over the rest of the season, which is +0.06pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.12pp +/-0.13pp, consistent, and too noisy at this simulation count to rank on. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16029,
+      "name": "Panthers D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16029,
+      "name": "Panthers D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Panthers D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00125,
+    "bracket_stderr": 0.001346,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.0005443759021119637,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0006010538727641105,
+    "delta_points": 0.7397586126327514,
+    "stderr": 8.234403185866651e-05,
+    "z": 7.299300983898216,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.003250",
+     "bracket_se:0.001520",
+     "add:Vikings D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Vikings D/ST (DST), drop Woody Marks. +0.7 starting-lineup points over the rest of the season, which is +0.06pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.33pp +/-0.15pp, consistent, and too noisy at this simulation count to rank on. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16016,
+      "name": "Vikings D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16016,
+      "name": "Vikings D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Vikings D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00325,
+    "bracket_stderr": 0.00152,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.0005538708498434587,
+    "clears_certain": true
+   }
+  ],
+  "claims": [
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0020093210467100144,
+    "delta_points": 2.47301051902771,
+    "stderr": 0.0001558059690313548,
+    "z": 12.896303390697781,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001750",
+     "bracket_se:0.001561",
+     "add:Kenyon Sadiq",
+     "pos:TE",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Kenyon Sadiq",
+    "position": "TE",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00175,
+    "bracket_stderr": 0.001561,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.0008543963241024453,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0016429039201140403,
+    "delta_points": 2.0220355939865113,
+    "stderr": 0.0001407624845462236,
+    "z": 11.671461507732506,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.003250",
+     "bracket_se:0.001676",
+     "add:Jets D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Jets D/ST (DST), drop Woody Marks. +2.0 starting-lineup points over the rest of the season, which is +0.16pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.33pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16020,
+      "name": "Jets D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16020,
+      "name": "Jets D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Jets D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00325,
+    "bracket_stderr": 0.001676,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.0004879791975064712,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0015225382753014563,
+    "delta_points": 1.8738932619094848,
+    "stderr": 0.0001538806316261732,
+    "z": 9.894281425879534,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.004500",
+     "bracket_se:0.001802",
+     "add:Buccaneers D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Buccaneers D/ST (DST), drop Woody Marks. +1.9 starting-lineup points over the rest of the season, which is +0.15pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.45pp +/-0.18pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16027,
+      "name": "Buccaneers D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16027,
+      "name": "Buccaneers D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Buccaneers D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.0045,
+    "bracket_stderr": 0.001802,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.0003676135526938871,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0013856514533758162,
+    "delta_points": 1.70541717338562,
+    "stderr": 0.00012235837644156416,
+    "z": 11.324532849106369,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.002750",
+     "bracket_se:0.001714",
+     "add:Chiefs D/ST",
+     "pos:DST",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Chiefs D/ST (DST), drop Woody Marks. +1.7 starting-lineup points over the rest of the season, which is +0.14pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.27pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": -16012,
+      "name": "Chiefs D/ST"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": -16012,
+      "name": "Chiefs D/ST",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ],
+    "add": "Chiefs D/ST",
+    "position": "DST",
+    "drop": "Woody Marks",
+    "bracket_title": 0.00275,
+    "bracket_stderr": 0.001714,
+    "agrees": true,
+    "clears_threshold": true,
+    "clears_margin": 0.00023072673076824702,
+    "clears_certain": false
+   }
+  ],
+  "blocks": [
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.00028549706425896296,
+    "delta_points": 0.0,
+    "stderr": 2.952768540146907e-05,
+    "z": 9.668792537486153,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors, but the surface that produced it rates it confidence='low'",
+    "leverage": 0.9978265243478915,
+    "confidence": "low",
+    "tags": [
+     "waiver",
+     "blocking",
+     "add:Kenyon Sadiq",
+     "rival:12"
+    ],
+    "rationale": "Blocking only. Kenyon Sadiq is worth +2.8 points and +0.31pp to Team 12; denying him returns +0.029pp to us, 1/11 of his gain. Never claim for this reason alone.",
+    "receive": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq"
+     }
+    ],
+    "send": [],
+    "players": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq",
+      "from_team": null,
+      "to_team": 1
+     }
+    ],
+    "add": "Kenyon Sadiq",
+    "position": "-",
+    "drop": "-",
+    "bracket_title": 0.0,
+    "bracket_stderr": 0.0,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.0008694276583486062,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.00020817313219774212,
+    "delta_points": 0.0,
+    "stderr": 2.153041668756979e-05,
+    "z": 9.668792537486153,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors, but the surface that produced it rates it confidence='low'",
+    "leverage": 0.9978265243478915,
+    "confidence": "low",
+    "tags": [
+     "waiver",
+     "blocking",
+     "add:C.J. Stroud",
+     "rival:12"
+    ],
+    "rationale": "Blocking only. C.J. Stroud is worth +2.1 points and +0.23pp to Team 12; denying him returns +0.021pp to us, 1/11 of his gain. Never claim for this reason alone.",
+    "receive": [
+     {
+      "player_id": 4432577,
+      "name": "C.J. Stroud"
+     }
+    ],
+    "send": [],
+    "players": [
+     {
+      "player_id": 4432577,
+      "name": "C.J. Stroud",
+      "from_team": null,
+      "to_team": 1
+     }
+    ],
+    "add": "C.J. Stroud",
+    "position": "-",
+    "drop": "-",
+    "bracket_title": 0.0,
+    "bracket_stderr": 0.0,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.0009467515904098271,
+    "clears_certain": true
+   },
+   {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 3.8480224513044255e-05,
+    "delta_points": 0.0,
+    "stderr": 4.470042825280173e-06,
+    "z": 8.60846887090671,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors, but the surface that produced it rates it confidence='low'",
+    "leverage": 0.9978265243478915,
+    "confidence": "low",
+    "tags": [
+     "waiver",
+     "blocking",
+     "add:Justice Hill",
+     "rival:5"
+    ],
+    "rationale": "Blocking only. Justice Hill is worth +0.5 points and +0.04pp to Team 05; denying him returns +0.004pp to us, 1/11 of his gain. Never claim for this reason alone.",
+    "receive": [
+     {
+      "player_id": 4038441,
+      "name": "Justice Hill"
+     }
+    ],
+    "send": [],
+    "players": [
+     {
+      "player_id": 4038441,
+      "name": "Justice Hill",
+      "from_team": null,
+      "to_team": 1
+     }
+    ],
+    "add": "Justice Hill",
+    "position": "-",
+    "drop": "-",
+    "bracket_title": 0.0,
+    "bracket_stderr": 0.0,
+    "agrees": true,
+    "clears_threshold": false,
+    "clears_margin": -0.001116444498094525,
+    "clears_certain": true
+   }
+  ],
+  "hold": {
+   "kind": "hold",
+   "league_id": 161496047,
+   "delta_title": 0.0,
+   "delta_points": 0.0,
+   "stderr": 0.0,
+   "z": null,
+   "significant": false,
+   "verdict": "null",
+   "verdict_note": "nothing measured: this move changes no roster",
+   "leverage": 0.9978265243478915,
+   "confidence": "high",
+   "tags": [
+    "waiver",
+    "hold"
+   ],
+   "rationale": "Submit all 4 claims as one conditional waterfall, best first: a losing claim costs nothing, so submitting every candidate above the 0.115pp threshold weakly dominates submitting one. Only a successful claim spends priority. Every claim here drops the same player, so at most one of them can execute and the list really is a waterfall. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+   "receive": [],
+   "send": [],
+   "players": []
+  },
+  "best": {
+   "kind": "waiver_claim",
+   "league_id": 161496047,
+   "delta_title": 0.0020093210467100144,
+   "delta_points": 2.47301051902771,
+   "stderr": 0.0001558059690313548,
+   "z": 12.896303390697781,
+   "significant": true,
+   "verdict": "act",
+   "verdict_note": "clears two standard errors",
+   "leverage": 0.9978265243478915,
+   "confidence": "high",
+   "tags": [
+    "waiver",
+    "confirmed",
+    "bracket:0.001750",
+    "bracket_se:0.001561",
+    "add:Kenyon Sadiq",
+    "pos:TE",
+    "drop:Woody Marks"
+   ],
+   "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+   "receive": [
+    {
+     "player_id": 5083315,
+     "name": "Kenyon Sadiq"
+    }
+   ],
+   "send": [
+    {
+     "player_id": 4429059,
+     "name": "Woody Marks"
+    }
+   ],
+   "players": [
+    {
+     "player_id": 5083315,
+     "name": "Kenyon Sadiq",
+     "from_team": null,
+     "to_team": 1
+    },
+    {
+     "player_id": 4429059,
+     "name": "Woody Marks",
+     "from_team": 1,
+     "to_team": null
+    }
+   ]
+  },
+  "any_claim": true,
+  "waterfall_note": "A losing claim is free -- winning moves you to the back of the queue and losing leaves you where you were -- so submit every candidate above the threshold, in order."
+ },
+ "error": null,
+ "name": "League Bravo (12, half PPR)",
+ "team_id": 1
+}

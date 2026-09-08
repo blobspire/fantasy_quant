@@ -1,0 +1,437 @@
+{
+ "ok": true,
+ "endpoint": "trades",
+ "league_id": 161496047,
+ "season": 2026,
+ "sims": 4000,
+ "schema_version": 1,
+ "cached": false,
+ "computed_at": "2026-09-08T15:30:40.894+00:00",
+ "stale_seconds": 0.0,
+ "compute_seconds": 7.965,
+ "data": {
+  "league_id": 161496047,
+  "name": "League Bravo (12, half PPR) \ud83e\udd75",
+  "team_id": 1,
+  "n_found": 32,
+  "min_gain": 0.0,
+  "significance_test": "selection-adjusted (decide.trades.selection_threshold)",
+  "selection_note": "dTitle on the top row is the MAXIMUM of 32 noisy paired estimates, so it is biased upward; the +/- is this draw's Monte Carlo error and not the uncertainty on the trade being worth that. Re-run with --seed to see how far it moves before you propose anything.",
+  "trades": [
+   {
+    "kind": "trade",
+    "league_id": 161496047,
+    "delta_title": 0.0145,
+    "delta_points": 9.987633898156218,
+    "stderr": 0.004803978252632181,
+    "z": 3.018331732050453,
+    "significant": false,
+    "verdict": "noise",
+    "verdict_note": "inside the selection-adjusted error for a search winner",
+    "leverage": 0.9676668523880971,
+    "confidence": "low",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason, Blake Corum (+0.6 pts) for Trevor Lawrence; Team 14 gets Trevor Lawrence (+7.7 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +0.6 playoff-weighted pts). Your title odds 6.8% -> 8.2% (+1.45pp +/- 0.48), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.95pp +/- 0.36) even though its starting lineup gains points.",
+    "receive": [
+     {
+      "player_id": 4241416,
+      "name": "Chuba Hubbard"
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason"
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 4241416,
+      "name": "Chuba Hubbard",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4360310,
+      "name": "Trevor Lawrence",
+      "from_team": 3,
+      "to_team": 14
+     },
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason",
+      "from_team": 1,
+      "to_team": 3
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum",
+      "from_team": 1,
+      "to_team": 3
+     }
+    ],
+    "partners": [
+     {
+      "team_id": 3,
+      "name": "Team 03"
+     },
+     {
+      "team_id": 14,
+      "name": "Team 14"
+     }
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+    ]
+   },
+   {
+    "kind": "trade",
+    "league_id": 161496047,
+    "delta_title": 0.0115,
+    "delta_points": 10.280771167567536,
+    "stderr": 0.0043984968106784384,
+    "z": 2.6145295756679663,
+    "significant": false,
+    "verdict": "noise",
+    "verdict_note": "inside the selection-adjusted error for a search winner",
+    "leverage": 0.9676668523880971,
+    "confidence": "low",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason (+2.3 pts) for Tyler Shough; Team 14 gets Tyler Shough (+2.7 pts) for Jaylen Waddle. You get Jaylen Waddle (+10.3 pts). Every side gains on its own starting lineup (weakest +2.3 playoff-weighted pts). Your title odds 6.8% -> 7.9% (+1.15pp +/- 0.44), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.20pp +/- 0.33), Team 14 (-0.45pp +/- 0.48) even though its starting lineup gains points.",
+    "receive": [
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4360689,
+      "name": "Tyler Shough",
+      "from_team": 3,
+      "to_team": 14
+     },
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason",
+      "from_team": 1,
+      "to_team": 3
+     }
+    ],
+    "partners": [
+     {
+      "team_id": 3,
+      "name": "Team 03"
+     },
+     {
+      "team_id": 14,
+      "name": "Team 14"
+     }
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+    ]
+   },
+   {
+    "kind": "trade",
+    "league_id": 161496047,
+    "delta_title": 0.0115,
+    "delta_points": 9.987633898156218,
+    "stderr": 0.00457953933765573,
+    "z": 2.5111696072659697,
+    "significant": false,
+    "verdict": "noise",
+    "verdict_note": "inside the selection-adjusted error for a search winner",
+    "leverage": 0.9676668523880971,
+    "confidence": "low",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason, Blake Corum (+1.9 pts) for Tyler Shough, Harrison Mevis; Team 14 gets Tyler Shough, Harrison Mevis (+9.9 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +1.9 playoff-weighted pts). Your title odds 6.8% -> 7.9% (+1.15pp +/- 0.46), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 14 (-0.38pp +/- 0.53) even though its starting lineup gains points.",
+    "receive": [
+     {
+      "player_id": 4241416,
+      "name": "Chuba Hubbard"
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason"
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 4241416,
+      "name": "Chuba Hubbard",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4360689,
+      "name": "Tyler Shough",
+      "from_team": 3,
+      "to_team": 14
+     },
+     {
+      "player_id": 4574716,
+      "name": "Harrison Mevis",
+      "from_team": 3,
+      "to_team": 14
+     },
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason",
+      "from_team": 1,
+      "to_team": 3
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum",
+      "from_team": 1,
+      "to_team": 3
+     }
+    ],
+    "partners": [
+     {
+      "team_id": 3,
+      "name": "Team 03"
+     },
+     {
+      "team_id": 14,
+      "name": "Team 14"
+     }
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+    ]
+   },
+   {
+    "kind": "trade",
+    "league_id": 161496047,
+    "delta_title": 0.011,
+    "delta_points": 9.987633898156218,
+    "stderr": 0.004511079411777723,
+    "z": 2.438440780111456,
+    "significant": false,
+    "verdict": "noise",
+    "verdict_note": "inside the selection-adjusted error for a search winner",
+    "leverage": 0.9676668523880971,
+    "confidence": "low",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason, Blake Corum (+1.9 pts) for Harrison Mevis; Team 14 gets Harrison Mevis (+2.6 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +1.9 playoff-weighted pts). Your title odds 6.8% -> 7.9% (+1.10pp +/- 0.45), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 14 (-1.23pp +/- 0.50) even though its starting lineup gains points.",
+    "receive": [
+     {
+      "player_id": 4241416,
+      "name": "Chuba Hubbard"
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason"
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 4241416,
+      "name": "Chuba Hubbard",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4574716,
+      "name": "Harrison Mevis",
+      "from_team": 3,
+      "to_team": 14
+     },
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason",
+      "from_team": 1,
+      "to_team": 3
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum",
+      "from_team": 1,
+      "to_team": 3
+     }
+    ],
+    "partners": [
+     {
+      "team_id": 3,
+      "name": "Team 03"
+     },
+     {
+      "team_id": 14,
+      "name": "Team 14"
+     }
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+    ]
+   },
+   {
+    "kind": "trade",
+    "league_id": 161496047,
+    "delta_title": 0.01025,
+    "delta_points": 11.489141603500684,
+    "stderr": 0.004747827907839607,
+    "z": 2.1588819559098202,
+    "significant": false,
+    "verdict": "noise",
+    "verdict_note": "inside the selection-adjusted error for a search winner",
+    "leverage": 0.9676668523880971,
+    "confidence": "low",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason, Blake Corum (+0.6 pts) for Trevor Lawrence; Team 14 gets Trevor Lawrence (+6.0 pts) for Parker Washington, Jaylen Waddle. You get Parker Washington, Jaylen Waddle (+11.5 pts). Every side gains on its own starting lineup (weakest +0.6 playoff-weighted pts). Your title odds 6.8% -> 7.8% (+1.03pp +/- 0.47), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.80pp +/- 0.37) even though its starting lineup gains points.",
+    "receive": [
+     {
+      "player_id": 4432620,
+      "name": "Parker Washington"
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason"
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 4432620,
+      "name": "Parker Washington",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4372016,
+      "name": "Jaylen Waddle",
+      "from_team": 14,
+      "to_team": 1
+     },
+     {
+      "player_id": 4360310,
+      "name": "Trevor Lawrence",
+      "from_team": 3,
+      "to_team": 14
+     },
+     {
+      "player_id": 4360569,
+      "name": "Jordan Mason",
+      "from_team": 1,
+      "to_team": 3
+     },
+     {
+      "player_id": 4429096,
+      "name": "Blake Corum",
+      "from_team": 1,
+      "to_team": 3
+     }
+    ],
+    "partners": [
+     {
+      "team_id": 3,
+      "name": "Team 03"
+     },
+     {
+      "team_id": 14,
+      "name": "Team 14"
+     }
+    ],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+    ]
+   }
+  ]
+ },
+ "error": null,
+ "name": "League Bravo (12, half PPR)",
+ "team_id": 1
+}

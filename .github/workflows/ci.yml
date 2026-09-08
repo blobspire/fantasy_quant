@@ -23,3 +23,26 @@ jobs:
         # Network tests hit live ESPN endpoints; they run locally, not in CI,
         # so a third-party outage can never redden the build.
         run: uv run pytest -q -m "not network"
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: web
+      - name: Render tests
+        # These mount every view against payloads captured from the live API, so
+        # they catch a view that type-checks but throws on real data.
+        run: npm test
+        working-directory: web
+      - name: Build
+        run: npm run build
+        working-directory: web

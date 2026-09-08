@@ -1,0 +1,2225 @@
+{
+ "ok": true,
+ "endpoint": "weekly",
+ "league_id": 161496047,
+ "season": 2026,
+ "sims": 4000,
+ "schema_version": 1,
+ "cached": false,
+ "computed_at": "2026-09-08T15:30:32.918+00:00",
+ "stale_seconds": 0.0,
+ "compute_seconds": 18.33,
+ "data": {
+  "league_id": 161496047,
+  "season": 2026,
+  "name": "League Bravo (12, half PPR) \ud83e\udd75",
+  "ok": true,
+  "team_id": 1,
+  "week": 1,
+  "n_sims": 4000,
+  "corpus_variant": "ppr",
+  "corpus_variant_requested": "half_ppr",
+  "odds": {
+   "ok": true,
+   "league_id": 161496047,
+   "season": 2026,
+   "name": "League Bravo (12, half PPR) \ud83e\udd75",
+   "size": 12,
+   "week": 1,
+   "team_id": 1,
+   "team_name": "Team 01",
+   "n_sims": 4000,
+   "corpus_variant": "ppr",
+   "corpus_variant_requested": "half_ppr",
+   "baseline": "championship_table (unfilled slot scores zero)",
+   "teams": [
+    {
+     "rank": 1,
+     "team_id": 11,
+     "name": "Team 11",
+     "is_me": false,
+     "championship": 0.137,
+     "playoffs": 0.6565,
+     "bye": 0.2865,
+     "expected_wins": 7.709000110626221,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 6,
+     "championship_stderr": 0.005436703964719801,
+     "separated_from_next": false
+    },
+    {
+     "rank": 2,
+     "team_id": 6,
+     "name": "Team 06",
+     "is_me": false,
+     "championship": 0.1245,
+     "playoffs": 0.545,
+     "bye": 0.202,
+     "expected_wins": 7.183499813079834,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 3,
+     "championship_stderr": 0.00522014726803756,
+     "separated_from_next": false
+    },
+    {
+     "rank": 3,
+     "team_id": 13,
+     "name": "Team 13",
+     "is_me": false,
+     "championship": 0.11525,
+     "playoffs": 0.60175,
+     "bye": 0.24125,
+     "expected_wins": 7.489999771118164,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 2,
+     "championship_stderr": 0.005048946362856314,
+     "separated_from_next": true
+    },
+    {
+     "rank": 4,
+     "team_id": 8,
+     "name": "Team 08",
+     "is_me": false,
+     "championship": 0.096,
+     "playoffs": 0.55,
+     "bye": 0.19475,
+     "expected_wins": 7.208499908447266,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 4,
+     "championship_stderr": 0.004657896520963084,
+     "separated_from_next": false
+    },
+    {
+     "rank": 5,
+     "team_id": 12,
+     "name": "Team 12",
+     "is_me": false,
+     "championship": 0.092,
+     "playoffs": 0.501,
+     "bye": 0.1635,
+     "expected_wins": 6.921750068664551,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 1,
+     "championship_stderr": 0.00456990153066781,
+     "separated_from_next": false
+    },
+    {
+     "rank": 6,
+     "team_id": 15,
+     "name": "Team 15",
+     "is_me": false,
+     "championship": 0.08575,
+     "playoffs": 0.49075,
+     "bye": 0.1455,
+     "expected_wins": 6.949999809265137,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 5,
+     "championship_stderr": 0.004427102254861526,
+     "separated_from_next": false
+    },
+    {
+     "rank": 7,
+     "team_id": 4,
+     "name": "Team 04",
+     "is_me": false,
+     "championship": 0.08325,
+     "playoffs": 0.51225,
+     "bye": 0.16925,
+     "expected_wins": 7.039999961853027,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 9,
+     "championship_stderr": 0.0043680498365975635,
+     "separated_from_next": false
+    },
+    {
+     "rank": 8,
+     "team_id": 14,
+     "name": "Team 14",
+     "is_me": false,
+     "championship": 0.076,
+     "playoffs": 0.523,
+     "bye": 0.17275,
+     "expected_wins": 7.053750038146973,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 7,
+     "championship_stderr": 0.004189988066808783,
+     "separated_from_next": true
+    },
+    {
+     "rank": 9,
+     "team_id": 16,
+     "name": "Team 05",
+     "is_me": false,
+     "championship": 0.06,
+     "playoffs": 0.41725,
+     "bye": 0.11425,
+     "expected_wins": 6.610249996185303,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 8,
+     "championship_stderr": 0.0037549966711037173,
+     "separated_from_next": true
+    },
+    {
+     "rank": 10,
+     "team_id": 1,
+     "name": "Team 01",
+     "is_me": true,
+     "championship": 0.04925,
+     "playoffs": 0.41925,
+     "bye": 0.1,
+     "expected_wins": 6.71150016784668,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 10,
+     "championship_stderr": 0.003421419204803761,
+     "separated_from_next": false
+    },
+    {
+     "rank": 11,
+     "team_id": 5,
+     "name": "Team 05",
+     "is_me": false,
+     "championship": 0.042,
+     "playoffs": 0.42025,
+     "bye": 0.11475,
+     "expected_wins": 6.7467498779296875,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 11,
+     "championship_stderr": 0.0031715926598477303,
+     "separated_from_next": false
+    },
+    {
+     "rank": 12,
+     "team_id": 3,
+     "name": "Team 03",
+     "is_me": false,
+     "championship": 0.039,
+     "playoffs": 0.363,
+     "bye": 0.0955,
+     "expected_wins": 6.375,
+     "wins": 0,
+     "losses": 0,
+     "ties": 0,
+     "points_for": 0.0,
+     "espn_projected_rank": 12,
+     "championship_stderr": 0.0030610047370103824,
+     "separated_from_next": null
+    }
+   ],
+   "my_rank": 10,
+   "my_championship": 0.04925,
+   "my_championship_stderr": 0.003421419204803761,
+   "my_playoffs": 0.41925,
+   "n_ranks_separated": 3,
+   "n_ranks": 11,
+   "ranking_note": "3 of 11 adjacent pairs are separated by more than twice the paired Monte Carlo error at 4,000 simulations. The rest of this order is noise; raise --sims to resolve it."
+  },
+  "leverage": {
+   "ok": true,
+   "league_id": 161496047,
+   "name": "League Bravo (12, half PPR) \ud83e\udd75",
+   "team_id": 1,
+   "mean_leverage": 0.9648775955419538,
+   "this_week": {
+    "week": 1,
+    "matchup_period": 1,
+    "weeks_in_matchup": 1,
+    "opponent_id": 15,
+    "opponent": "Team 15",
+    "margin": 1.5465198574066161,
+    "sd_diff": 28.08003211879331,
+    "win_probability": 0.51575,
+    "leverage": 0.9984844980122987,
+    "decided": false,
+    "points_per_win_pct": 1.4185798680618609
+   },
+   "least_leveraged": {
+    "week": 11,
+    "matchup_period": 11,
+    "weeks_in_matchup": 1,
+    "opponent_id": 5,
+    "opponent": "Team 05",
+    "margin": 14.4327717294693,
+    "sd_diff": 20.692172750650847,
+    "win_probability": 0.7565,
+    "leverage": 0.7840735160998961,
+    "decided": false,
+    "points_per_win_pct": 1.511683090435359
+   },
+   "weeks": [
+    {
+     "week": 1,
+     "matchup_period": 1,
+     "weeks_in_matchup": 1,
+     "opponent_id": 15,
+     "opponent": "Team 15",
+     "margin": 1.5465198574066161,
+     "sd_diff": 28.08003211879331,
+     "win_probability": 0.51575,
+     "leverage": 0.9984844980122987,
+     "decided": false,
+     "points_per_win_pct": 1.4185798680618609
+    },
+    {
+     "week": 2,
+     "matchup_period": 2,
+     "weeks_in_matchup": 1,
+     "opponent_id": 4,
+     "opponent": "Team 04",
+     "margin": -1.6921185474395752,
+     "sd_diff": 27.70731013714334,
+     "win_probability": 0.4725,
+     "leverage": 0.9981368922988147,
+     "decided": false,
+     "points_per_win_pct": 1.437162272322777
+    },
+    {
+     "week": 3,
+     "matchup_period": 3,
+     "weeks_in_matchup": 1,
+     "opponent_id": 13,
+     "opponent": "Team 13",
+     "margin": 0.6777541208267212,
+     "sd_diff": 27.482989735427914,
+     "win_probability": 0.51125,
+     "leverage": 0.9996959672565215,
+     "decided": false,
+     "points_per_win_pct": 1.4511557611627621
+    },
+    {
+     "week": 4,
+     "matchup_period": 4,
+     "weeks_in_matchup": 1,
+     "opponent_id": 6,
+     "opponent": "Team 06",
+     "margin": 0.09450054359436035,
+     "sd_diff": 27.865857443343582,
+     "win_probability": 0.49225,
+     "leverage": 0.9999942496729347,
+     "decided": false,
+     "points_per_win_pct": 1.4316443955258102
+    },
+    {
+     "week": 5,
+     "matchup_period": 5,
+     "weeks_in_matchup": 1,
+     "opponent_id": 14,
+     "opponent": "Team 14",
+     "margin": -1.5237889604568482,
+     "sd_diff": 28.717866860504046,
+     "win_probability": 0.4865,
+     "leverage": 0.9985932735652505,
+     "decided": false,
+     "points_per_win_pct": 1.3872237784399997
+    },
+    {
+     "week": 6,
+     "matchup_period": 6,
+     "weeks_in_matchup": 1,
+     "opponent_id": 12,
+     "opponent": "Team 12",
+     "margin": -7.553913788795471,
+     "sd_diff": 26.55686663032744,
+     "win_probability": 0.38825,
+     "leverage": 0.9603534366161377,
+     "decided": false,
+     "points_per_win_pct": 1.4426611216154264
+    },
+    {
+     "week": 7,
+     "matchup_period": 7,
+     "weeks_in_matchup": 1,
+     "opponent_id": 16,
+     "opponent": "Team 05",
+     "margin": 0.3767500638961792,
+     "sd_diff": 25.447679524974095,
+     "win_probability": 0.5,
+     "leverage": 0.9998904136398165,
+     "decided": false,
+     "points_per_win_pct": 1.5675243056150767
+    },
+    {
+     "week": 8,
+     "matchup_period": 8,
+     "weeks_in_matchup": 1,
+     "opponent_id": 8,
+     "opponent": "Team 08",
+     "margin": -5.2793623046875,
+     "sd_diff": 25.946976644652768,
+     "win_probability": 0.417,
+     "leverage": 0.9795132845450105,
+     "decided": false,
+     "points_per_win_pct": 1.5060300426193
+    },
+    {
+     "week": 9,
+     "matchup_period": 9,
+     "weeks_in_matchup": 1,
+     "opponent_id": 3,
+     "opponent": "Team 03",
+     "margin": 3.0517991218566896,
+     "sd_diff": 26.042394623212417,
+     "win_probability": 0.538,
+     "leverage": 0.993157261789696,
+     "decided": false,
+     "points_per_win_pct": 1.5214131747411095
+    },
+    {
+     "week": 10,
+     "matchup_period": 10,
+     "weeks_in_matchup": 1,
+     "opponent_id": 11,
+     "opponent": "Team 11",
+     "margin": -14.090303974151611,
+     "sd_diff": 25.61212116990894,
+     "win_probability": 0.29575,
+     "leverage": 0.8595656126785867,
+     "decided": false,
+     "points_per_win_pct": 1.3388858478443206
+    },
+    {
+     "week": 11,
+     "matchup_period": 11,
+     "weeks_in_matchup": 1,
+     "opponent_id": 5,
+     "opponent": "Team 05",
+     "margin": 14.4327717294693,
+     "sd_diff": 20.692172750650847,
+     "win_probability": 0.7565,
+     "leverage": 0.7840735160998961,
+     "decided": false,
+     "points_per_win_pct": 1.511683090435359
+    },
+    {
+     "week": 12,
+     "matchup_period": 12,
+     "weeks_in_matchup": 1,
+     "opponent_id": 12,
+     "opponent": "Team 12",
+     "margin": -9.127201609611511,
+     "sd_diff": 27.922481764573316,
+     "win_probability": 0.372,
+     "leverage": 0.9479778845285007,
+     "decided": false,
+     "points_per_win_pct": 1.3544227988493243
+    },
+    {
+     "week": 13,
+     "matchup_period": 13,
+     "weeks_in_matchup": 1,
+     "opponent_id": 16,
+     "opponent": "Team 05",
+     "margin": -2.877235366821289,
+     "sd_diff": 26.610875756139304,
+     "win_probability": 0.457,
+     "leverage": 0.9941718088116114,
+     "decided": false,
+     "points_per_win_pct": 1.4904326041453906
+    },
+    {
+     "week": 14,
+     "matchup_period": 14,
+     "weeks_in_matchup": 1,
+     "opponent_id": 8,
+     "opponent": "Team 08",
+     "margin": 2.774384122848511,
+     "sd_diff": 26.856213649972588,
+     "win_probability": 0.54225,
+     "leverage": 0.9946782380722782,
+     "decided": false,
+     "points_per_win_pct": 1.4775694360125813
+    }
+   ]
+  },
+  "lineup": {
+   "ok": true,
+   "league_id": 161496047,
+   "name": "League Bravo (12, half PPR) \ud83e\udd75",
+   "team_id": 1,
+   "team_name": "Team 01",
+   "week": 1,
+   "threshold_kind": "opponent",
+   "target": "this week's matchup",
+   "margin": 1.177433539154008,
+   "sd_diff": 29.639338592071944,
+   "z": 0.039725364838908823,
+   "leverage": 0.9992112589141169,
+   "current_known": true,
+   "unpriced_current": [],
+   "opponent": {
+    "team_id": 15,
+    "name": "Team 15",
+    "mean": 102.63198278487042,
+    "sd": 21.471863462676133
+   },
+   "recommended": [
+    {
+     "slot_id": 0,
+     "slot": "QB",
+     "player_id": 4040715,
+     "name": "Jalen Hurts"
+    },
+    {
+     "slot_id": 6,
+     "slot": "TE",
+     "player_id": 4723086,
+     "name": "Colston Loveland"
+    },
+    {
+     "slot_id": 16,
+     "slot": "DST",
+     "player_id": -16024,
+     "name": "Chargers D/ST"
+    },
+    {
+     "slot_id": 17,
+     "slot": "K",
+     "player_id": 3055899,
+     "name": "Harrison Butker"
+    },
+    {
+     "slot_id": 4,
+     "slot": "WR",
+     "player_id": 4262921,
+     "name": "Justin Jefferson"
+    },
+    {
+     "slot_id": 4,
+     "slot": "WR",
+     "player_id": 4685278,
+     "name": "Luther Burden III"
+    },
+    {
+     "slot_id": 2,
+     "slot": "RB",
+     "player_id": 4362238,
+     "name": "Chase Brown"
+    },
+    {
+     "slot_id": 2,
+     "slot": "RB",
+     "player_id": 4239996,
+     "name": "Travis Etienne Jr."
+    },
+    {
+     "slot_id": 23,
+     "slot": "FLEX",
+     "player_id": 4429023,
+     "name": "MarShawn Lloyd"
+    }
+   ],
+   "baseline": [
+    {
+     "slot_id": 0,
+     "slot": "QB",
+     "player_id": 4040715,
+     "name": "Jalen Hurts"
+    },
+    {
+     "slot_id": 6,
+     "slot": "TE",
+     "player_id": 4723086,
+     "name": "Colston Loveland"
+    },
+    {
+     "slot_id": 16,
+     "slot": "DST",
+     "player_id": -16024,
+     "name": "Chargers D/ST"
+    },
+    {
+     "slot_id": 17,
+     "slot": "K",
+     "player_id": 3055899,
+     "name": "Harrison Butker"
+    },
+    {
+     "slot_id": 4,
+     "slot": "WR",
+     "player_id": 4262921,
+     "name": "Justin Jefferson"
+    },
+    {
+     "slot_id": 4,
+     "slot": "WR",
+     "player_id": 4685278,
+     "name": "Luther Burden III"
+    },
+    {
+     "slot_id": 2,
+     "slot": "RB",
+     "player_id": 4362238,
+     "name": "Chase Brown"
+    },
+    {
+     "slot_id": 2,
+     "slot": "RB",
+     "player_id": 4239996,
+     "name": "Travis Etienne Jr."
+    },
+    {
+     "slot_id": 23,
+     "slot": "FLEX",
+     "player_id": 4429023,
+     "name": "MarShawn Lloyd"
+    }
+   ],
+   "changes": [],
+   "n_changes": 0,
+   "points_lineup_mean": 104.9318608455003,
+   "win_prob_lineup_mean": 104.9318608455003,
+   "delta_win_prob": 0.0,
+   "delta_win_prob_stderr": 0.0,
+   "noise_floor": 0.0,
+   "points_sacrifice": 0.0,
+   "guard": "",
+   "differ": false,
+   "significant": false,
+   "n_lineups": 48,
+   "sd_independent": 30.355095657479154,
+   "stacks": [
+    {
+     "name": "Luther Burden III",
+     "opponent_name": "Caleb Williams",
+     "rho": 0.3,
+     "modelled": true
+    },
+    {
+     "name": "Colston Loveland",
+     "opponent_name": "Caleb Williams",
+     "rho": 0.2,
+     "modelled": true
+    },
+    {
+     "name": "Chargers D/ST",
+     "opponent_name": "Omarion Hampton",
+     "rho": 0.0,
+     "modelled": false
+    },
+    {
+     "name": "Harrison Butker",
+     "opponent_name": "Travis Kelce",
+     "rho": 0.0,
+     "modelled": false
+    }
+   ],
+   "recommendation": {
+    "kind": "hold",
+    "league_id": 161496047,
+    "delta_title": 0.0,
+    "delta_points": 0.0,
+    "stderr": 0.0,
+    "z": null,
+    "significant": false,
+    "verdict": "null",
+    "verdict_note": "nothing measured: this move changes no roster",
+    "leverage": 0.9992112589141169,
+    "confidence": "medium",
+    "tags": [
+     "start_sit",
+     "opponent",
+     "favorite",
+     "no_change",
+     "not_significant"
+    ],
+    "rationale": "Start the projected-best lineup; nothing to change. You are a 0.04-sigma favorite against Team 15 (+1.2 +/- 29.6 points). Leverage 1.00 against an even matchup. Worth +0.000pp of championship probability, inside its own 0.000pp Monte Carlo error.",
+    "receive": [],
+    "send": [],
+    "players": []
+   }
+  },
+  "waivers": {
+   "ok": true,
+   "league_id": 161496047,
+   "name": "League Bravo (12, half PPR) \ud83e\udd75",
+   "team_id": 1,
+   "team_name": "Team 01",
+   "week": 1,
+   "uses_faab": false,
+   "priority": 2,
+   "priority_known": true,
+   "budget": 100,
+   "threshold": 0.0011549247226075691,
+   "baseline_title": 0.06175,
+   "baseline": "waiver board (unfilled slot streams a replacement)",
+   "title_per_point": 0.0008125,
+   "title_per_point_stderr": 3.904992522316631e-05,
+   "week_leverage": 0.9978265243478915,
+   "sd_diff": 27.453343440404335,
+   "n_free_agents": 60,
+   "board": [
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0020093210467100144,
+     "delta_points": 2.47301051902771,
+     "stderr": 0.0001558059690313548,
+     "z": 12.896303390697781,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.001750",
+      "bracket_se:0.001561",
+      "add:Kenyon Sadiq",
+      "pos:TE",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": 5083315,
+       "name": "Kenyon Sadiq"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 5083315,
+       "name": "Kenyon Sadiq",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Kenyon Sadiq",
+     "position": "TE",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00175,
+     "bracket_stderr": 0.001561,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.0008543963241024453,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0016429039201140403,
+     "delta_points": 2.0220355939865113,
+     "stderr": 0.0001407624845462236,
+     "z": 11.671461507732506,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.003250",
+      "bracket_se:0.001676",
+      "add:Jets D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Jets D/ST (DST), drop Woody Marks. +2.0 starting-lineup points over the rest of the season, which is +0.16pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.33pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16020,
+       "name": "Jets D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16020,
+       "name": "Jets D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Jets D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00325,
+     "bracket_stderr": 0.001676,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.0004879791975064712,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0015225382753014563,
+     "delta_points": 1.8738932619094848,
+     "stderr": 0.0001538806316261732,
+     "z": 9.894281425879534,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.004500",
+      "bracket_se:0.001802",
+      "add:Buccaneers D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Buccaneers D/ST (DST), drop Woody Marks. +1.9 starting-lineup points over the rest of the season, which is +0.15pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.45pp +/-0.18pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16027,
+       "name": "Buccaneers D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16027,
+       "name": "Buccaneers D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Buccaneers D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.0045,
+     "bracket_stderr": 0.001802,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.0003676135526938871,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0013856514533758162,
+     "delta_points": 1.70541717338562,
+     "stderr": 0.00012235837644156416,
+     "z": 11.324532849106369,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.002750",
+      "bracket_se:0.001714",
+      "add:Chiefs D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Chiefs D/ST (DST), drop Woody Marks. +1.7 starting-lineup points over the rest of the season, which is +0.14pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.27pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16012,
+       "name": "Chiefs D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16012,
+       "name": "Chiefs D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Chiefs D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00275,
+     "bracket_stderr": 0.001714,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.00023072673076824702,
+     "clears_certain": false
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0010120410653948785,
+     "delta_points": 1.2455890035629273,
+     "stderr": 0.0001251139711663587,
+     "z": 8.08895326365439,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.002250",
+      "bracket_se:0.001714",
+      "add:Giants D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Giants D/ST (DST), drop Woody Marks. +1.2 starting-lineup points over the rest of the season, which is +0.10pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.22pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16019,
+       "name": "Giants D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16019,
+       "name": "Giants D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Giants D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00225,
+     "bracket_stderr": 0.001714,
+     "agrees": true,
+     "clears_threshold": false,
+     "clears_margin": -0.00014288365721269063,
+     "clears_certain": false
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0009059981467723845,
+     "delta_points": 1.1150746421813964,
+     "stderr": 0.00010705336816929252,
+     "z": 8.463051301101085,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.001750",
+      "bracket_se:0.001479",
+      "add:49ers D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim 49ers D/ST (DST), drop Woody Marks. +1.1 starting-lineup points over the rest of the season, which is +0.09pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.18pp +/-0.15pp, consistent, and too noisy at this simulation count to rank on. Below the 0.115pp continuation value of priority 2: hold the claim. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16025,
+       "name": "49ers D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16025,
+       "name": "49ers D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "49ers D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00175,
+     "bracket_stderr": 0.001479,
+     "agrees": true,
+     "clears_threshold": false,
+     "clears_margin": -0.00024892657583518467,
+     "clears_certain": true
+    }
+   ],
+   "claims": [
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0020093210467100144,
+     "delta_points": 2.47301051902771,
+     "stderr": 0.0001558059690313548,
+     "z": 12.896303390697781,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.001750",
+      "bracket_se:0.001561",
+      "add:Kenyon Sadiq",
+      "pos:TE",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": 5083315,
+       "name": "Kenyon Sadiq"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 5083315,
+       "name": "Kenyon Sadiq",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Kenyon Sadiq",
+     "position": "TE",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00175,
+     "bracket_stderr": 0.001561,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.0008543963241024453,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0016429039201140403,
+     "delta_points": 2.0220355939865113,
+     "stderr": 0.0001407624845462236,
+     "z": 11.671461507732506,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.003250",
+      "bracket_se:0.001676",
+      "add:Jets D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Jets D/ST (DST), drop Woody Marks. +2.0 starting-lineup points over the rest of the season, which is +0.16pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.33pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16020,
+       "name": "Jets D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16020,
+       "name": "Jets D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Jets D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00325,
+     "bracket_stderr": 0.001676,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.0004879791975064712,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0015225382753014563,
+     "delta_points": 1.8738932619094848,
+     "stderr": 0.0001538806316261732,
+     "z": 9.894281425879534,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.004500",
+      "bracket_se:0.001802",
+      "add:Buccaneers D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Buccaneers D/ST (DST), drop Woody Marks. +1.9 starting-lineup points over the rest of the season, which is +0.15pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.45pp +/-0.18pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16027,
+       "name": "Buccaneers D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16027,
+       "name": "Buccaneers D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Buccaneers D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.0045,
+     "bracket_stderr": 0.001802,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.0003676135526938871,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.0013856514533758162,
+     "delta_points": 1.70541717338562,
+     "stderr": 0.00012235837644156416,
+     "z": 11.324532849106369,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors",
+     "leverage": 0.9978265243478915,
+     "confidence": "high",
+     "tags": [
+      "waiver",
+      "confirmed",
+      "bracket:0.002750",
+      "bracket_se:0.001714",
+      "add:Chiefs D/ST",
+      "pos:DST",
+      "drop:Woody Marks"
+     ],
+     "rationale": "Claim Chiefs D/ST (DST), drop Woody Marks. +1.7 starting-lineup points over the rest of the season, which is +0.14pp of title probability (+/-0.01pp). A direct paired bracket run puts it at +0.27pp +/-0.17pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+     "receive": [
+      {
+       "player_id": -16012,
+       "name": "Chiefs D/ST"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks"
+      }
+     ],
+     "players": [
+      {
+       "player_id": -16012,
+       "name": "Chiefs D/ST",
+       "from_team": null,
+       "to_team": 1
+      },
+      {
+       "player_id": 4429059,
+       "name": "Woody Marks",
+       "from_team": 1,
+       "to_team": null
+      }
+     ],
+     "add": "Chiefs D/ST",
+     "position": "DST",
+     "drop": "Woody Marks",
+     "bracket_title": 0.00275,
+     "bracket_stderr": 0.001714,
+     "agrees": true,
+     "clears_threshold": true,
+     "clears_margin": 0.00023072673076824702,
+     "clears_certain": false
+    }
+   ],
+   "blocks": [
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.00028549706425896296,
+     "delta_points": 0.0,
+     "stderr": 2.952768540146907e-05,
+     "z": 9.668792537486153,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors, but the surface that produced it rates it confidence='low'",
+     "leverage": 0.9978265243478915,
+     "confidence": "low",
+     "tags": [
+      "waiver",
+      "blocking",
+      "add:Kenyon Sadiq",
+      "rival:12"
+     ],
+     "rationale": "Blocking only. Kenyon Sadiq is worth +2.8 points and +0.31pp to Team 12; denying him returns +0.029pp to us, 1/11 of his gain. Never claim for this reason alone.",
+     "receive": [
+      {
+       "player_id": 5083315,
+       "name": "Kenyon Sadiq"
+      }
+     ],
+     "send": [],
+     "players": [
+      {
+       "player_id": 5083315,
+       "name": "Kenyon Sadiq",
+       "from_team": null,
+       "to_team": 1
+      }
+     ],
+     "add": "Kenyon Sadiq",
+     "position": "-",
+     "drop": "-",
+     "bracket_title": 0.0,
+     "bracket_stderr": 0.0,
+     "agrees": true,
+     "clears_threshold": false,
+     "clears_margin": -0.0008694276583486062,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 0.00020817313219774212,
+     "delta_points": 0.0,
+     "stderr": 2.153041668756979e-05,
+     "z": 9.668792537486153,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors, but the surface that produced it rates it confidence='low'",
+     "leverage": 0.9978265243478915,
+     "confidence": "low",
+     "tags": [
+      "waiver",
+      "blocking",
+      "add:C.J. Stroud",
+      "rival:12"
+     ],
+     "rationale": "Blocking only. C.J. Stroud is worth +2.1 points and +0.23pp to Team 12; denying him returns +0.021pp to us, 1/11 of his gain. Never claim for this reason alone.",
+     "receive": [
+      {
+       "player_id": 4432577,
+       "name": "C.J. Stroud"
+      }
+     ],
+     "send": [],
+     "players": [
+      {
+       "player_id": 4432577,
+       "name": "C.J. Stroud",
+       "from_team": null,
+       "to_team": 1
+      }
+     ],
+     "add": "C.J. Stroud",
+     "position": "-",
+     "drop": "-",
+     "bracket_title": 0.0,
+     "bracket_stderr": 0.0,
+     "agrees": true,
+     "clears_threshold": false,
+     "clears_margin": -0.0009467515904098271,
+     "clears_certain": true
+    },
+    {
+     "kind": "waiver_claim",
+     "league_id": 161496047,
+     "delta_title": 3.8480224513044255e-05,
+     "delta_points": 0.0,
+     "stderr": 4.470042825280173e-06,
+     "z": 8.60846887090671,
+     "significant": true,
+     "verdict": "act",
+     "verdict_note": "clears two standard errors, but the surface that produced it rates it confidence='low'",
+     "leverage": 0.9978265243478915,
+     "confidence": "low",
+     "tags": [
+      "waiver",
+      "blocking",
+      "add:Justice Hill",
+      "rival:5"
+     ],
+     "rationale": "Blocking only. Justice Hill is worth +0.5 points and +0.04pp to Team 05; denying him returns +0.004pp to us, 1/11 of his gain. Never claim for this reason alone.",
+     "receive": [
+      {
+       "player_id": 4038441,
+       "name": "Justice Hill"
+      }
+     ],
+     "send": [],
+     "players": [
+      {
+       "player_id": 4038441,
+       "name": "Justice Hill",
+       "from_team": null,
+       "to_team": 1
+      }
+     ],
+     "add": "Justice Hill",
+     "position": "-",
+     "drop": "-",
+     "bracket_title": 0.0,
+     "bracket_stderr": 0.0,
+     "agrees": true,
+     "clears_threshold": false,
+     "clears_margin": -0.001116444498094525,
+     "clears_certain": true
+    }
+   ],
+   "hold": {
+    "kind": "hold",
+    "league_id": 161496047,
+    "delta_title": 0.0,
+    "delta_points": 0.0,
+    "stderr": 0.0,
+    "z": null,
+    "significant": false,
+    "verdict": "null",
+    "verdict_note": "nothing measured: this move changes no roster",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "hold"
+    ],
+    "rationale": "Submit all 4 claims as one conditional waterfall, best first: a losing claim costs nothing, so submitting every candidate above the 0.115pp threshold weakly dominates submitting one. Only a successful claim spends priority. Every claim here drops the same player, so at most one of them can execute and the list really is a waterfall. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [],
+    "send": [],
+    "players": []
+   },
+   "best": {
+    "kind": "waiver_claim",
+    "league_id": 161496047,
+    "delta_title": 0.0020093210467100144,
+    "delta_points": 2.47301051902771,
+    "stderr": 0.0001558059690313548,
+    "z": 12.896303390697781,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9978265243478915,
+    "confidence": "high",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001750",
+     "bracket_se:0.001561",
+     "add:Kenyon Sadiq",
+     "pos:TE",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "receive": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq"
+     }
+    ],
+    "send": [
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks"
+     }
+    ],
+    "players": [
+     {
+      "player_id": 5083315,
+      "name": "Kenyon Sadiq",
+      "from_team": null,
+      "to_team": 1
+     },
+     {
+      "player_id": 4429059,
+      "name": "Woody Marks",
+      "from_team": 1,
+      "to_team": null
+     }
+    ]
+   },
+   "any_claim": true,
+   "waterfall_note": "A losing claim is free -- winning moves you to the back of the queue and losing leaves you where you were -- so submit every candidate above the threshold, in order."
+  },
+  "trades": {
+   "ok": true,
+   "league_id": 161496047,
+   "name": "League Bravo (12, half PPR) \ud83e\udd75",
+   "team_id": 1,
+   "n_found": 32,
+   "min_gain": 0.0,
+   "significance_test": "selection-adjusted (decide.trades.selection_threshold)",
+   "selection_note": "dTitle on the top row is the MAXIMUM of 32 noisy paired estimates, so it is biased upward; the +/- is this draw's Monte Carlo error and not the uncertainty on the trade being worth that. Re-run with --seed to see how far it moves before you propose anything.",
+   "trades": [
+    {
+     "kind": "trade",
+     "league_id": 161496047,
+     "delta_title": 0.0145,
+     "delta_points": 9.987633898156218,
+     "stderr": 0.004803978252632181,
+     "z": 3.018331732050453,
+     "significant": false,
+     "verdict": "noise",
+     "verdict_note": "inside the selection-adjusted error for a search winner",
+     "leverage": 0.9676668523880971,
+     "confidence": "low",
+     "tags": [
+      "trade",
+      "3-team",
+      "confirmed",
+      "counterparty-loses"
+     ],
+     "rationale": "Team 03 gets Jordan Mason, Blake Corum (+0.6 pts) for Trevor Lawrence; Team 14 gets Trevor Lawrence (+7.7 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +0.6 playoff-weighted pts). Your title odds 6.8% -> 8.2% (+1.45pp +/- 0.48), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.95pp +/- 0.36) even though its starting lineup gains points.",
+     "receive": [
+      {
+       "player_id": 4241416,
+       "name": "Chuba Hubbard"
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason"
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 4241416,
+       "name": "Chuba Hubbard",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4360310,
+       "name": "Trevor Lawrence",
+       "from_team": 3,
+       "to_team": 14
+      },
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason",
+       "from_team": 1,
+       "to_team": 3
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum",
+       "from_team": 1,
+       "to_team": 3
+      }
+     ],
+     "partners": [
+      {
+       "team_id": 3,
+       "name": "Team 03"
+      },
+      {
+       "team_id": 14,
+       "name": "Team 14"
+      }
+     ],
+     "caveats": [
+      "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+     ]
+    },
+    {
+     "kind": "trade",
+     "league_id": 161496047,
+     "delta_title": 0.0115,
+     "delta_points": 10.280771167567536,
+     "stderr": 0.0043984968106784384,
+     "z": 2.6145295756679663,
+     "significant": false,
+     "verdict": "noise",
+     "verdict_note": "inside the selection-adjusted error for a search winner",
+     "leverage": 0.9676668523880971,
+     "confidence": "low",
+     "tags": [
+      "trade",
+      "3-team",
+      "confirmed",
+      "counterparty-loses"
+     ],
+     "rationale": "Team 03 gets Jordan Mason (+2.3 pts) for Tyler Shough; Team 14 gets Tyler Shough (+2.7 pts) for Jaylen Waddle. You get Jaylen Waddle (+10.3 pts). Every side gains on its own starting lineup (weakest +2.3 playoff-weighted pts). Your title odds 6.8% -> 7.9% (+1.15pp +/- 0.44), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.20pp +/- 0.33), Team 14 (-0.45pp +/- 0.48) even though its starting lineup gains points.",
+     "receive": [
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4360689,
+       "name": "Tyler Shough",
+       "from_team": 3,
+       "to_team": 14
+      },
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason",
+       "from_team": 1,
+       "to_team": 3
+      }
+     ],
+     "partners": [
+      {
+       "team_id": 3,
+       "name": "Team 03"
+      },
+      {
+       "team_id": 14,
+       "name": "Team 14"
+      }
+     ],
+     "caveats": [
+      "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+     ]
+    },
+    {
+     "kind": "trade",
+     "league_id": 161496047,
+     "delta_title": 0.0115,
+     "delta_points": 9.987633898156218,
+     "stderr": 0.00457953933765573,
+     "z": 2.5111696072659697,
+     "significant": false,
+     "verdict": "noise",
+     "verdict_note": "inside the selection-adjusted error for a search winner",
+     "leverage": 0.9676668523880971,
+     "confidence": "low",
+     "tags": [
+      "trade",
+      "3-team",
+      "confirmed",
+      "counterparty-loses"
+     ],
+     "rationale": "Team 03 gets Jordan Mason, Blake Corum (+1.9 pts) for Tyler Shough, Harrison Mevis; Team 14 gets Tyler Shough, Harrison Mevis (+9.9 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +1.9 playoff-weighted pts). Your title odds 6.8% -> 7.9% (+1.15pp +/- 0.46), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 14 (-0.38pp +/- 0.53) even though its starting lineup gains points.",
+     "receive": [
+      {
+       "player_id": 4241416,
+       "name": "Chuba Hubbard"
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason"
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 4241416,
+       "name": "Chuba Hubbard",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4360689,
+       "name": "Tyler Shough",
+       "from_team": 3,
+       "to_team": 14
+      },
+      {
+       "player_id": 4574716,
+       "name": "Harrison Mevis",
+       "from_team": 3,
+       "to_team": 14
+      },
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason",
+       "from_team": 1,
+       "to_team": 3
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum",
+       "from_team": 1,
+       "to_team": 3
+      }
+     ],
+     "partners": [
+      {
+       "team_id": 3,
+       "name": "Team 03"
+      },
+      {
+       "team_id": 14,
+       "name": "Team 14"
+      }
+     ],
+     "caveats": [
+      "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+     ]
+    },
+    {
+     "kind": "trade",
+     "league_id": 161496047,
+     "delta_title": 0.011,
+     "delta_points": 9.987633898156218,
+     "stderr": 0.004511079411777723,
+     "z": 2.438440780111456,
+     "significant": false,
+     "verdict": "noise",
+     "verdict_note": "inside the selection-adjusted error for a search winner",
+     "leverage": 0.9676668523880971,
+     "confidence": "low",
+     "tags": [
+      "trade",
+      "3-team",
+      "confirmed",
+      "counterparty-loses"
+     ],
+     "rationale": "Team 03 gets Jordan Mason, Blake Corum (+1.9 pts) for Harrison Mevis; Team 14 gets Harrison Mevis (+2.6 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +1.9 playoff-weighted pts). Your title odds 6.8% -> 7.9% (+1.10pp +/- 0.45), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 14 (-1.23pp +/- 0.50) even though its starting lineup gains points.",
+     "receive": [
+      {
+       "player_id": 4241416,
+       "name": "Chuba Hubbard"
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason"
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 4241416,
+       "name": "Chuba Hubbard",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4574716,
+       "name": "Harrison Mevis",
+       "from_team": 3,
+       "to_team": 14
+      },
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason",
+       "from_team": 1,
+       "to_team": 3
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum",
+       "from_team": 1,
+       "to_team": 3
+      }
+     ],
+     "partners": [
+      {
+       "team_id": 3,
+       "name": "Team 03"
+      },
+      {
+       "team_id": 14,
+       "name": "Team 14"
+      }
+     ],
+     "caveats": [
+      "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+     ]
+    },
+    {
+     "kind": "trade",
+     "league_id": 161496047,
+     "delta_title": 0.01025,
+     "delta_points": 11.489141603500684,
+     "stderr": 0.004747827907839607,
+     "z": 2.1588819559098202,
+     "significant": false,
+     "verdict": "noise",
+     "verdict_note": "inside the selection-adjusted error for a search winner",
+     "leverage": 0.9676668523880971,
+     "confidence": "low",
+     "tags": [
+      "trade",
+      "3-team",
+      "confirmed",
+      "counterparty-loses"
+     ],
+     "rationale": "Team 03 gets Jordan Mason, Blake Corum (+0.6 pts) for Trevor Lawrence; Team 14 gets Trevor Lawrence (+6.0 pts) for Parker Washington, Jaylen Waddle. You get Parker Washington, Jaylen Waddle (+11.5 pts). Every side gains on its own starting lineup (weakest +0.6 playoff-weighted pts). Your title odds 6.8% -> 7.8% (+1.03pp +/- 0.47), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.80pp +/- 0.37) even though its starting lineup gains points.",
+     "receive": [
+      {
+       "player_id": 4432620,
+       "name": "Parker Washington"
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason"
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 4432620,
+       "name": "Parker Washington",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4372016,
+       "name": "Jaylen Waddle",
+       "from_team": 14,
+       "to_team": 1
+      },
+      {
+       "player_id": 4360310,
+       "name": "Trevor Lawrence",
+       "from_team": 3,
+       "to_team": 14
+      },
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason",
+       "from_team": 1,
+       "to_team": 3
+      },
+      {
+       "player_id": 4429096,
+       "name": "Blake Corum",
+       "from_team": 1,
+       "to_team": 3
+      }
+     ],
+     "partners": [
+      {
+       "team_id": 3,
+       "name": "Team 03"
+      },
+      {
+       "team_id": 14,
+       "name": "Team 14"
+      }
+     ],
+     "caveats": [
+      "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+     ]
+    },
+    {
+     "kind": "trade",
+     "league_id": 161496047,
+     "delta_title": 0.01,
+     "delta_points": 2.385336611096591,
+     "stderr": 0.004044018857786216,
+     "z": 2.472787677719737,
+     "significant": false,
+     "verdict": "noise",
+     "verdict_note": "inside the selection-adjusted error for a search winner",
+     "leverage": 0.9676668523880971,
+     "confidence": "low",
+     "tags": [
+      "trade",
+      "3-team",
+      "confirmed",
+      "counterparty-loses"
+     ],
+     "rationale": "Team 03 gets Jordan Mason (+2.3 pts) for Tyler Shough; Team 12 gets Tyler Shough (+1.9 pts) for Alec Pierce. You get Alec Pierce (+2.4 pts). Every side gains on its own starting lineup (weakest +1.9 playoff-weighted pts). Your title odds 6.8% -> 7.8% (+1.00pp +/- 0.40), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 12 (-1.05pp +/- 0.49) even though its starting lineup gains points.",
+     "receive": [
+      {
+       "player_id": 4360078,
+       "name": "Alec Pierce"
+      }
+     ],
+     "send": [
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason"
+      }
+     ],
+     "players": [
+      {
+       "player_id": 4360078,
+       "name": "Alec Pierce",
+       "from_team": 12,
+       "to_team": 1
+      },
+      {
+       "player_id": 4360689,
+       "name": "Tyler Shough",
+       "from_team": 3,
+       "to_team": 12
+      },
+      {
+       "player_id": 4360569,
+       "name": "Jordan Mason",
+       "from_team": 1,
+       "to_team": 3
+      }
+     ],
+     "partners": [
+      {
+       "team_id": 3,
+       "name": "Team 03"
+      },
+      {
+       "team_id": 12,
+       "name": "Team 12"
+      }
+     ],
+     "caveats": [
+      "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test"
+     ]
+    }
+   ]
+  },
+  "stream": {
+   "ok": true,
+   "league_id": 161496047,
+   "name": "League Bravo (12, half PPR) \ud83e\udd75",
+   "team_id": 1,
+   "stream": {
+    "kind": "hold",
+    "league_id": 161496047,
+    "delta_title": 0.029,
+    "delta_points": 39.150390625,
+    "stderr": 0.0039898282773097645,
+    "z": 7.268483248996855,
+    "significant": true,
+    "verdict": "act",
+    "verdict_note": "clears two standard errors",
+    "leverage": 0.9946017781544323,
+    "confidence": "medium",
+    "tags": [
+     "streaming",
+     "dst",
+     "waiver-priority",
+     "partially-unpriced",
+     "no-action-this-week"
+    ],
+    "rationale": "Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today. w1 Chargers D/ST -> w2 Buccaneers D/ST -> w3 49ers D/ST -> w4 Bears D/ST -> w5 Jets D/ST -> w6 Bills D/ST -> w7 Titans D/ST* -> w8 Jets D/ST* -> w9 Chiefs D/ST* -> w10 Bills D/ST* -> w11 Chiefs D/ST* -> w12 Buccaneers D/ST* -> w13 Vikings D/ST* -> w14 Falcons D/ST* -> w15 Giants D/ST* -> w16 Titans D/ST* -> w17 Vikings D/ST* * no closing line posted yet for weeks 7-17; those weeks use the projection-only fit and will move as the market opens. Adopting the WHOLE plan -- 16 acquisitions over 17 weeks -- is worth +39.2 model points (+7.0 from covering the bye, +32.1 from matchups; +13.4 in weeks with a posted line, +25.8 without), +39.2 simulated points-for, +2.90pp of title (+/-0.40). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do.",
+    "receive": [],
+    "send": [],
+    "players": [],
+    "position": "DST",
+    "caveats": [
+     "later weeks have no closing line yet and use the projection-only fit; those numbers will move"
+    ],
+    "plan": [
+     {
+      "week": 1,
+      "start": "Chargers D/ST",
+      "opponent_priced": true,
+      "value": 7.687014948990771,
+      "hold": "Chargers D/ST",
+      "hold_value": 7.687014948990771,
+      "gain": 0.0,
+      "add": [],
+      "drop": []
+     },
+     {
+      "week": 2,
+      "start": "Buccaneers D/ST",
+      "opponent_priced": true,
+      "value": 8.487425394584198,
+      "hold": "Chargers D/ST",
+      "hold_value": 8.30339641350317,
+      "gain": 0.1840289810810276,
+      "add": [
+       "Buccaneers D/ST"
+      ],
+      "drop": [
+       "Chargers D/ST"
+      ]
+     },
+     {
+      "week": 3,
+      "start": "49ers D/ST",
+      "opponent_priced": true,
+      "value": 8.119678893421867,
+      "hold": "Chargers D/ST",
+      "hold_value": 2.9988010041850317,
+      "gain": 5.120877889236835,
+      "add": [
+       "49ers D/ST"
+      ],
+      "drop": [
+       "Buccaneers D/ST"
+      ]
+     },
+     {
+      "week": 4,
+      "start": "Bears D/ST",
+      "opponent_priced": true,
+      "value": 8.004271583631231,
+      "hold": "Chargers D/ST",
+      "hold_value": 4.422811145290983,
+      "gain": 3.5814604383402484,
+      "add": [
+       "Bears D/ST"
+      ],
+      "drop": [
+       "49ers D/ST"
+      ]
+     },
+     {
+      "week": 5,
+      "start": "Jets D/ST",
+      "opponent_priced": true,
+      "value": 8.387747161845079,
+      "hold": "Chargers D/ST",
+      "hold_value": 6.123021496133233,
+      "gain": 2.264725665711846,
+      "add": [
+       "Jets D/ST"
+      ],
+      "drop": [
+       "Bears D/ST"
+      ]
+     },
+     {
+      "week": 6,
+      "start": "Bills D/ST",
+      "opponent_priced": true,
+      "value": 6.41097522563425,
+      "hold": "Chargers D/ST",
+      "hold_value": 4.140676961518067,
+      "gain": 2.2702982641161826,
+      "add": [
+       "Bills D/ST"
+      ],
+      "drop": [
+       "Jets D/ST"
+      ]
+     },
+     {
+      "week": 7,
+      "start": "Titans D/ST",
+      "opponent_priced": false,
+      "value": 7.0412999931176845,
+      "hold": "(empty)",
+      "hold_value": 0.0,
+      "gain": 7.0412999931176845,
+      "add": [
+       "Titans D/ST"
+      ],
+      "drop": [
+       "Bills D/ST"
+      ]
+     },
+     {
+      "week": 8,
+      "start": "Jets D/ST",
+      "opponent_priced": false,
+      "value": 7.469483460693256,
+      "hold": "Chargers D/ST",
+      "hold_value": 2.2706312764917547,
+      "gain": 5.198852184201502,
+      "add": [
+       "Jets D/ST"
+      ],
+      "drop": [
+       "Titans D/ST"
+      ]
+     }
+    ],
+    "plan_source": "rederived",
+    "plan_summary": {
+     "weeks": 17,
+     "weeks_shown": 8,
+     "total_gain_points": 39.183367523786096,
+     "priced_gain_points": 13.421391238486141,
+     "unpriced_gain_points": 25.761976285299955,
+     "unpriced_share": 0.6574722366489112,
+     "week_one_gain_points": 0.0,
+     "n_acquisitions": 16
+    },
+    "action": "hold"
+   }
+  },
+  "headline": "Claim Kenyon Sadiq (TE), drop Woody Marks. Spends waiver priority 2. Worth +0.20pp (+/-0.02pp). This week's matchup is live (leverage 1.00); a projected point is worth 1.42pp of it.",
+  "actions": [
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "waiver",
+    "headline": "Claim Kenyon Sadiq (TE), drop Woody Marks. Spends waiver priority 2.",
+    "delta_title": 0.0020093210467100144,
+    "stderr": 0.0001558059690313548,
+    "z": 12.896303390697781,
+    "leverage": 0.9978265243478915,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "high",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night (ESPN runs waivers ~3-4am ET Wednesday)",
+    "tags": [
+     "waiver",
+     "confirmed",
+     "bracket:0.001750",
+     "bracket_se:0.001561",
+     "add:Kenyon Sadiq",
+     "pos:TE",
+     "drop:Woody Marks"
+    ],
+    "rationale": "Claim Kenyon Sadiq (TE), drop Woody Marks. +2.5 starting-lineup points over the rest of the season, which is +0.20pp of title probability (+/-0.02pp). A direct paired bracket run puts it at +0.18pp +/-0.16pp, consistent, and too noisy at this simulation count to rank on. Above the 0.115pp continuation value of holding priority 2, so spending it is right. Matchup leverage 1.00; the coming game is close, so the points land. Submit as late as Tuesday night allows: claims are blind, snap counts and route participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": []
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "trade",
+    "headline": "Offer Team 03, Team 14: you get Chuba Hubbard, Jaylen Waddle for Jordan Mason, Blake Corum.",
+    "delta_title": 0.0145,
+    "stderr": 0.004803978252632181,
+    "z": 3.018331732050453,
+    "leverage": 0.9676668523880971,
+    "significant": false,
+    "verdict": "noise",
+    "confidence": "low",
+    "cost": "negotiation",
+    "deadline": "league trade deadline",
+    "tags": [
+     "trade",
+     "3-team",
+     "confirmed",
+     "counterparty-loses"
+    ],
+    "rationale": "Team 03 gets Jordan Mason, Blake Corum (+0.6 pts) for Trevor Lawrence; Team 14 gets Trevor Lawrence (+7.7 pts) for Chuba Hubbard, Jaylen Waddle. You get Chuba Hubbard, Jaylen Waddle (+10.0 pts). Every side gains on its own starting lineup (weakest +0.6 playoff-weighted pts). Your title odds 6.8% -> 8.2% (+1.45pp +/- 0.48), which is inside the 3.2x standard error this ranking needs to clear once it has picked a winner out of 40 candidates -- not a significant edge. Simulated title odds fall for Team 03 (-0.95pp +/- 0.36) even though its starting lineup gains points.",
+    "actionable": true,
+    "blockers": [],
+    "caveats": [
+     "a counterparty's simulated title odds FALL under this; the points gate it passed is not the same test",
+     "best of 32 candidates: the point estimate is the maximum of 32 noisy paired draws and is biased upward"
+    ]
+   },
+   {
+    "league_id": 161496047,
+    "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "season": 2026,
+    "team_id": 1,
+    "surface": "stream",
+    "headline": "Rest-of-season DST plan (week 1 action: hold what you have).",
+    "delta_title": 0.029,
+    "stderr": 0.0039898282773097645,
+    "z": 7.268483248996855,
+    "leverage": 0.9946017781544323,
+    "significant": true,
+    "verdict": "act",
+    "confidence": "medium",
+    "cost": "waiver priority",
+    "deadline": "Tuesday night",
+    "tags": [
+     "streaming",
+     "dst",
+     "waiver-priority",
+     "partially-unpriced",
+     "no-action-this-week"
+    ],
+    "rationale": "Week 1: hold Chargers D/ST -- the move is in the weeks after it, so there is nothing to execute today. w1 Chargers D/ST -> w2 Buccaneers D/ST -> w3 49ers D/ST -> w4 Bears D/ST -> w5 Jets D/ST -> w6 Bills D/ST -> w7 Titans D/ST* -> w8 Jets D/ST* -> w9 Chiefs D/ST* -> w10 Bills D/ST* -> w11 Chiefs D/ST* -> w12 Buccaneers D/ST* -> w13 Vikings D/ST* -> w14 Falcons D/ST* -> w15 Giants D/ST* -> w16 Titans D/ST* -> w17 Vikings D/ST* * no closing line posted yet for weeks 7-17; those weeks use the projection-only fit and will move as the market opens. Adopting the WHOLE plan -- 16 acquisitions over 17 weeks -- is worth +39.2 model points (+7.0 from covering the bye, +32.1 from matchups; +13.4 in weeks with a posted line, +25.8 without), +39.2 simulated points-for, +2.90pp of title (+/-0.40). That is the number `delta_title` carries; it is not the value of the single move above. Making only this week's move and then never touching the slot again is worth +0.00pp (+/-0.00); the rest is the value of re-solving every week, which you only collect if you actually do.",
+    "actionable": false,
+    "blockers": [
+     "no-action-this-week"
+    ],
+    "caveats": [
+     "prices 16 acquisition(s) over 17 weeks; week one's gain over holding is +0.0 pts",
+     "later weeks have no closing line yet and use the projection-only fit; those numbers will move"
+    ]
+   }
+  ]
+ },
+ "error": null,
+ "name": "League Bravo (12, half PPR)",
+ "team_id": 1
+}

@@ -1,0 +1,942 @@
+{
+ "ok": true,
+ "endpoint": "portfolio",
+ "league_id": null,
+ "season": null,
+ "sims": 4000,
+ "schema_version": 1,
+ "cached": false,
+ "computed_at": "2026-09-08T15:28:45.344+00:00",
+ "stale_seconds": 0.0,
+ "compute_seconds": 8.067,
+ "data": {
+  "season": 2026,
+  "seed": 1,
+  "n_sims": 4000,
+  "leagues": [
+   {
+    "league_id": 161496047,
+    "name": "League Bravo (12, half PPR) \ud83e\udd75",
+    "team_id": 1,
+    "team_name": "Team 01",
+    "title": 0.0575,
+    "n_sims": 4000
+   },
+   {
+    "league_id": 272150391,
+    "name": "League Alpha (14, full PPR) \ud83c\udf77",
+    "team_id": 1,
+    "team_name": "Team 01",
+    "title": 0.03575,
+    "n_sims": 4000
+   },
+   {
+    "league_id": 634537479,
+    "name": "League Charlie (12, half PPR)",
+    "team_id": 2,
+    "team_name": "Team 02",
+    "title": 0.073,
+    "n_sims": 4000
+   }
+  ],
+  "odds": {
+   "names": [
+    "League Bravo (12, half PPR) \ud83e\udd75",
+    "League Alpha (14, full PPR) \ud83c\udf77",
+    "League Charlie (12, half PPR)"
+   ],
+   "titles": [
+    0.0575,
+    0.03575,
+    0.073
+   ],
+   "p_at_least_one": 0.15425,
+   "p_zero": 0.84575,
+   "p_two_plus": 0.01175,
+   "expected_titles": 0.16625,
+   "variance_titles": 0.16315172543135784,
+   "independent": 0.15753718562499985,
+   "sum_bound": 0.16625,
+   "max_bound": 0.073,
+   "stderr": 0.005710887354431008,
+   "dependence_cost": 0.0032871856249998554,
+   "dependence_cost_stderr": 0.0014898090772997815,
+   "dependence_significant": true,
+   "n_sims": 4000
+  },
+  "coupling": [
+   {
+    "a": "League Bravo (12, half PPR) \ud83e\udd75",
+    "b": "League Alpha (14, full PPR) \ud83c\udf77",
+    "shared_pool": 192,
+    "median_player_correlation": 0.9993886150153919,
+    "min_player_correlation": 0.9755526379705955,
+    "availability_match": 1.0,
+    "same_seed": true,
+    "coupled": true
+   },
+   {
+    "a": "League Bravo (12, half PPR) \ud83e\udd75",
+    "b": "League Charlie (12, half PPR)",
+    "shared_pool": 186,
+    "median_player_correlation": 1.0,
+    "min_player_correlation": 0.9910804386581943,
+    "availability_match": 1.0,
+    "same_seed": true,
+    "coupled": true
+   },
+   {
+    "a": "League Alpha (14, full PPR) \ud83c\udf77",
+    "b": "League Charlie (12, half PPR)",
+    "shared_pool": 193,
+    "median_player_correlation": 0.9993937944444997,
+    "min_player_correlation": 0.9755526379705957,
+    "availability_match": 1.0,
+    "same_seed": true,
+    "coupled": true
+   }
+  ],
+  "correlations": {
+   "pairs": [
+    {
+     "a": "League Bravo (12, half PPR) \ud83e\udd75",
+     "b": "League Alpha (14, full PPR) \ud83c\udf77",
+     "shared_players": [
+      "Jalen Hurts",
+      "Jordan Mason",
+      "Chase Brown",
+      "Colston Loveland"
+     ],
+     "n_shared": 4,
+     "weekly": 0.4052019914428309,
+     "weekly_stderr": 0.003462797937272943,
+     "season": 0.3882580368066741,
+     "season_stderr": 0.013121331442346439,
+     "champion": 0.03920144594852742,
+     "champion_stderr": 0.020780021486313038,
+     "champion_significant": false
+    },
+    {
+     "a": "League Bravo (12, half PPR) \ud83e\udd75",
+     "b": "League Charlie (12, half PPR)",
+     "shared_players": [
+      "Chargers D/ST",
+      "Luther Burden III"
+     ],
+     "n_shared": 2,
+     "weekly": 0.10870534694234883,
+     "weekly_stderr": 0.0036840635019850165,
+     "season": 0.09156242423301816,
+     "season_stderr": 0.015521686560946416,
+     "champion": 0.009123393009887815,
+     "champion_stderr": 0.016419050904516144,
+     "champion_significant": false
+    },
+    {
+     "a": "League Alpha (14, full PPR) \ud83c\udf77",
+     "b": "League Charlie (12, half PPR)",
+     "shared_players": [
+      "Tank Bigsby",
+      "Kenneth Walker III",
+      "Ladd McConkey"
+     ],
+     "n_shared": 3,
+     "weekly": 0.24487076312634298,
+     "weekly_stderr": 0.0036304003977854333,
+     "season": 0.24080705761065513,
+     "season_stderr": 0.014386279495269468,
+     "champion": 0.023608366409910517,
+     "champion_stderr": 0.019615393358916045,
+     "champion_significant": false
+    }
+   ],
+   "by_week": {
+    "1": 0.22793499172808776,
+    "2": 0.2776554152101947,
+    "3": 0.23037855169031532,
+    "4": 0.2632381536780982,
+    "5": 0.26461228976713186,
+    "6": 0.24058737141929254,
+    "7": 0.22069007496606322,
+    "8": 0.22539033298406053,
+    "9": 0.3128891266108685,
+    "10": 0.15058313974172302,
+    "11": 0.2841635738557455,
+    "12": 0.23494380146440066,
+    "13": 0.2805746045479832,
+    "14": 0.29707441664158774,
+    "15": 0.24785868801604435,
+    "16": 0.24457525965912033,
+    "17": 0.24194361925239213
+   },
+   "worst_week": 9,
+   "worst_week_value": 0.3128891266108685,
+   "worst_week_gap_stderr": 0.014503486350708925,
+   "worst_week_separable": false
+  },
+  "exposures": [
+   {
+    "player_id": 4567048,
+    "name": "Kenneth Walker III",
+    "position_id": 2,
+    "position": "RB",
+    "pro_team_id": 12,
+    "n_leagues": 2,
+    "n_starting": 2,
+    "equity_at_risk": 0.065,
+    "equity_share": 0.39097744360902253,
+    "portfolio_damage": 0.05825,
+    "portfolio_damage_stderr": 0.004369669080945288,
+    "significant": true,
+    "holdings": [
+     {
+      "league_id": 272150391,
+      "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+      "team_id": 1,
+      "slot_id": 2,
+      "slot": "RB",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.0275,
+      "title_added_stderr": 0.002861465445558278
+     },
+     {
+      "league_id": 634537479,
+      "league_name": "League Charlie (12, half PPR)",
+      "team_id": 2,
+      "slot_id": 2,
+      "slot": "RB",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.0375,
+      "title_added_stderr": 0.003778492656032022
+     }
+    ]
+   },
+   {
+    "player_id": 4362238,
+    "name": "Chase Brown",
+    "position_id": 2,
+    "position": "RB",
+    "pro_team_id": 4,
+    "n_leagues": 2,
+    "n_starting": 2,
+    "equity_at_risk": 0.0595,
+    "equity_share": 0.3578947368421052,
+    "portfolio_damage": 0.05025,
+    "portfolio_damage_stderr": 0.004205431700663706,
+    "significant": true,
+    "holdings": [
+     {
+      "league_id": 161496047,
+      "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+      "team_id": 1,
+      "slot_id": 2,
+      "slot": "RB",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.031,
+      "title_added_stderr": 0.0035725258200863708
+     },
+     {
+      "league_id": 272150391,
+      "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+      "team_id": 1,
+      "slot_id": 2,
+      "slot": "RB",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.0285,
+      "title_added_stderr": 0.0029024202850169234
+     }
+    ]
+   },
+   {
+    "player_id": 4723086,
+    "name": "Colston Loveland",
+    "position_id": 4,
+    "position": "TE",
+    "pro_team_id": 3,
+    "n_leagues": 2,
+    "n_starting": 2,
+    "equity_at_risk": 0.049,
+    "equity_share": 0.29473684210526313,
+    "portfolio_damage": 0.042,
+    "portfolio_damage_stderr": 0.0038324498585081967,
+    "significant": true,
+    "holdings": [
+     {
+      "league_id": 161496047,
+      "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+      "team_id": 1,
+      "slot_id": 6,
+      "slot": "TE",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.02475,
+      "title_added_stderr": 0.0031681017332383815
+     },
+     {
+      "league_id": 272150391,
+      "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+      "team_id": 1,
+      "slot_id": 6,
+      "slot": "TE",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.02425,
+      "title_added_stderr": 0.002700427272092875
+     }
+    ]
+   },
+   {
+    "player_id": 4040715,
+    "name": "Jalen Hurts",
+    "position_id": 1,
+    "position": "QB",
+    "pro_team_id": 21,
+    "n_leagues": 2,
+    "n_starting": 2,
+    "equity_at_risk": 0.03775,
+    "equity_share": 0.2270676691729323,
+    "portfolio_damage": 0.032,
+    "portfolio_damage_stderr": 0.004212889401500747,
+    "significant": true,
+    "holdings": [
+     {
+      "league_id": 161496047,
+      "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+      "team_id": 1,
+      "slot_id": 0,
+      "slot": "QB",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.02225,
+      "title_added_stderr": 0.003580075224021475
+     },
+     {
+      "league_id": 272150391,
+      "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+      "team_id": 1,
+      "slot_id": 0,
+      "slot": "QB",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.0155,
+      "title_added_stderr": 0.0028621644775194345
+     }
+    ]
+   },
+   {
+    "player_id": 4612826,
+    "name": "Ladd McConkey",
+    "position_id": 3,
+    "position": "WR",
+    "pro_team_id": 24,
+    "n_leagues": 2,
+    "n_starting": 2,
+    "equity_at_risk": 0.024,
+    "equity_share": 0.1443609022556391,
+    "portfolio_damage": 0.0205,
+    "portfolio_damage_stderr": 0.004318518252824108,
+    "significant": true,
+    "holdings": [
+     {
+      "league_id": 272150391,
+      "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+      "team_id": 1,
+      "slot_id": 4,
+      "slot": "WR",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.0155,
+      "title_added_stderr": 0.0027049522531225802
+     },
+     {
+      "league_id": 634537479,
+      "league_name": "League Charlie (12, half PPR)",
+      "team_id": 2,
+      "slot_id": 4,
+      "slot": "WR",
+      "start_share": 0.9411764705882353,
+      "starts": true,
+      "title_added": 0.0085,
+      "title_added_stderr": 0.0038059898698922516
+     }
+    ]
+   },
+   {
+    "player_id": -16024,
+    "name": "Chargers D/ST",
+    "position_id": 16,
+    "position": "DST",
+    "pro_team_id": 24,
+    "n_leagues": 2,
+    "n_starting": 2,
+    "equity_at_risk": 0.012,
+    "equity_share": 0.07218045112781955,
+    "portfolio_damage": 0.00925,
+    "portfolio_damage_stderr": 0.003942714245783731,
+    "significant": true,
+    "holdings": [
+     {
+      "league_id": 161496047,
+      "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+      "team_id": 1,
+      "slot_id": 16,
+      "slot": "DST",
+      "start_share": 0.5882352941176471,
+      "starts": true,
+      "title_added": 0.00475,
+      "title_added_stderr": 0.00283881561456946
+     },
+     {
+      "league_id": 634537479,
+      "league_name": "League Charlie (12, half PPR)",
+      "team_id": 2,
+      "slot_id": 16,
+      "slot": "DST",
+      "start_share": 0.5882352941176471,
+      "starts": true,
+      "title_added": 0.00725,
+      "title_added_stderr": 0.0030292991827128267
+     }
+    ]
+   },
+   {
+    "player_id": 4685278,
+    "name": "Luther Burden III",
+    "position_id": 3,
+    "position": "WR",
+    "pro_team_id": 3,
+    "n_leagues": 2,
+    "n_starting": 2,
+    "equity_at_risk": 0.00875,
+    "equity_share": 0.052631578947368425,
+    "portfolio_damage": 0.0075,
+    "portfolio_damage_stderr": 0.0043864276680371395,
+    "significant": false,
+    "holdings": [
+     {
+      "league_id": 161496047,
+      "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+      "team_id": 1,
+      "slot_id": 4,
+      "slot": "WR",
+      "start_share": 0.8823529411764706,
+      "starts": true,
+      "title_added": 0.00375,
+      "title_added_stderr": 0.003230571702250369
+     },
+     {
+      "league_id": 634537479,
+      "league_name": "League Charlie (12, half PPR)",
+      "team_id": 2,
+      "slot_id": 4,
+      "slot": "WR",
+      "start_share": 0.5882352941176471,
+      "starts": true,
+      "title_added": 0.005,
+      "title_added_stderr": 0.0034636323689584644
+     }
+    ]
+   },
+   {
+    "player_id": 4360569,
+    "name": "Jordan Mason",
+    "position_id": 2,
+    "position": "RB",
+    "pro_team_id": 16,
+    "n_leagues": 2,
+    "n_starting": 0,
+    "equity_at_risk": 0.00025,
+    "equity_share": 0.0015037593984962405,
+    "portfolio_damage": -0.0005,
+    "portfolio_damage_stderr": 0.0014578987849699322,
+    "significant": false,
+    "holdings": [
+     {
+      "league_id": 161496047,
+      "league_name": "League Bravo (12, half PPR) \ud83e\udd75",
+      "team_id": 1,
+      "slot_id": 20,
+      "slot": "BE",
+      "start_share": 0.0,
+      "starts": false,
+      "title_added": 0.0,
+      "title_added_stderr": 0.001323041046000596
+     },
+     {
+      "league_id": 272150391,
+      "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+      "team_id": 1,
+      "slot_id": 20,
+      "slot": "BE",
+      "start_share": 0.0,
+      "starts": false,
+      "title_added": 0.00025,
+      "title_added_stderr": 0.0008292504380898862
+     }
+    ]
+   },
+   {
+    "player_id": 4429013,
+    "name": "Tank Bigsby",
+    "position_id": 2,
+    "position": "RB",
+    "pro_team_id": 21,
+    "n_leagues": 2,
+    "n_starting": 0,
+    "equity_at_risk": 0.0,
+    "equity_share": 0.0,
+    "portfolio_damage": 0.0,
+    "portfolio_damage_stderr": 0.0,
+    "significant": false,
+    "holdings": [
+     {
+      "league_id": 272150391,
+      "league_name": "League Alpha (14, full PPR) \ud83c\udf77",
+      "team_id": 1,
+      "slot_id": 20,
+      "slot": "BE",
+      "start_share": 0.0,
+      "starts": false,
+      "title_added": 0.0,
+      "title_added_stderr": 0.0
+     },
+     {
+      "league_id": 634537479,
+      "league_name": "League Charlie (12, half PPR)",
+      "team_id": 2,
+      "slot_id": 20,
+      "slot": "BE",
+      "start_share": 0.0,
+      "starts": false,
+      "title_added": 0.0,
+      "title_added_stderr": 0.0
+     }
+    ]
+   }
+  ],
+  "concentration": [
+   {
+    "kind": "player",
+    "label": "Kenneth Walker III",
+    "removed": {
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Kenneth Walker III"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Kenneth Walker III"
+     ]
+    },
+    "n_removed": 2,
+    "before": 0.15425,
+    "after": 0.096,
+    "damage": 0.058249999999999996,
+    "stderr": 0.004369669080945288,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.10125,
+    "driver": "",
+    "driver_damage": 0.0,
+    "increment": 0.0,
+    "increment_stderr": 0.0,
+    "increment_significant": false,
+    "describe": "player Kenneth Walker III: P(>=1 title) 15.43% -> 9.60% (-5.82pp +/- 0.44), E[titles] 0.1663 -> 0.1013 [League Alpha (14, full PPR) \ud83c\udf77: Kenneth Walker III; League Charlie (12, half PPR): Kenneth Walker III]"
+   },
+   {
+    "kind": "player",
+    "label": "Chase Brown",
+    "removed": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Chase Brown"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Chase Brown"
+     ]
+    },
+    "n_removed": 2,
+    "before": 0.15425,
+    "after": 0.104,
+    "damage": 0.05025,
+    "stderr": 0.004205431700663706,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.10675,
+    "driver": "",
+    "driver_damage": 0.0,
+    "increment": 0.0,
+    "increment_stderr": 0.0,
+    "increment_significant": false,
+    "describe": "player Chase Brown: P(>=1 title) 15.43% -> 10.40% (-5.03pp +/- 0.42), E[titles] 0.1663 -> 0.1067 [League Bravo (12, half PPR) \ud83e\udd75: Chase Brown; League Alpha (14, full PPR) \ud83c\udf77: Chase Brown]"
+   },
+   {
+    "kind": "player",
+    "label": "Jonathan Taylor",
+    "removed": {
+     "League Charlie (12, half PPR)": [
+      "Jonathan Taylor"
+     ]
+    },
+    "n_removed": 1,
+    "before": 0.15425,
+    "after": 0.103,
+    "damage": 0.051250000000000004,
+    "stderr": 0.0037462471844489586,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.10925,
+    "driver": "",
+    "driver_damage": 0.0,
+    "increment": 0.0,
+    "increment_stderr": 0.0,
+    "increment_significant": false,
+    "describe": "player Jonathan Taylor: P(>=1 title) 15.43% -> 10.30% (-5.12pp +/- 0.37), E[titles] 0.1663 -> 0.1092 [League Charlie (12, half PPR): Jonathan Taylor]"
+   },
+   {
+    "kind": "player",
+    "label": "Colston Loveland",
+    "removed": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Colston Loveland"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Colston Loveland"
+     ]
+    },
+    "n_removed": 2,
+    "before": 0.15425,
+    "after": 0.11225,
+    "damage": 0.041999999999999996,
+    "stderr": 0.0038324498585081967,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.11725,
+    "driver": "",
+    "driver_damage": 0.0,
+    "increment": 0.0,
+    "increment_stderr": 0.0,
+    "increment_significant": false,
+    "describe": "player Colston Loveland: P(>=1 title) 15.43% -> 11.22% (-4.20pp +/- 0.38), E[titles] 0.1663 -> 0.1172 [League Bravo (12, half PPR) \ud83e\udd75: Colston Loveland; League Alpha (14, full PPR) \ud83c\udf77: Colston Loveland]"
+   },
+   {
+    "kind": "player",
+    "label": "Trey McBride",
+    "removed": {
+     "League Charlie (12, half PPR)": [
+      "Trey McBride"
+     ]
+    },
+    "n_removed": 1,
+    "before": 0.15425,
+    "after": 0.12,
+    "damage": 0.03425,
+    "stderr": 0.0034492330563719946,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.128,
+    "driver": "",
+    "driver_damage": 0.0,
+    "increment": 0.0,
+    "increment_stderr": 0.0,
+    "increment_significant": false,
+    "describe": "player Trey McBride: P(>=1 title) 15.43% -> 12.00% (-3.43pp +/- 0.34), E[titles] 0.1663 -> 0.1280 [League Charlie (12, half PPR): Trey McBride]"
+   }
+  ],
+  "pro_teams": [
+   {
+    "kind": "NFL team",
+    "label": "KC",
+    "removed": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Harrison Butker"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Kenneth Walker III"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Kenneth Walker III"
+     ]
+    },
+    "n_removed": 3,
+    "before": 0.15425,
+    "after": 0.0855,
+    "damage": 0.06874999999999999,
+    "stderr": 0.005363119440916303,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.09075,
+    "driver": "Kenneth Walker III",
+    "driver_damage": 0.05825,
+    "increment": 0.0105,
+    "increment_stderr": 0.0032365191586125395,
+    "increment_significant": true,
+    "describe": "NFL team KC: P(>=1 title) 15.43% -> 8.55% (-6.87pp +/- 0.54), E[titles] 0.1663 -> 0.0907 [League Bravo (12, half PPR) \ud83e\udd75: Harrison Butker; League Alpha (14, full PPR) \ud83c\udf77: Kenneth Walker III; League Charlie (12, half PPR): Kenneth Walker III]\n      3 roster spots; Kenneth Walker III alone is 5.83pp of it, the other 2 add +1.05pp +/- 0.32 -- the grouping is worth more than its driver"
+   },
+   {
+    "kind": "NFL team",
+    "label": "CIN",
+    "removed": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Chase Brown"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Chase Brown"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Evan McPherson"
+     ]
+    },
+    "n_removed": 3,
+    "before": 0.15425,
+    "after": 0.0965,
+    "damage": 0.057749999999999996,
+    "stderr": 0.005372238789592577,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.09825,
+    "driver": "Chase Brown",
+    "driver_damage": 0.05025,
+    "increment": 0.0075,
+    "increment_stderr": 0.003551632163211119,
+    "increment_significant": true,
+    "describe": "NFL team CIN: P(>=1 title) 15.43% -> 9.65% (-5.77pp +/- 0.54), E[titles] 0.1663 -> 0.0983 [League Bravo (12, half PPR) \ud83e\udd75: Chase Brown; League Alpha (14, full PPR) \ud83c\udf77: Chase Brown; League Charlie (12, half PPR): Evan McPherson]\n      3 roster spots; Chase Brown alone is 5.03pp of it, the other 2 add +0.75pp +/- 0.36 -- the grouping is worth more than its driver"
+   },
+   {
+    "kind": "NFL team",
+    "label": "CHI",
+    "removed": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Colston Loveland",
+      "Luther Burden III"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Colston Loveland"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Luther Burden III"
+     ]
+    },
+    "n_removed": 4,
+    "before": 0.15425,
+    "after": 0.101,
+    "damage": 0.05324999999999999,
+    "stderr": 0.0051463803476492756,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.105,
+    "driver": "Colston Loveland",
+    "driver_damage": 0.042,
+    "increment": 0.01125,
+    "increment_stderr": 0.00418751038038074,
+    "increment_significant": true,
+    "describe": "NFL team CHI: P(>=1 title) 15.43% -> 10.10% (-5.32pp +/- 0.51), E[titles] 0.1663 -> 0.1050 [League Bravo (12, half PPR) \ud83e\udd75: Colston Loveland, Luther Burden III; League Alpha (14, full PPR) \ud83c\udf77: Colston Loveland; League Charlie (12, half PPR): Luther Burden III]\n      4 roster spots; Colston Loveland alone is 4.20pp of it, the other 3 add +1.12pp +/- 0.42 -- the grouping is worth more than its driver"
+   },
+   {
+    "kind": "NFL team",
+    "label": "IND",
+    "removed": {
+     "League Charlie (12, half PPR)": [
+      "Jonathan Taylor",
+      "Daniel Jones"
+     ]
+    },
+    "n_removed": 2,
+    "before": 0.15425,
+    "after": 0.10275,
+    "damage": 0.051500000000000004,
+    "stderr": 0.0037703436677368296,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.1085,
+    "driver": "Jonathan Taylor",
+    "driver_damage": 0.05125,
+    "increment": 0.00025,
+    "increment_stderr": 0.001299194501061291,
+    "increment_significant": false,
+    "describe": "NFL team IND: P(>=1 title) 15.43% -> 10.27% (-5.15pp +/- 0.38), E[titles] 0.1663 -> 0.1085 [League Charlie (12, half PPR): Jonathan Taylor, Daniel Jones]\n      2 roster spots; Jonathan Taylor alone is 5.12pp of it, the other 1 add +0.03pp +/- 0.13 -- NOT separable from its driver alone"
+   },
+   {
+    "kind": "NFL team",
+    "label": "PHI",
+    "removed": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Jalen Hurts",
+      "Makai Lemon"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Jalen Hurts",
+      "Tank Bigsby"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Tank Bigsby"
+     ]
+    },
+    "n_removed": 5,
+    "before": 0.15425,
+    "after": 0.12225,
+    "damage": 0.032,
+    "stderr": 0.004212889401500747,
+    "significant": true,
+    "expected_before": 0.16625,
+    "expected_after": 0.1285,
+    "driver": "Jalen Hurts",
+    "driver_damage": 0.032,
+    "increment": 0.0,
+    "increment_stderr": 0.0,
+    "increment_significant": false,
+    "describe": "NFL team PHI: P(>=1 title) 15.43% -> 12.22% (-3.20pp +/- 0.42), E[titles] 0.1663 -> 0.1285 [League Bravo (12, half PPR) \ud83e\udd75: Jalen Hurts, Makai Lemon; League Alpha (14, full PPR) \ud83c\udf77: Jalen Hurts, Tank Bigsby; League Charlie (12, half PPR): Tank Bigsby]\n      5 roster spots; Jalen Hurts alone is 3.20pp of it, the other 4 add +0.00pp +/- 0.00 -- NOT separable from its driver alone"
+   }
+  ],
+  "byes": [
+   {
+    "week": 7,
+    "starters_out": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Chargers D/ST"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Ladd McConkey",
+      "Brian Thomas Jr.",
+      "Jaguars D/ST"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Ladd McConkey",
+      "Bhayshul Tuten",
+      "Parker Washington",
+      "Chargers D/ST"
+     ]
+    },
+    "normal_points": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 5.077183465075509,
+     "League Alpha (14, full PPR) \ud83c\udf77": 27.02667598111822,
+     "League Charlie (12, half PPR)": 34.43668523451082
+    },
+    "bye_points": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 2.8679141626435616,
+     "League Alpha (14, full PPR) \ud83c\udf77": 3.4092798906601387,
+     "League Charlie (12, half PPR)": 3.2880676573766268
+    },
+    "weekly_mean": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 94.4357076458931,
+     "League Alpha (14, full PPR) \ud83c\udf77": 99.35555762100219,
+     "League Charlie (12, half PPR)": 93.31633574104309
+    },
+    "unpriced": [
+     {
+      "league": "League Bravo (12, half PPR) \ud83e\udd75",
+      "player": "Chargers D/ST",
+      "bye_points": 2.8679141626435616,
+      "season_mean": 5.077183465075509
+     },
+     {
+      "league": "League Alpha (14, full PPR) \ud83c\udf77",
+      "player": "Jaguars D/ST",
+      "bye_points": 3.2819675566154163,
+      "season_mean": 4.800212882132999
+     },
+     {
+      "league": "League Charlie (12, half PPR)",
+      "player": "Chargers D/ST",
+      "bye_points": 2.8679141626435616,
+      "season_mean": 5.077183465075509
+     }
+    ],
+    "total_out": 8,
+    "leagues_hit": 3,
+    "worst_share": 0.3690316916222913,
+    "describe": "week 7: 8 starters across 3 leagues; League Bravo (12, half PPR) \ud83e\udd75: 1 out (Chargers D/ST), 5.1 of 94.4 weekly pts (5%), priced at 2.9; League Alpha (14, full PPR) \ud83c\udf77: 3 out (Ladd McConkey, Brian Thomas Jr., Jaguars D/ST), 27.0 of 99.4 weekly pts (27%), priced at 3.4; League Charlie (12, half PPR): 4 out (Ladd McConkey, Bhayshul Tuten, Parker Washington, Chargers D/ST), 34.4 of 93.3 weekly pts (37%), priced at 3.3  [UNPRICED BYE: Chargers D/ST (League Bravo (12, half PPR) \ud83e\udd75, 2.9 vs 5.1), Jaguars D/ST (League Alpha (14, full PPR) \ud83c\udf77, 3.3 vs 4.8), Chargers D/ST (League Charlie (12, half PPR), 2.9 vs 5.1)]"
+   },
+   {
+    "week": 10,
+    "starters_out": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Colston Loveland",
+      "Luther Burden III",
+      "Jalen Hurts"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Colston Loveland",
+      "Jalen Hurts"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Luther Burden III"
+     ]
+    },
+    "normal_points": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 37.22365316499801,
+     "League Alpha (14, full PPR) \ud83c\udf77": 30.064835422915184,
+     "League Charlie (12, half PPR)": 9.446176397408635
+    },
+    "bye_points": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 0.5627539612267398,
+     "League Alpha (14, full PPR) \ud83c\udf77": 0.4990977942043787,
+     "League Charlie (12, half PPR)": 0.06365616702236115
+    },
+    "weekly_mean": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 90.00740251541137,
+     "League Alpha (14, full PPR) \ud83c\udf77": 98.34205431652069,
+     "League Charlie (12, half PPR)": 101.38195616817474
+    },
+    "unpriced": [],
+    "total_out": 6,
+    "leagues_hit": 3,
+    "worst_share": 0.4135621307216865,
+    "describe": "week 10: 6 starters across 3 leagues; League Bravo (12, half PPR) \ud83e\udd75: 3 out (Colston Loveland, Luther Burden III, Jalen Hurts), 37.2 of 90.0 weekly pts (41%), priced at 0.6; League Alpha (14, full PPR) \ud83c\udf77: 2 out (Colston Loveland, Jalen Hurts), 30.1 of 98.3 weekly pts (31%), priced at 0.5; League Charlie (12, half PPR): 1 out (Luther Burden III), 9.4 of 101.4 weekly pts (9%), priced at 0.1"
+   },
+   {
+    "week": 6,
+    "starters_out": {
+     "League Bravo (12, half PPR) \ud83e\udd75": [
+      "Justin Jefferson",
+      "Chase Brown"
+     ],
+     "League Alpha (14, full PPR) \ud83c\udf77": [
+      "Chase Brown"
+     ],
+     "League Charlie (12, half PPR)": [
+      "Evan McPherson"
+     ]
+    },
+    "normal_points": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 26.558055081632595,
+     "League Alpha (14, full PPR) \ud83c\udf77": 15.012151720700547,
+     "League Charlie (12, half PPR)": 8.023726011672371
+    },
+    "bye_points": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 0.356497327710704,
+     "League Alpha (14, full PPR) \ud83c\udf77": 0.29284116068834287,
+     "League Charlie (12, half PPR)": 0.17417666568381596
+    },
+    "weekly_mean": {
+     "League Bravo (12, half PPR) \ud83e\udd75": 91.92515190029144,
+     "League Alpha (14, full PPR) \ud83c\udf77": 99.69140819740295,
+     "League Charlie (12, half PPR)": 99.60499699878693
+    },
+    "unpriced": [],
+    "total_out": 4,
+    "leagues_hit": 3,
+    "worst_share": 0.28890955883803543,
+    "describe": "week 6: 4 starters across 3 leagues; League Bravo (12, half PPR) \ud83e\udd75: 2 out (Justin Jefferson, Chase Brown), 26.6 of 91.9 weekly pts (29%), priced at 0.4; League Alpha (14, full PPR) \ud83c\udf77: 1 out (Chase Brown), 15.0 of 99.7 weekly pts (15%), priced at 0.3; League Charlie (12, half PPR): 1 out (Evan McPherson), 8.0 of 99.6 weekly pts (8%), priced at 0.2"
+   }
+  ],
+  "diversification": {
+   "p_at_least_one": 0.15425,
+   "independent": 0.15753718562499985,
+   "sum_bound": 0.16625,
+   "max_bound": 0.073,
+   "expected_titles": 0.16625,
+   "marginal_sum": 0.16625,
+   "expected_titles_invariant": true,
+   "concentration_headroom": 0.08125,
+   "diversification_headroom": 0.01200000000000001,
+   "variance_titles": 0.16315172543135784,
+   "variance_independent": 0.15633668750000002,
+   "dependence_cost": 0.0032871856249998554,
+   "dependence_cost_stderr": 0.0014898090772997815,
+   "verdict": "Maximising E[titles]: hold the best player in each league and ignore overlap entirely -- E[N] is a sum of marginals and cannot see dependence. Maximising P(>=1 title): prefer the less-correlated of two otherwise equal players, because P(>=1) falls as the leagues move together. On this portfolio the overlap currently costs +0.329pp of P(>=1 title) (+/- 0.149pp), which is a real effect. Full concentration would cost 8.12pp more and perfect diversification would add 1.20pp, so the position is already near the diversified end and the argument is small."
+  }
+ },
+ "error": null
+}
