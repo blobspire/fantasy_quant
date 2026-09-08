@@ -102,5 +102,14 @@ def status() -> None:
     console.print(f"ESPN current season [bold]{season}[/bold], scoring period [bold]{week}[/bold]")
 
 
+# Reporting lives in report.py but mounts flat, so the user types `fq odds` rather
+# than `fq report odds`. Imported at the bottom to keep the data-plane commands
+# above independent of the analytics stack -- `fq snapshot` must keep working even
+# if a decision surface fails to import.
+from .report import mount as _mount_report  # noqa: E402
+
+_mount_report(app)
+
+
 if __name__ == "__main__":
     app()
