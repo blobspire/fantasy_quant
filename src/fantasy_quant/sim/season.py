@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import logging
 import math
+import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
@@ -1425,6 +1426,27 @@ def _historical_all_play(matchups: Sequence[Matchup]) -> tuple[dict[int, float],
     return wins, games
 
 
+def _warn_if_bracket_started(week: int, playoff_rounds: Sequence[Sequence[int]]) -> None:
+    """Say so, loudly, when the bracket is already underway.
+
+    Silently re-simulating a game somebody has already won is the kind of error that
+    looks like a plausible number, so this refuses to be quiet about it.
+    """
+    if not playoff_rounds:
+        return
+    first_playoff_week = min(w for rnd in playoff_rounds for w in rnd)
+    if week >= first_playoff_week:
+        warnings.warn(
+            f"week {week} is inside the playoff bracket (starts week {first_playoff_week}). "
+            "Playoff games already played are NOT treated as facts: the bracket is "
+            "re-simulated from seeds, so a team that has already advanced is understated. "
+            "Regular-season results and seeding remain exact. Treat championship "
+            "probabilities as indicative until this is fixed.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+
+
 def state_from_league(
     league: League,
     *,
@@ -1443,11 +1465,17 @@ def state_from_league(
     inside it are not treated as facts. The regular season still is, so the seeds are
     right, but a playoff game already won is re-simulated. Everything up to week 15 is
     exact.
+
+    That limitation now WARNS at runtime rather than sitting only in this docstring --
+    see `_warn_if_bracket_started`. Championship probabilities computed mid-bracket are
+    wrong in a specific direction: a team that has already won its first-round game is
+    understated, because the simulation makes it play that game again.
     """
     settings = league.settings()
     schedule = settings.schedule
     teams = league.teams()
     week = roster_week if roster_week is not None else league.current_week()
+    _warn_if_bracket_started(week, playoff_round_weeks(schedule))
     rosters = league.rosters(week)
     matchups = league.matchups()
 

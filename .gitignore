@@ -4,6 +4,10 @@
 *.pem
 cookies.json
 
+# Establish The Run exports are paid subscriber content. The loader reads them
+# from here; they are not ours to redistribute.
+data/manual/
+
 # The real league config names the user's actual leagues; the repo is public.
 config/leagues.toml
 

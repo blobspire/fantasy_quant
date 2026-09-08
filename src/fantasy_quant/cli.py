@@ -102,6 +102,84 @@ def status() -> None:
     console.print(f"ESPN current season [bold]{season}[/bold], scoring period [bold]{week}[/bold]")
 
 
+@app.command()
+def doctor() -> None:
+    """Check the things that fail silently: cookies, the cron, and ESPN's schema.
+
+    Exits non-zero when something needs a human, so it can run from cron next to
+    the snapshot and actually tell you.
+    """
+    import sys
+
+    from .doctor import run as run_checks
+
+    checks = run_checks()
+    table = Table("check", "", "detail", title="fq doctor")
+    for c in checks:
+        table.add_row(c.name, "[green]ok[/green]" if c.ok else "[red]FAIL[/red]", c.detail)
+    console.print(table)
+    broken = [c for c in checks if not c.ok and c.fatal]
+    if broken:
+        console.print(f"[red]{len(broken)} problem(s) need attention.[/red]")
+        sys.exit(1)
+    console.print("[green]all good.[/green]")
+
+
+@app.command()
+def managers(
+    league: str | None = typer.Option(None, help="League id or name; default all configured."),
+    season: int = typer.Option(2026),
+) -> None:
+    """Per-manager tendencies from the transaction log: who to trade with, who to ignore.
+
+    Most published fantasy "manager bias" analysis does not survive a permutation
+    test, and neither did most of ours: five of nine traits collapsed when the
+    labels were shuffled and are refused outright rather than reported. What is
+    printed here is what survived, with its signal-to-noise. Read the refusals as
+    findings too -- "we cannot tell" is the honest answer for a trait measured on
+    thirteen draft picks.
+    """
+    from .edges.behavioral import behavioral_report, build_panel
+    from .pipeline import client_from_env
+    from .registry import Registry
+
+    registry = Registry.load()
+    targets = [c for c in registry.active() if league in (None, str(c.league_id), c.name)]
+    if not targets:
+        console.print(f"[red]no league matching {league!r} in config/leagues.toml[/red]")
+        raise typer.Exit(1)
+
+    client = client_from_env()
+    try:
+        for cfg in targets:
+            console.rule(f"{cfg.name} ({cfg.league_id})")
+            try:
+                panel = build_panel(cfg.league_id, season, client=client)
+                report = behavioral_report(panel)
+            except Exception as exc:  # a league with no history is normal, not fatal
+                console.print(f"  [yellow]unavailable: {exc}[/yellow]")
+                continue
+
+            usable = getattr(report, "usable_traits", ()) or ()
+            marginal = getattr(report, "marginal_traits", ()) or ()
+            refused = getattr(report, "refused_traits", ()) or ()
+            console.print(
+                f"  usable: {', '.join(map(str, usable)) or 'none'}\n"
+                f"  marginal (read, do not act): {', '.join(map(str, marginal)) or 'none'}\n"
+                f"  refused as noise: {', '.join(map(str, refused)) or 'none'}"
+            )
+            actions = getattr(report, "actions", ()) or ()
+            if actions:
+                table = Table("manager", "read", title="what to do about it")
+                for a in actions:
+                    table.add_row(str(getattr(a, "manager", "?")), str(getattr(a, "note", a)))
+                console.print(table)
+            else:
+                console.print("  [dim]no per-manager read clears its own error yet.[/dim]")
+    finally:
+        client.close()
+
+
 # Reporting lives in report.py but mounts flat, so the user types `fq odds` rather
 # than `fq report odds`. Imported at the bottom to keep the data-plane commands
 # above independent of the analytics stack -- `fq snapshot` must keep working even

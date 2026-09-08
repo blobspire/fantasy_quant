@@ -1717,3 +1717,51 @@ class TestTheShippedDefaultIsAssumptionFree:
     def test_the_published_constant_is_still_reachable_and_named(self):
         assert LineupEfficiency.literal().opponent_mean == OPPONENT_LINEUP_EFFICIENCY
         assert LineupEfficiency.literal().is_asymmetric
+
+
+class TestMidBracketRunsWarn:
+    """Re-simulating a playoff game somebody already won produces a plausible
+    wrong number, so it must not be silent."""
+
+    ROUNDS = [[15], [16], [17]]
+
+    def test_regular_season_weeks_are_quiet(self):
+        import warnings as _w
+
+        from fantasy_quant.sim.season import _warn_if_bracket_started
+
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            _warn_if_bracket_started(8, self.ROUNDS)
+        assert not caught
+
+    def test_a_week_inside_the_bracket_warns(self):
+        import warnings as _w
+
+        from fantasy_quant.sim.season import _warn_if_bracket_started
+
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            _warn_if_bracket_started(16, self.ROUNDS)
+        assert len(caught) == 1
+        assert "NOT treated as facts" in str(caught[0].message)
+
+    def test_the_first_playoff_week_itself_warns(self):
+        import warnings as _w
+
+        from fantasy_quant.sim.season import _warn_if_bracket_started
+
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            _warn_if_bracket_started(15, self.ROUNDS)
+        assert len(caught) == 1
+
+    def test_a_league_with_no_playoffs_never_warns(self):
+        import warnings as _w
+
+        from fantasy_quant.sim.season import _warn_if_bracket_started
+
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            _warn_if_bracket_started(17, [])
+        assert not caught
