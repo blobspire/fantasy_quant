@@ -90,9 +90,11 @@ pruned `method="dp"` path above one roster slot -- which is not idle bookkeeping
 on six random 20x17 instances that pruned DP took 4.7 seconds and came back up to 5.4
 points (3%) short of HiGHS on three of them. `brute_force` re-derives both by exhaustion
 on small instances. On the user's real week-1 D/ST grid the four solvers rank
-`hold 81.5 <= LAP 116.3 <= exact 124.9 <= per-week argmax 126.1`, and the residual 1.2
+`hold 147.3 <= LAP 159.9 <= exact 160.9 <= per-week argmax 163.6`, and the residual 2.7
 is precisely the option value the default declines to spend: an unlimited-reuse planner
-would re-sign the Jaguars twice, this one will not.
+would re-sign the same defense twice, this one will not. (Those levels used to read
+`81.5 <= 116.3 <= 124.9 <= 126.1`; they all rose by the wire floor, which every plan
+including `hold` now collects on a week it starts nobody.)
 
 One correctness note that the exhaustion did *not* catch, because it shared the bug.
 `_reward` used to read `grid.floor` only when nothing at all was startable, so a held
@@ -128,35 +130,55 @@ the projection-only model. It becomes available a week at a time, which is the w
 reason to re-solve rather than to commit a season-long plan in September.
 
 **What it says about the user's actual teams, and how much of that to believe.** All
-three teams hold a below-average defense with an uncovered week-7 bye, and the
-rest-of-season D/ST plan is worth +39.2 to +43.5 model points -- about 2.4 a week -- for
-`+2.0pp` to `+3.8pp` of championship probability at 4,000 paired simulations, each
-several standard errors clear of zero. Five things bound that claim, and all five are
-reported rather than buried:
+three teams hold a below-average defense with an uncovered bye, and the rest-of-season
+D/ST plan is worth **+13.4 to +15.7 model points -- about 0.8 a week -- for `+0.68pp` to
+`+1.55pp`** of championship probability at 4,000 paired simulations. Two of the three
+clear two standard errors; Type shi's `+0.68 +/- 0.49` does not.
 
-* Only 13.4-14.9 of those points sit in weeks a bookmaker has priced. `through_week=6`
-  prices just those and gives `+0.45pp +/- 0.21`, which clears two standard errors by a
-  hair and no more. That is the honest floor, and it is a floor rather than an estimate.
-* 7.1 points of it is covering the bye, which needs no model at all.
+**Those numbers used to be +39.2 to +43.5 points and +2.0pp to +3.8pp, and the difference
+is the floor.** The plan was priced against a seat that scored *nothing*, so it was
+credited with the entire replacement level it would have collected by doing nothing at
+all. The hold baseline on Blacksburg's D/ST grid was 100.8 points against a wire paying
+149.5. Every plan on this surface was worth roughly the floor more than it is. Five
+things bound what is left, and all five are reported rather than buried:
+
+* Only **2.1-2.4** of those points sit in weeks a bookmaker has priced (it used to be
+  13.4-14.9 of a much larger total). `through_week=6` prices just those and gives
+  `+0.23 +/- 0.28`, `+0.35 +/- 0.23` and `-0.28 +/- 0.29` -- **none of which clears two
+  standard errors, and one of which is negative.** The priced-weeks-only floor used to
+  clear by a hair; it no longer clears at all. That is the honest bound and it is worth
+  more than the headline.
+* **The bye cover is now 0.04-0.49 points, not 7.1.** Covering a bye is worth `best -
+  floor`, not a whole starter: the seat is empty and an empty seat streams a body off the
+  wire whatever week it is. Nearly all of what is left is matchup.
 * Running the simulator on ESPN's own calibrated means instead of the matchup model
-  (`apply_matchup_model=False`) still gives `+1.90pp` and +30.7 points, so roughly three
-  quarters of the effect survives disbelieving the model's magnitude entirely.
+  (`apply_matchup_model=False`) gives `+0.90pp`, `+0.75pp`, `+1.10pp` and +10.7 to +11.2
+  points, so about three quarters of the *points* survive disbelieving the model's
+  magnitude entirely -- and on Type shi the answer is larger without the model than with
+  it, which is a reason to hold that league's D/ST number loosely.
 * **The action recommended today is a hold in every one of these cases.** `delta_title`
   prices the whole seventeen-week plan; the week-one move is worth `commit_delta`, which
   the rationale quotes and which is exactly 0.00pp here. A reader who takes the headline
   as the value of `Recommendation.move` is reading it wrong, and the
   `no-action-this-week` tag exists to stop that.
-* An independent check: Wine Wednesday's own cross-section of title odds against
-  expected wins has a slope of 5.64pp per win (R^2 0.83). 2.56 points a week is 0.42
-  extra wins at the measured 1.16pp/point, which predicts +2.34pp -- against the
-  simulator's +2.77pp, by a route that shares no code with it.
+* An independent check: Wine Wednesday's own cross-section of title odds against expected
+  wins has a slope of 5.64pp per win (R^2 0.83), and 2.56 points a week measured 0.42
+  extra wins there. At that rate 0.92 points a week is 0.15 wins and predicts `+0.85pp`,
+  against the simulator's `+1.25pp +/- 0.34` -- agreeing inside one standard error by a
+  route that shares no code with it. The same check on the old numbers predicted +2.34pp
+  against +2.77pp, so it agreed before and it agrees now; it never had the resolution to
+  catch the floor.
 
-**And the kicker result, which is the one worth acting on.** The same machinery run on K
-finds +9.3 to +14.0 points, of which **+8.1 to +8.4 is simply covering the kicker's bye
-week**. The residual matchup edge is 0.9-5.7 points over sixteen weeks, well under half a
-point a week, against a fitted within-week spread of 0.68. So the correct kicker advice
-is "cover the bye and otherwise stop thinking about it", and `Recommendation.tags`
-carries `not-streamable` with `confidence="low"` to say so. `as_recommendation` goes one
+**And the kicker result, which is now that there is no kicker result.** The same
+machinery run on K finds **+0.5, +3.4 and +2.4 model points** for `+0.03pp +/- 0.29`,
+`+0.18pp +/- 0.31` and `-0.20pp +/- 0.38`. Not one of the three is distinguishable from
+zero and one of them is negative. It used to read +9.3 to +14.0 points "of which +8.1 to
++8.4 is simply covering the kicker's bye week" -- and that was the tell, because a bye
+cover is only worth a whole starter if the alternative is a seat scoring zero. Against
+the wire the bye is worth 0.00-0.16 points and the matchup edge was never there. The
+correct kicker advice is not "cover the bye and otherwise stop thinking about it"; it is
+that the kicker plan is worth nothing at all. `Recommendation.tags` carries
+`not-streamable` with `confidence="low"`, which was already saying so. `as_recommendation` goes one
 step further and *suppresses* a week-one kicker transaction that is not a bye cover:
 left to itself the Type shi grid emitted "drop Evan McPherson for Jake Elliott" on a
 0.02-point edge at R^2 = 0.022, priced off the season plan at "+1.00pp, significant",
@@ -211,7 +233,18 @@ import polars as pl
 from scipy.optimize import Bounds, LinearConstraint, linear_sum_assignment, milp
 from scipy.sparse import csr_matrix, lil_matrix
 
-from ..core import DST, QB, TE, K, Move, MoveKind, PlayerMove, PlayerOutlook, Recommendation
+from ..core import (
+    DST,
+    QB,
+    TE,
+    K,
+    Move,
+    MoveKind,
+    PlayerMove,
+    PlayerOutlook,
+    Recommendation,
+    WireLevel,
+)
 from ..core import leverage as _leverage
 from ..data import nflverse
 from ..data.ids import DST_BY_NFLVERSE, team_from_pro_team_id
@@ -219,6 +252,7 @@ from ..projections.calibration import CalibrationSet
 from ..projections.calibration import load as load_calibration
 from ..sim import season as S
 from ..sim.distributions import WeeklySampler
+from .wire import DEFAULT_WIRE_DEPTH, all_rostered, kth_best_index, wire_levels
 
 log = logging.getLogger(__name__)
 
@@ -493,8 +527,10 @@ class StreamGrid:
     held: np.ndarray
     #: Weeks where the market form was used rather than the projection-only fallback.
     priced: tuple[bool, ...]
-    #: What an empty streamed slot scores, per week. Zero unless a caller supplies a
-    #: replacement level -- an unfilled slot really does score nothing.
+    #: What an empty streamed slot scores, per week: the `DEFAULT_WIRE_DEPTH`-th best
+    #: body on this wire that week, in THIS GRID'S units. See `wire_floor`. A caller may
+    #: pass `build_grid(floor=0.0)` for the empty-seat convention, which is what this
+    #: used to be and is now an explicit choice rather than a silent default.
     floor: np.ndarray
 
     def __post_init__(self) -> None:
@@ -545,6 +581,52 @@ class StreamGrid:
         return np.where(self.playing, self.value, -np.inf).astype(np.float64)
 
 
+def wire_floor(grid: StreamGrid, *, depth: int = DEFAULT_WIRE_DEPTH) -> np.ndarray:
+    """`(weeks,)` what an empty streamed seat scores, **in this grid's own units**.
+
+    Same definition as `decide.wire.wire_levels` -- the `depth`-th best unrostered body,
+    week by week, through the shared `wire.kth_best_index` -- read off `grid.value` rather
+    than off the raw calibrated projection. The units are the whole point.
+
+    `grid.value` is the matchup model's conditional expectation, and `_reward` compares a
+    candidate against `grid.floor` directly. Handing it the raw-projection floor mixes two
+    scales, and the mix is not a wash: measured on the three live leagues at week 1 of
+    2026, the depth-2 raw projection and the depth-2 grid value differ by **-0.97 to -1.01
+    points a week at D/ST** (the market term re-spreads the top of the field, so the model
+    sees streaming edges the projection alone does not) and by **+0.09 to +0.10 at K** (no
+    usable market term, so the 0.32 shrink dominates).
+
+    The tell that settles it is an impossibility. A floor defined as "the second-best body
+    on this wire" can never exceed the best body the plan may sign, because the plan can
+    sign the first. Against the raw-projection floor the grid's best value fell BELOW it in
+    1 of 17 weeks at D/ST and in up to **7 of 17** at K -- so the optimiser would leave the
+    seat empty in weeks where it demonstrably had a better body available. Against this
+    floor it is 0 of 17 everywhere, which is what the definition requires.
+
+    Only free agents count, exactly as in `wire_levels`: a defence on a rival's roster is
+    not what an empty seat streams. A week with nothing acquirable contributes zero.
+
+    **The per-week values are averaged to one number and broadcast back**, which is the
+    same reduction `wire_levels` makes ("one scalar triple per slot", because that is what
+    `sim/season._floors` takes). Keeping the week axis here instead is not a free
+    improvement, it is a disagreement: the grid would price an empty week at *that* week's
+    floor while the simulator priced it at the season average, and the weeks a plan leaves
+    empty are selected on the floor being high -- an incumbent is started exactly when the
+    wire is thin. Measured on the live D/ST grids that selection put `model_points` at
+    +8.64 against a simulated +13.50, a 56% disagreement between the optimiser and the
+    simulator about the same plan, which is what `_grid_outlooks` exists to prevent. One
+    number, and the two agree.
+    """
+    free = np.array([s.owner is None for s in grid.streamers], dtype=bool)
+    if not free.any():
+        return np.zeros(grid.n_weeks, dtype=float)
+    scores = np.where(grid.playing & free[:, None], grid.value, -np.inf)
+    pick = kth_best_index(scores, depth)
+    got = scores[pick, np.arange(scores.shape[1])]
+    level = float(np.where(np.isfinite(got), got, 0.0).mean())
+    return np.full(grid.n_weeks, level, dtype=float)
+
+
 def _week_market(
     grid_teams: Sequence[str],
     week: int,
@@ -577,8 +659,9 @@ def build_grid(
     model: MatchupModel | None = None,
     include_rostered: bool = False,
     min_projection: float | None = None,
-    floor: float | Sequence[float] = 0.0,
+    floor: float | Sequence[float] | None = None,
     readd_dropped: bool = False,
+    wire_depth: int = DEFAULT_WIRE_DEPTH,
 ) -> StreamGrid:
     """Compile the candidate x week matchup grid for one streamed position.
 
@@ -605,6 +688,15 @@ def build_grid(
     deliberately NOT the projection: for D/ST the projection's within-week deviation is
     multiplied by 0.52 and the market does the rest of the work, so the grid disagrees
     with ESPN by design and by a measured margin.
+
+    `floor` defaults to **the wire** (`wire_floor`), not to zero. That reverses what this
+    used to do, and the old behaviour is now the explicit `floor=0.0`. An unfilled streamed
+    seat does not score nothing -- the wire always has a defence -- and pricing a plan
+    against an empty seat credited it with the whole floor it would have got anyway. On
+    the live D/ST grids the hold baseline was worth 5.93 points a week against a wire that
+    pays 8.35: the seat was being valued at zero while the manager's real alternative was
+    the best thing available. Every other surface in this codebase already floors at the
+    wire; this was the last one that did not.
     """
     model = model or MATCHUP_MODELS.get(position_id)
     if model is None:
@@ -716,8 +808,13 @@ def build_grid(
         # licence to re-sign him after dropping him. See `readd_dropped`.
         available[i, :] = s.owner is None or (s.mine and readd_dropped)
 
-    floor_vec = np.full(n_w, float(floor)) if np.isscalar(floor) else np.asarray(floor, dtype=float)
-    return StreamGrid(
+    if floor is None:
+        floor_vec = np.zeros(n_w, dtype=float)  # replaced below, once the grid exists
+    elif np.isscalar(floor):
+        floor_vec = np.full(n_w, float(floor))
+    else:
+        floor_vec = np.asarray(floor, dtype=float)
+    grid = StreamGrid(
         league_id=league_id,
         season=season,
         position_id=position_id,
@@ -733,6 +830,9 @@ def build_grid(
         priced=tuple(priced),
         floor=floor_vec,
     )
+    # Derived from the assembled grid rather than recomputed from the outlooks, so the
+    # floor and the candidates are by construction the same bodies in the same units.
+    return grid if floor is not None else replace(grid, floor=wire_floor(grid, depth=wire_depth))
 
 
 # --------------------------------------------------------------------------------------
@@ -794,10 +894,17 @@ class StreamPlan:
         Three decompositions of the same number, and every one of them has changed a
         conclusion here at least once:
 
-        * **bye vs matchup.** Covering the week your incumbent is idle is worth a full
-          starter and needs no model at all. On the user's real leagues that is 7.1 of
-          the 40.9-point D/ST gain -- and 8.4 of the 11.0-point *kicker* gain, which is
-          to say kicker streaming is a bye cover with a rounding error attached.
+        * **bye vs matchup.** Covering the week your incumbent is idle needs no model at
+          all. It is worth `best - floor` rather than a whole starter: the seat is empty,
+          and an empty seat streams a body off the wire like any other.
+
+          A bye week is one where the baseline HOLDS somebody and none of them has a
+          game. It used to be spelled `baseline.start[j] < 0` -- "the baseline started
+          nobody" -- which was the same thing only while an empty seat scored zero, since
+          the sole reason not to start your incumbent was that he could not play. Under a
+          wire floor there is a second reason: he is worth less than the wire. On the live
+          D/ST grids the incumbent is below the floor in *every* week, so the old spelling
+          called the entire 13.0-point gain a bye cover on a schedule with one bye.
         * **priced vs unpriced.** A week with no posted line falls back to the
           projection-only fit, which was estimated on ESPN's in-season projections and is
           being applied to a preseason one. The further out the week, the more that
@@ -807,7 +914,14 @@ class StreamPlan:
         """
         baseline = baseline or hold_plan(grid)
         delta = self.week_value(grid) - baseline.week_value(grid)
-        bye = np.array([i < 0 for i in baseline.start])
+        # Holds somebody, none of them playing. A baseline holding nobody at all has no
+        # incumbent to be idle, so it has no bye to cover and the gain is all matchup.
+        bye = np.array(
+            [
+                bool(held) and not grid.playing[np.asarray(held, dtype=int), j].any()
+                for j, held in enumerate(baseline.roster)
+            ]
+        )
         priced = np.array(grid.priced)
         return ValueSplit(
             total=float(delta.sum()) - self.cost,
@@ -1780,6 +1894,44 @@ def _grid_outlooks(
     return out
 
 
+def _replacement_levels(
+    state: S.LeagueState,
+    outlooks: Sequence[PlayerOutlook],
+    grid: StreamGrid,
+    *,
+    depth: int = DEFAULT_WIRE_DEPTH,
+    apply_model: bool = True,
+) -> dict[int, WireLevel]:
+    """Per-slot wire levels for the simulation, with the streamed slot in grid units.
+
+    `wire_levels` for every slot, because an unfilled seat anywhere on any roster streams
+    a body; then the streamed slot's MEAN is replaced by `grid.floor`, because the streamed
+    slot is the one whose candidates `_grid_outlooks` has re-priced through the matchup
+    model, and a baseline the optimiser never saw is not a baseline. The spread and hurdle
+    are left alone: the model shifts a conditional mean, not the dispersion around it.
+
+    `apply_model=False` withdraws the override, and that is the point rather than a
+    detail. The override exists *because* `_grid_outlooks` re-prices the candidates; with
+    the re-pricing off, the candidates are on ESPN's calibrated means and so is the wire,
+    and keeping a model-units floor would score the plan in one currency against a
+    baseline in another. Measured on Blacksburg's D/ST grid that contamination cost the
+    sensitivity 8.5 of its 13.6 model points and made the check read far more fragile than
+    it is -- which would have been a wrong conclusion drawn from the run whose whole job is
+    to check the conclusion.
+    """
+    levels = wire_levels(
+        outlooks, all_rostered(state), state.weeks, state.slot_eligibility, depth=depth
+    )
+    slot = POSITION_SLOT.get(grid.position_id)
+    if apply_model and slot is not None and slot in levels:
+        was = levels[slot]
+        # `grid.floor` spans the grid's weeks, which are the horizon unless a caller
+        # passed `through_week`; the mean over them is what `_floors` wants -- one scalar
+        # triple per slot -- and is how `wire_levels` reduces its own week axis too.
+        levels[slot] = WireLevel(float(np.mean(grid.floor)), was.sd, was.p_zero)
+    return levels
+
+
 def evaluate(
     state: S.LeagueState,
     outlooks: Sequence[PlayerOutlook],
@@ -1794,6 +1946,8 @@ def evaluate(
     calibration: CalibrationSet | None = None,
     apply_matchup_model: bool = True,
     efficiency: S.LineupEfficiency | None = None,
+    replacement: Mapping[int, WireLevel] | float | None = None,
+    wire_depth: int = DEFAULT_WIRE_DEPTH,
 ) -> StreamEvaluation:
     """Simulate holding against streaming under common random numbers.
 
@@ -1815,6 +1969,27 @@ def evaluate(
     calibrated means instead, which is the sensitivity worth running before believing
     any of this: on Wine Wednesday it takes the D/ST answer from +2.80pp to +2.05pp, so
     most of the effect does not depend on the matchup model being right about magnitude.
+
+    **`replacement` is what an empty seat is paid, and it used to be nothing.** `arm()`
+    writes `-inf` into the streamed slot's ranking key on a week the plan leaves it empty,
+    so the lineup solver already benches it; without a replacement level `sim/season._floors`
+    then paid that seat zero. Every plan was therefore credited with the floor it would
+    have got by doing nothing. It defaults to `decide.wire.wire_levels` over this league --
+    the same call `title` and `waivers` make -- with **the streamed slot's mean overridden
+    by `grid.floor`**.
+
+    That override is the part worth being careful about. The candidates in this simulation
+    have had their distributions rebuilt from the matchup model by `_grid_outlooks`, for
+    exactly the reason that docstring gives: the optimiser and the simulator must not
+    disagree about what a defense is worth. The body filling an *empty* seat is drawn from
+    the same wire as those candidates, so it has to be priced by the same model, or the
+    plan is scored against a baseline the optimiser never saw. `grid.floor` is that number
+    (see `wire_floor`); the spread and hurdle stay `wire_levels`', because the model moves
+    a conditional mean and not the outcome dispersion around it.
+
+    Every OTHER slot keeps the ordinary `wire_levels` value, and it applies to every
+    franchise, not only the user's -- an unfilled seat on a rival's roster does not score
+    zero either. Pass `replacement=0.0` for the old empty-seat convention.
     """
     calibration = calibration or load_calibration("ppr")
     baseline = baseline or hold_plan(grid)
@@ -1841,6 +2016,13 @@ def evaluate(
     byes = market.bye_by_pro_team_id() if market is not None else None
     panel = S.panel_for(ext_state, rows, byes=byes)
     draw = WeeklySampler(panel, seed=seed).draw(n_sims)
+    if replacement is None:
+        replacement = _replacement_levels(
+            ext_state, outlooks, grid, depth=wire_depth, apply_model=apply_matchup_model
+        )
+    # The draw is fixed per (seed, n_sims), so both arms meet the same football AND the
+    # same wire. Without this an empty seat is paid a constant and carries no variance.
+    noise = S.FloorNoise(ext_state, draw) if isinstance(replacement, Mapping) else None
 
     points = np.asarray(draw.points)
     rank = S.ex_ante_rank(draw)
@@ -1865,7 +2047,9 @@ def evaluate(
                 else:
                     pts[:, wi, slot_col] = points[:, wi, src]
                     rk[:, wi, slot_col] = rank[:, wi, src]
-        scores = S.team_week_scores(ext_state, pts, rank=rk, efficiency=efficiency)
+        scores = S.team_week_scores(
+            ext_state, pts, rank=rk, efficiency=efficiency, replacement=replacement, noise=noise
+        )
         # `SeasonResult.points_for` accumulates only over scheduled head-to-head games,
         # so it silently drops the three playoff weeks -- a quarter of the horizon, and
         # the quarter that decides titles. The starting-lineup total is the honest one.
@@ -2119,7 +2303,9 @@ def as_recommendation(
     -- quoted in the rationale -- is what this week's move is worth on its own.
 
     A position whose fitted within-week spread is under `STREAMABLE_SD` has no measured
-    matchup signal to act on, so the only transaction it can justify is covering a bye.
+    matchup signal to act on, so the only transaction it can justify is covering a bye --
+    a week its incumbent has no game, which is not the same as a week the plan benches
+    him. See `covers_bye` below for why the difference started mattering.
     Without that gate the kicker grids emitted *drop Evan McPherson for Jake Elliott* on
     a week-one edge of 0.02 points at R^2 = 0.022, priced at "+1.00pp, significant" off
     the season plan while the simulated value of making that swap and holding it was
@@ -2127,7 +2313,14 @@ def as_recommendation(
     """
     add, drop = plan.start[0], base.start[0]
     streamable = grid.model.fitted_sd >= STREAMABLE_SD
-    covers_bye = drop < 0
+    # A bye is "holds somebody, none of them playing", not "started nobody". Those were
+    # the same statement only while an empty seat scored zero: the sole reason to bench
+    # your incumbent was that he could not play. Under a wire floor there is a second
+    # reason -- he is worth less than the wire -- and on the live kicker grids that is
+    # most weeks. Spelling it `drop < 0` would hand every one of them the bye exemption
+    # below, which is the only way a non-streamable position is allowed to transact.
+    held_week_one = np.asarray(base.roster[0], dtype=int) if base.roster else np.empty(0, int)
+    covers_bye = bool(held_week_one.size) and not grid.playing[held_week_one, 0].any()
     suppressed = not streamable and add != drop and not covers_bye
     if suppressed:
         add = drop

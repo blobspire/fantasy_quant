@@ -1135,7 +1135,10 @@ def _stream_plan_rows(
         return []
     if rows and rec.move.lineup:
         started = next(iter(rec.move.lineup.values()))
-        if grid.streamers[plan.start[0]].player_id != started:
+        # `plan.start[0] < 0` is "leave the seat empty", and a negative index would wrap
+        # to the last streamer and compare against the wrong player rather than disagree.
+        here = grid.streamers[plan.start[0]].player_id if plan.start[0] >= 0 else None
+        if here != started:
             log.info("re-derived streaming plan disagrees with the recommendation; dropping it")
             return []
     return list(rows) if limit is None else rows[:limit]

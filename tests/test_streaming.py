@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import itertools
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -777,6 +778,138 @@ class TestPlanTable:
 # --------------------------------------------------------------------------------------
 
 
+class TestTheWireIsTheFloorAndTheGridIsTheUnits:
+    """`build_grid` used to floor an unfilled streamed seat at ZERO, and price plans on it.
+
+    An empty seat streams a body off the wire -- the whole premise of `decide/wire.py` --
+    so every plan was credited with the replacement level it would have collected by doing
+    nothing. On Blacksburg's live D/ST grid the hold baseline read 100.8 points against a
+    wire paying 149.5, and `delta_title` fell from +4.08pp to +1.55pp once it was priced
+    against the right thing.
+
+    The floor is read off `grid.value` rather than off the raw calibrated projection, and
+    that is not interchangeable. Same definition, same bodies, same depth -- through the
+    shared `wire.kth_best_index` -- but `_reward` compares a candidate against
+    `grid.floor` directly, so the floor has to be in the grid's units. Measured live at
+    week 1 of 2026 the two differ by -0.97 to -1.01 points a week at D/ST and +0.09 to
+    +0.10 at K, and against the raw-projection floor the grid's best value fell BELOW the
+    floor in up to 7 of 17 kicker weeks. That is impossible for a floor meaning "the
+    second-best body on this wire": the plan can always sign the first.
+    """
+
+    def test_the_floor_is_the_depth_th_best_free_agent_in_grid_units(self):
+        state, outlooks, market = _sim_league()
+        own = {pid: f.team_id for f in state.franchises for pid in f.player_ids}
+        g = ST.build_grid(
+            outlooks,
+            league_id=state.league_id,
+            season=2026,
+            position_id=DST,
+            weeks=state.weeks,
+            ownership=own,
+            my_team_id=1,
+            market=market,
+        )
+        free = np.array([st.owner is None for st in g.streamers])
+        scores = np.where(g.playing & free[:, None], g.value, -np.inf)
+        ranked = -np.sort(-scores, axis=0)
+        assert np.allclose(g.floor, ranked[ST.DEFAULT_WIRE_DEPTH - 1].mean())
+        # depth 1 is the best body, depth 2 is strictly below it on a real wire.
+        deeper = ST.wire_floor(g, depth=1)
+        assert deeper[0] > g.floor[0]
+
+    def test_the_best_signable_body_is_never_below_the_floor(self):
+        """The impossibility that settles the units question.
+
+        A floor meaning "the second-best body on this wire" can never exceed the best,
+        because the plan can sign the best. Against a raw-projection floor this failed in
+        1 of 17 D/ST weeks and up to 7 of 17 kicker weeks on the live grids.
+        """
+        state, outlooks, market = _sim_league()
+        own = {pid: f.team_id for f in state.franchises for pid in f.player_ids}
+        for pos in (DST,):
+            g = ST.build_grid(
+                outlooks,
+                league_id=state.league_id,
+                season=2026,
+                position_id=pos,
+                weeks=state.weeks,
+                ownership=own,
+                my_team_id=1,
+                market=market,
+            )
+            best = np.where(g.playing, g.value, -np.inf).max(axis=0)
+            assert (best >= g.floor - 1e-9).all()
+
+    def test_an_explicit_zero_restores_the_old_empty_seat_convention(self):
+        """The negative control. `floor=0.0` must be exactly what this module used to do."""
+        state, outlooks, market = _sim_league()
+        own = {pid: f.team_id for f in state.franchises for pid in f.player_ids}
+        kw = dict(
+            league_id=state.league_id,
+            season=2026,
+            position_id=DST,
+            weeks=state.weeks,
+            ownership=own,
+            my_team_id=1,
+            market=market,
+        )
+        zero = ST.build_grid(outlooks, floor=0.0, **kw)
+        assert not zero.floor.any()
+        wired = ST.build_grid(outlooks, **kw)
+        assert wired.floor.any()
+        # Only the floor differs; every other array is the same grid.
+        assert np.array_equal(zero.value, wired.value)
+        assert np.array_equal(zero.playing, wired.playing)
+        assert np.array_equal(zero.available, wired.available)
+        # And the baseline really was the thing that moved.
+        assert ST.hold_plan(wired).points > ST.hold_plan(zero).points
+
+    def test_a_scalar_or_vector_floor_is_still_taken_verbatim(self):
+        state, outlooks, market = _sim_league()
+        own = {pid: f.team_id for f in state.franchises for pid in f.player_ids}
+        kw = dict(
+            league_id=state.league_id,
+            season=2026,
+            position_id=DST,
+            weeks=state.weeks,
+            ownership=own,
+            my_team_id=1,
+            market=market,
+        )
+        assert np.allclose(ST.build_grid(outlooks, floor=3.5, **kw).floor, 3.5)
+        vec = np.arange(len(state.weeks), dtype=float)
+        assert np.allclose(ST.build_grid(outlooks, floor=vec, **kw).floor, vec)
+
+    def test_a_benched_incumbent_is_not_a_bye(self):
+        """`covers_bye` and `ValueSplit.bye_cover` both used to mean "started nobody".
+
+        Under a wire floor there are two reasons to start nobody -- he cannot play, or he
+        is worth less than the wire -- and on the live grids the second is nearly every
+        week. Left as `start < 0`, the entire 13.0-point D/ST gain was reported as a bye
+        cover on a schedule with one bye, and every non-streamable kicker transaction got
+        the bye exemption that is the only way it may transact at all.
+        """
+        # Two weeks, both played, incumbent worth less than the wire: benched, never idle.
+        value = np.array([[9.0, 9.0], [8.0, 8.0], [2.0, 2.0]])
+        g = make_grid(value, held=(2,), floor=8.0)
+        hold = ST.hold_plan(g)
+        assert hold.start == (-1, -1), "the incumbent is under the floor and must be benched"
+        split = ST.solve(g).value_split(g, hold)
+        assert split.bye_cover == 0.0, "benched is not idle; there is no bye here"
+        assert split.matchup == pytest.approx(split.total)
+
+    def test_a_real_bye_still_counts_as_one(self):
+        value = np.array([[9.0, 9.0], [5.0, 5.0]])
+        playing = np.array([[True, True], [True, False]])  # incumbent idle in week 2
+        g = make_grid(value, held=(1,), floor=1.0, playing=playing)
+        hold = ST.hold_plan(g)
+        assert hold.start == (1, -1)
+        split = ST.solve(g).value_split(g, hold)
+        assert split.bye_cover > 0.0
+        assert split.bye_cover == pytest.approx(9.0 - 1.0)
+
+
 class TestTheFloorIsAChoiceNotAFallback:
     """A non-zero `floor` is what a caller passes when an unfilled slot still streams
     something. Reading it only as "nobody is startable" makes benching impossible, and
@@ -1082,11 +1215,19 @@ def _sim_league(*, n_teams: int = 8, weeks: tuple[int, ...] = (1, 2, 3, 4, 5, 6)
         rows.append((d.pro_team_id, DST, d.pro_team_id, f"{d.nflverse} D/ST"))
         rosters.append(tuple(ids))
 
-    # Every defense in the league, rostered or not, gets an outlook. The rostered ones
-    # are worth 5; the free agents alternate 3 and 9 so streaming has something to find.
+    # Every defense in the league, rostered or not, gets an outlook. The rostered ones are
+    # worth 5; the free agents are a DESCENDING LADDER so the wire has depth.
+    #
+    # They used to alternate 3 and 9, which put three bodies at exactly 9.0 -- and once an
+    # empty seat is floored at the wire rather than at zero, a wire with three identical
+    # best bodies is bottomless at 9.0: the depth-2 floor equals the depth-1 pick, signing
+    # one of them is worth exactly nothing, and every test here measured zero. That was the
+    # fixture being degenerate for the question, not the floor being wrong. A real wire
+    # falls away from its top (Blacksburg, week 1: best 9.53/wk, second 8.35, held 5.93),
+    # so this one does too.
     for k, d in enumerate(defenses):
         mine = k < n_teams
-        base = 5.0 if mine else (9.0 if k % 2 else 3.0)
+        base = 5.0 if mine else max(10.0 - 1.6 * (k - n_teams), 1.0)
         outlooks.append(
             outlook(
                 d.pro_team_id,
@@ -1201,16 +1342,33 @@ class TestTheSimulatedHalf:
         assert ev.model_points > 0
         assert ev.delta_points == pytest.approx(ev.model_points, rel=0.15)
 
-    def test_the_bye_week_is_not_quietly_covered_for_free(self, league):
-        """Week 3 is the incumbent's bye. Holding must score nothing in that slot, which
-        is what makes the bye cover worth a whole starter rather than an upgrade."""
+    def test_a_bye_is_worth_an_upgrade_over_the_wire_and_not_a_whole_starter(self, league):
+        """This test used to assert the opposite, and the old assertion was the bug.
+
+        It read: "Holding must score nothing in that slot, which is what makes the bye
+        cover worth a whole starter rather than an upgrade." Holding scores nothing only
+        if an empty seat scores nothing, and an empty seat streams a body off the wire.
+        Covering a bye is therefore worth `best - floor`, never the whole starter.
+
+        Week 3 is the incumbent's bye. The floor makes that week ordinary rather than
+        special: the seat is empty, and an empty seat is paid the wire either way.
+        """
         state, outlooks, market = league
         g = self._grid(state, outlooks, market)
-        hold = ST.hold_plan(g)
+        g0 = replace(g, floor=np.zeros(g.n_weeks))  # the old empty-seat convention
+        floored, empty = ST.hold_plan(g), ST.hold_plan(g0)
         j = g.weeks.index(3)
-        assert hold.start[j] == -1
-        split = ST.solve(g).value_split(g, hold)
-        assert split.bye_cover > 0
+        assert empty.start[j] == -1  # nothing to start on a bye, whatever the floor
+        assert floored.start[j] == -1
+
+        best = float(np.where(g.playing[:, j], g.value[:, j], -np.inf).max())
+        cover = ST.solve(g).value_split(g, floored).bye_cover
+        assert 0.0 <= cover <= best - float(g.floor[j]) + 1e-9, (
+            "covering a bye cannot be worth more than the upgrade over what the wire "
+            "would have streamed into the same seat"
+        )
+        # And the old convention really did price it at a whole starter.
+        assert ST.solve(g0).value_split(g0, empty).bye_cover > cover
 
     def test_recommend_plans_around_a_roster_that_already_holds_more_than_kappa(self, league):
         """A roster with two quarterbacks is the ordinary case and this used to raise
@@ -1377,13 +1535,22 @@ class TestAgainstTheRealLeagues:
         assert pooled > 0
         assert abs(a.delta_title - b.delta_title) <= 4.0 * pooled
 
-    def test_the_kicker_gain_is_mostly_a_bye_cover_not_a_matchup_edge(self, sims, market):
-        """If this ever inverts, the K model has found signal it did not have in the
-        2022-2025 fit and the constants should be re-measured before believing it."""
+    def test_the_kicker_gain_is_not_there_at_all_once_the_seat_is_floored(self, sims, market):
+        """This asserted `bye_cover > matchup`, and that was the tell rather than the check.
+
+        A bye cover is only worth a whole starter if the alternative is a seat scoring
+        zero. Floored at the wire it is worth `best - floor`, which on this grid is 0.00
+        points -- so the old assertion could only ever have held while the floor was
+        wrong. The kicker gain fell from +9.2 model points to +0.5, and `delta_title` from
+        +0.80pp to +0.03pp against a standard error of 0.29.
+
+        What replaces it is the statement that was always true underneath: there is no
+        kicker edge. Both halves of the split are small, which is what `not-streamable`
+        and `confidence="low"` have been saying all along.
+        """
         sim = sims[161496047]
         own = {pid: f.team_id for f in sim.state.franchises for pid in f.player_ids}
-        g = ST.build_grid(
-            sim.outlooks,
+        kw = dict(
             league_id=161496047,
             season=2026,
             position_id=K,
@@ -1392,8 +1559,18 @@ class TestAgainstTheRealLeagues:
             my_team_id=1,
             market=market,
         )
+        g = ST.build_grid(sim.outlooks, **kw)
         split = ST.solve(g).value_split(g)
-        assert split.bye_cover > split.matchup
+        # Under half a point a week, against a fitted within-week spread of 0.68.
+        assert abs(split.total) < 0.5 * g.n_weeks
+        assert abs(split.bye_cover) < 1.0, "a floored bye is an upgrade, not a starter"
+
+        # And the old convention really did put most of it in the bye. If this stops
+        # holding, the K model has found signal the 2022-2025 fit did not have.
+        g0 = ST.build_grid(sim.outlooks, floor=0.0, **kw)
+        empty = ST.solve(g0).value_split(g0)
+        assert empty.bye_cover > empty.matchup
+        assert empty.total > split.total
 
     def test_the_2026_market_is_only_partly_posted(self, market):
         """160 of 272 games unpriced on 2026-09-07. The plan must degrade, not invent."""

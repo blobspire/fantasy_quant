@@ -1,7 +1,7 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Six findings are fixed and pushed -- four from the original nine,
-plus two the audit did not have. Five remain, all located. Read the **Remaining work**
+Status as of 2026-09-10. Seven findings are fixed and pushed -- five from the original nine,
+plus two the audit did not have. Four remain, all located. Read the **Remaining work**
 section to continue.
 
 ## Why this file exists
@@ -256,6 +256,82 @@ prints.
 It fired: `title_added` for the only quarterback went from **-0.5075** -- deleting him *raises*
 the title odds by more than half -- to **+0.1025**. It is now a test that the two paths agree.
 
+### #5 — the streaming plan was priced against a seat that scored nothing
+
+`build_grid` floored an unfilled streamed slot at **zero** and `evaluate` passed no
+`replacement` to `S.team_week_scores` at all, so every unfilled seat in the simulated league
+was paid nothing. Every plan was therefore credited with the replacement level it would have
+collected by doing nothing. On Blacksburg's D/ST grid the hold baseline read **100.8 points
+against a wire paying 149.5**.
+
+| | D/ST before | after | K before | after |
+|---|---|---|---|---|
+| Blacksburg | +4.075pp | **+1.550pp** ±0.444 | +0.800pp | **+0.025pp** ±0.288 |
+| Wine Wednesday | +4.250pp | **+1.250pp** ±0.342 | +0.250pp | **+0.175pp** ±0.307 |
+| Type shi | +5.825pp | **+0.675pp** ±0.492 | +1.050pp | **−0.200pp** ±0.384 |
+
+**Corrections to what the audit and I said before.** Two of them:
+
+1. *"Streaming still ranks #1 in all three"* — it does, but the action queue never depended on
+   this: `move.kind` is `hold` with `no-action-this-week` in all six cases, before and after.
+   What moved is the **price**, not the advice.
+2. *"The kicker plan flips sign in two of three leagues"* — it flips in **one**. In the other
+   two it collapses to a fraction of its own standard error. The honest statement is stronger
+   than the audit's: **no kicker plan is distinguishable from zero in any league**, and one is
+   negative. D/ST survives in two of three; Type shi's `+0.675 ± 0.492` no longer clears.
+
+**The floor has to be in the grid's units, and that is not a detail.** `wire_levels` ranks the
+raw calibrated projection; `grid.value` is the matchup model's conditional expectation, and
+`_reward` compares a candidate against `grid.floor` directly. Same definition, same bodies,
+same depth — extracted as `wire.kth_best_index` so there is still one — but measured live the
+two differ by **−0.97 to −1.01 points a week at D/ST** (the market term re-spreads the top of
+the field) and **+0.09 to +0.10 at K** (no usable market term, so the 0.32 shrink dominates).
+
+The tell was an impossibility. A floor meaning "the second-best body on this wire" can never
+exceed the best body the plan may sign. Against the raw-projection floor the grid's best value
+fell *below* it in 1 of 17 D/ST weeks and **up to 7 of 17 kicker weeks** — and those spurious
+"leave it empty" weeks are most of what the audit saw as the kicker flipping sign. Against the
+grid-units floor it is 0 of 17 everywhere.
+
+**Three things the fix dragged out that were not in the audit:**
+
+- **The per-week floor had to be reduced to one number.** The grid priced an empty week at
+  *that* week's floor while the simulator priced it at the season average, and a plan leaves
+  empty exactly the weeks the floor is high. That selection put `model_points` at +8.64
+  against a simulated +13.50 — a 56% disagreement between optimiser and simulator about the
+  same plan. One number, and they agree to 0.5% (13.57 vs 13.50).
+- **`ValueSplit.bye_cover` and `as_recommendation`'s `covers_bye` both meant "started
+  nobody".** That was the same statement as "on a bye" only while an empty seat scored zero.
+  Under a floor there is a second reason to bench an incumbent — he is worth less than the
+  wire — and on the live D/ST grids that is *every* week, so the old spelling reported the
+  entire 13.0-point gain as a bye cover on a schedule with one bye. Worse, `covers_bye` is the
+  sole exemption that lets a `not-streamable` position transact at all, so it would have
+  waved through exactly the junk kicker moves the gate exists to suppress. Both now mean
+  "holds somebody, none of them playing".
+- **`apply_matchup_model=False` was scoring the plan in one currency against a baseline in
+  another.** The sensitivity run turns the re-pricing off, so the floor override — which
+  exists *because* of the re-pricing — has to come off with it. Contaminated, the check read
+  +0.475pp/+5.1 points; corrected, +0.90pp/+11.2. That is a wrong conclusion drawn from the
+  run whose whole job is to check the conclusion.
+
+**The honest bound got worse, and it is the number worth reading.** Only **2.1–2.4** of the
+13.4–15.7 model points sit in weeks a bookmaker has priced (it used to be 13.4–14.9 of a much
+larger total). `through_week=6` now gives `+0.23 ± 0.28`, `+0.35 ± 0.23` and `−0.28 ± 0.29` —
+**none clears two standard errors and one is negative**, where it used to clear by a hair.
+
+**Negative control:** `build_grid(floor=0.0)` + `evaluate(replacement=0.0)` on the three live
+leagues reproduces the parent commit **byte for byte** — floors, plan, hold, `delta_title`,
+`stderr`, `delta_points`, `model_points`, both title levels, `commit_delta`, `leverage` and
+all six `ValueSplit` fields, for D/ST and K. Separately verified that `replacement=0.0` and
+`replacement=None` give bit-identical franchise scores, so the old default really is
+expressible.
+
+The offline fixture had to change too. `_sim_league` gave its free agents alternating 3 and 9,
+which put three bodies at exactly 9.0 — and a wire with three identical best bodies is
+bottomless: the depth-2 floor equals the depth-1 pick, signing one is worth exactly nothing,
+and every test measured zero. That was the fixture being degenerate for the question, not the
+floor being wrong. It is a descending ladder now, like a real wire.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -269,21 +345,6 @@ the title odds by more than half -- to **+0.1025**. It is now a test that the tw
 ## Remaining work
 
 Ranked. Everything below is located and measured; none is started.
-
-### #5 MAJOR — `streaming.evaluate` prices against an empty seat
-
-Compares the streaming plan to a seat scoring nothing rather than to the wire floor, inflating
-every plan by roughly the floor. **D/ST +3.33 → +1.85pp; the kicker plan flips sign in two of
-three leagues.** Streaming still ranks #1 in all three after the fix.
-
-Same root cause as #1 — "what does an empty seat score?" had five live answers. Route it
-through `decide/wire.wire_levels` like every other surface. Confirm the exact call site before
-editing; `streaming.py:1841` is already the one production path that passes byes, so this
-module is close to correct and the change should be small.
-
-Correction to report to the user when this lands: I previously told them "the top line
-changes". It does not — streaming stays #1 in all three leagues; the magnitude halves
-(+1.85/+1.62/+2.45pp) and the **kicker** plan is what flips sign.
 
 ### #6 MAJOR — the bench-hoarding prior is never overridden
 

@@ -124,7 +124,7 @@ def wire_levels(
         # Rank by projection down each week's column independently, then take THAT
         # player's own spread and hurdle -- not the k-th largest of each, which would
         # pair one body's mean with another body's variance.
-        pick = np.argsort(-mu, axis=0)[min(k, mu.shape[0]) - 1]
+        pick = kth_best_index(mu, k)
         cols = np.arange(mu.shape[1])
         out[slot] = WireLevel(
             mean=float(mu[pick, cols].mean()),
@@ -132,6 +132,25 @@ def wire_levels(
             p_zero=float(pz[pick, cols].mean()),
         )
     return out
+
+
+def kth_best_index(scores: np.ndarray, depth: int) -> np.ndarray:
+    """`(weeks,)` row index of the `depth`-th best candidate in each week's column.
+
+    Extracted so "the k-th best body on the wire, week by week" has ONE definition even
+    when two callers rank on different quantities. `wire_levels` ranks on the calibrated
+    projection, because that is the scale the simulator pays an empty seat in.
+    `decide/streaming.wire_floor` ranks on `StreamGrid.value` -- the matchup model's
+    conditional expectation -- because that is the scale its optimiser compares a
+    candidate against, and a floor in the wrong units is a floor that benches candidates
+    it cannot actually beat.
+
+    Indices rather than values, because the caller usually wants something else off the
+    same body: `wire_levels` takes his spread and hurdle, and pairing one body's mean with
+    another body's variance is the bug this shape exists to prevent.
+    """
+    k = max(int(depth), 1)
+    return np.argsort(-scores, axis=0)[min(k, scores.shape[0]) - 1]
 
 
 def all_rostered(state) -> set[int]:
@@ -143,4 +162,11 @@ def all_rostered(state) -> set[int]:
 
 
 #: Re-exported: `WireLevel` is defined in core.py so `sim` can use it too.
-__all__ = ["DEFAULT_WIRE_DEPTH", "WireLevel", "all_rostered", "wire_floor", "wire_levels"]
+__all__ = [
+    "DEFAULT_WIRE_DEPTH",
+    "WireLevel",
+    "all_rostered",
+    "kth_best_index",
+    "wire_floor",
+    "wire_levels",
+]
