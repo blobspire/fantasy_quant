@@ -53,6 +53,8 @@ from fantasy_quant.sim.season import (
     PlayerPool,
     ScheduledGame,
     SeasonError,
+    _floors,
+    _franchise_scores,
     bracket_seed_order,
     bye_seeds,
     ex_ante_rank,
@@ -1911,3 +1913,90 @@ def _league(*, n_sims: int = 800, seed: int = 5):
     from test_title import build_league
 
     return build_league(n_sims=n_sims, seed=seed)
+
+
+class TestTheEmptySlotGroupCannotLiftTheWholeTeam:
+    """`monotone_floor` plus a roster missing a position is a phantom floor on every slot.
+
+    A slot group's floor is raised to that of every group whose eligible set it CONTAINS,
+    and eligibility is computed against *this roster*. A roster with nobody at a position
+    leaves that group's eligible set empty -- and the empty set is contained in every
+    other -- so the whole team lifts to the missing position's replacement level.
+
+    Measured on the user's Blacksburg roster minus its only quarterback: all seven slot
+    groups floored at **14.007**, the QB wire level, and the solver left **96.1% of
+    slot-weeks empty** because no real player could beat it. Guarded, the groups floor at
+    their own levels (0.0 / 5.57 / 6.31 / 6.14 / 7.39 / 8.82 / 6.69) and 23.5% sit empty.
+    `decide/title.py` measured the downstream damage: a 137.6-point-a-week team with zero
+    variance at 93% title probability, against 5.8% before the drop.
+
+    This guard was reimplemented twice -- `title.TitleEngine._floors_for` and
+    `portfolio._floors_for` -- before it was put where every floor in the system is built.
+    Both copies are gone; this is where it is tested now.
+    """
+
+    def _plan_without_quarterbacks(self):
+        state = _tensor_state(n_teams=4, per_team=9)
+        roster = state.franchises[0].player_ids
+        short = tuple(p for p in roster if state.pool.positions_of([p])[0] != 1)
+        plan = plan_from_slots(
+            state.lineup_slot_counts, state.slot_eligibility, state.pool.positions_of(short)
+        )
+        return state, short, plan
+
+    def test_an_empty_group_no_longer_lifts_every_other_slot(self):
+        _state, _short, plan = self._plan_without_quarterbacks()
+        floors = {0: 14.0, 2: 5.5, 4: 6.3, 6: 6.1, 16: 7.4, 17: 8.8, 23: 6.7}
+        groups, per_slot, _credit, omitted = _floors(plan, floors)
+
+        qb = plan.floor_slot_ids.index(0)
+        assert float(groups[qb]) == 0.0
+        # The tell: seven groups must not be one number. Unguarded they were all 14.0.
+        assert len({round(float(v), 6) for v in np.asarray(groups)}) > 1
+        assert max(float(v) for v in np.asarray(groups)) < 14.0
+        assert per_slot[[i for i, sl in enumerate(plan.slot_ids) if sl == 0]].tolist() == [0.0]
+        # Exact, not approximate: an empty group takes its floor every week of every sim.
+        assert omitted == pytest.approx(14.0 * plan.group_counts[qb])
+
+    def test_the_omission_is_added_back_so_the_team_total_is_whole(self):
+        """Held out of the solve, then paid. The two together must be a no-op on level."""
+        state, short, plan = self._plan_without_quarterbacks()
+        floors = {0: 14.0, 2: 5.5, 4: 6.3, 6: 6.1, 16: 7.4, 17: 8.8, 23: 6.7}
+        rng = np.random.default_rng(11)
+        points = rng.gamma(2.0, 5.0, (64, len(state.weeks), state.pool.size)).astype(np.float32)
+        rank = np.tile(
+            np.arange(state.pool.size, 0, -1, dtype=np.float32), (len(state.weeks), 1)
+        )[None, :, :]
+        carrier = Franchise(team_id=1, name="T1", player_ids=short)
+
+        got = _franchise_scores(state.pool, carrier, plan, points, rank, floors)
+        _g, _p, _c, omitted = _floors(plan, floors)
+        # Same solve, floors zeroed at the QB group by hand: the difference is exactly
+        # the omission, which is what "held out and added back" has to mean.
+        by_hand = _franchise_scores(state.pool, carrier, plan, points, rank, {**floors, 0: 0.0})
+        assert omitted > 0.0
+        assert np.allclose(got - by_hand, np.float32(omitted), atol=1e-3)
+
+    def test_a_full_roster_omits_nothing(self):
+        """The negative control: no empty group, no correction, no change of any kind."""
+        state = _tensor_state(n_teams=4, per_team=9)
+        roster = state.franchises[0].player_ids
+        plan = plan_from_slots(
+            state.lineup_slot_counts, state.slot_eligibility, state.pool.positions_of(roster)
+        )
+        floors = {0: 14.0, 2: 5.5, 4: 6.3, 6: 6.1, 16: 7.4, 17: 8.8, 23: 6.7}
+        _groups, _per_slot, _credit, omitted = _floors(plan, floors)
+        assert omitted == 0.0
+
+    def test_a_scalar_floor_is_uniform_so_there_is_nothing_to_guard(self):
+        _state, _short, plan = self._plan_without_quarterbacks()
+        groups, per_slot, credit, omitted = _floors(plan, 4.0)
+        assert (credit, omitted) == (None, 0.0)
+        assert np.allclose(np.asarray(groups), 4.0)
+        assert np.allclose(per_slot, 4.0)
+
+    def test_no_floor_at_all_is_untouched(self):
+        _state, _short, plan = self._plan_without_quarterbacks()
+        groups, per_slot, credit, omitted = _floors(plan, None)
+        assert (groups, credit, omitted) == (None, None, 0.0)
+        assert not per_slot.any()

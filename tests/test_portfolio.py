@@ -712,10 +712,14 @@ class TestEmptyPositionFloorTrap:
     `lineup.monotone_floor` lifts every slot to the floor of any slot whose eligible set
     it contains; a roster with nobody at a position has an *empty* eligible set, which is
     contained in every other. `decide/title.py` measured what that does -- a 137-point-a-
-    week team with zero variance at 93% title odds -- and this module reimplements the
-    guard, so it needs its own test. Every one of the user's three real rosters carries
-    exactly one quarterback, one kicker and one defence, so this fires on the first
-    interesting exposure rather than on a contrived one.
+    week team with zero variance at 93% title odds. Every one of the user's three real
+    rosters carries exactly one quarterback, one kicker and one defence, so this fires on
+    the first interesting exposure rather than on a contrived one.
+
+    The guard used to be reimplemented here as `_floors_for`. It now lives in
+    `sim/season._floors`, so these tests reach for it there -- but they stay in this file
+    as well as in `test_season.py`, because this module is where the empty position is
+    routine rather than exceptional.
     """
 
     def test_the_guard_zeroes_the_empty_group_and_hands_back_its_points(self, overlapping):
@@ -730,10 +734,13 @@ class TestEmptyPositionFloorTrap:
             state.slot_eligibility,
             state.pool.positions_of(without_qb.player_ids),
         )
-        floors, omitted = PF._floors_for(plan, stake.replacement)
+        groups, per_slot, _credit, omitted = S._floors(plan, stake.replacement)
         assert omitted > 0.0
-        assert floors[0] == 0.0  # the QB slot no longer lifts anything
-        assert any(v > 0.0 for k, v in floors.items() if k != 0)
+        # The QB group lifts nothing any more, and nothing else was flattened with it.
+        qb_group = plan.floor_slot_ids.index(0)
+        assert groups[qb_group] == 0.0
+        assert any(float(v) > 0.0 for i, v in enumerate(groups) if i != qb_group)
+        assert per_slot[[i for i, s in enumerate(plan.slot_ids) if s == 0]].tolist() == [0.0]
 
     def test_a_scalar_or_absent_replacement_needs_no_guard(self, overlapping):
         stake = overlapping.stakes[0]
@@ -742,8 +749,15 @@ class TestEmptyPositionFloorTrap:
             stake.state.slot_eligibility,
             stake.state.pool.positions_of(stake.roster),
         )
-        assert PF._floors_for(plan, None) == (None, 0.0)
-        assert PF._floors_for(plan, 3.0) == (3.0, 0.0)
+        groups, per_slot, credit, omitted = S._floors(plan, None)
+        assert (groups, credit, omitted) == (None, None, 0.0)
+        assert not per_slot.any()
+
+        groups, per_slot, credit, omitted = S._floors(plan, 3.0)
+        assert credit is None and omitted == 0.0
+        # A scalar is uniform, so the lift is a no-op and every slot sits at the number.
+        assert np.allclose(np.asarray(groups), 3.0)
+        assert np.allclose(per_slot, 3.0)
 
     def test_dropping_the_only_quarterback_lowers_the_title_odds(self, overlapping):
         stake = overlapping.stakes[0]
@@ -755,19 +769,22 @@ class TestEmptyPositionFloorTrap:
         # with the league.
         assert float(after.mean()) < 0.5
 
-    def test_season_leave_one_out_still_has_the_bug_this_module_guards_against(self, overlapping):
-        """The guard is not defensive programming; the unguarded path is live upstream.
+    def test_season_leave_one_out_now_agrees_with_this_module_about_the_quarterback(
+        self, overlapping
+    ):
+        """The predecessor of this test was written to fail once `leave_one_out` was fixed.
 
-        `sim/season.leave_one_out` forwards a Mapping `replacement` straight into
-        `_floors` with no empty-group handling, so on this roster -- one quarterback, as
-        on all three of the user's real teams -- it reports that **deleting the
-        quarterback RAISES the title probability by more than half**, because every
-        remaining slot is lifted to the quarterback's waiver level. This module's own
-        counterfactual, over the same state and the same draw, has him worth a loss.
+        It did exactly that. `sim/season.leave_one_out` used to forward a Mapping
+        `replacement` straight into `_floors` with no empty-group handling, so on this
+        roster -- one quarterback, as on all three of the user's real teams -- it reported
+        that **deleting the quarterback RAISED the title probability by more than half**
+        (`title_added` -0.5075) while this module's own counterfactual, over the same
+        state and the same draw, had him worth a gain. Two answers of opposite sign for
+        one question was the whole reason `_floors_for` existed here.
 
-        The test is written to fail if `leave_one_out` is ever fixed, which is the point:
-        at that moment `_floors_for` here becomes redundant and should be deleted rather
-        than left as a second copy of a solved problem.
+        The guard now lives in `sim/season._floors`, so both paths route through it and
+        the disagreement is gone. This asserts they agree, which is the property the two
+        copies were maintaining by hand.
         """
         stake = overlapping.stakes[0]
         qb = next(p for p in stake.roster if stake.state.pool.positions_of([p])[0] == 1)
@@ -779,8 +796,12 @@ class TestEmptyPositionFloorTrap:
             replacement=stake.replacement,
         )
         guarded = float((stake.champions - stake.champions_without([qb])).mean())
-        assert upstream.title_added < -0.5
+        assert upstream.title_added > 0.0, "the quarterback must be worth having"
         assert guarded > 0.0
+        # Not identical -- `leave_one_out` re-stands the league from the draw while
+        # `champions_without` re-scores only the touched franchises -- but they must not
+        # disagree about the sign, which is what the unguarded path did.
+        assert abs(upstream.title_added - guarded) < 0.1
 
 
 # --------------------------------------------------------------------------------------

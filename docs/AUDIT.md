@@ -1,7 +1,7 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Five findings are fixed and pushed -- four from the original nine,
-plus one the audit did not have. Five remain, all located. Read the **Remaining work**
+Status as of 2026-09-10. Six findings are fixed and pushed -- four from the original nine,
+plus two the audit did not have. Five remain, all located. Read the **Remaining work**
 section to continue.
 
 ## Why this file exists
@@ -209,6 +209,53 @@ now takes `wire_strength=` and grows free agents that are in `outlooks` and abse
 `state.pool`; the regression guard drives `build_portfolio` itself rather than the test helper,
 because the helper mirrored the bug and would have passed either way.
 
+### The empty-slot-group guard lived at the wrong altitude
+
+**Also not one of the nine**, and it is the reason #5 could not be done first. The audit
+listed "the duplicated `_floors_for`" as a tidiness leftover. It was not tidiness: the guard
+was missing from `sim/season._floors`, which is the one place every floor in the system is
+built, so it had been reimplemented twice on top -- `title.TitleEngine._floors_for` and
+`portfolio._floors_for` -- and any caller that reached `_floors` directly got no guard at all.
+
+`lineup.monotone_floor` raises a slot group's floor to that of every group whose eligible set
+it *contains*, and eligibility is computed against this roster. A roster with nobody at a
+position leaves that group's eligible set empty, and the empty set is contained in every
+other. Measured on Blacksburg minus its only quarterback:
+
+```
+floor_slot_ids      (QB, RB, WR, TE, DST, K, FLEX)
+unguarded groups    [14.007, 14.007, 14.007, 14.007, 14.007, 14.007, 14.007]
+guarded groups      [ 0.0,    5.569,  6.312,  6.135,  7.386,  8.819,  6.692]
+
+   unguarded: 147 of 153 slot-weeks left EMPTY (96.1%)
+     guarded:  36 of 153 slot-weeks left EMPTY (23.5%)
+```
+
+The tell again: **seven different slot groups, one identical number.** The whole team is
+benched behind a phantom quarterback floor.
+
+The guard now lives in `_floors`, which returns the points a week it holds out as a fourth
+value; `_franchise_scores` adds them back. Both private copies are deleted.
+
+**The negative control is the whole point of this one.** A digest of every guarded path on the
+three live leagues -- portfolio `champions`, `weekly`, `scores`, `replacement`, `starting`,
+three `champions_without` counterfactuals per league, `TitleEngine._base_scores` and
+`_roster_moments` on full and QB-less rosters -- is **byte-identical** before and after.
+
+Exactly one path moves, and it is the one that never had a guard:
+`TitleEngine._hindsight_moments` read `self.replacement` raw while its two siblings went
+through `_floors_for`. On a roster with an empty group it floored every slot at the missing
+position's level, so 96% of them were left empty and the Clark bonus it exists to compute came
+back very nearly zero. Per-season starting mean, roster minus QB: 1611.17 -> 1823.64
+(Blacksburg), 1779.94 -> 1885.72 (Wine Wednesday), 1714.54 -> 1838.81 (Type shi). It is a
+diagnostic -- reached only through `screen(hindsight_max=True)` and `agreement()`, neither of
+which any production surface calls -- so this is a latent fix, not a change to what anything
+prints.
+
+`tests/test_portfolio.py` carried a test written to fail the moment `leave_one_out` was fixed.
+It fired: `title_added` for the only quarterback went from **-0.5075** -- deleting him *raises*
+the title odds by more than half -- to **+0.1025**. It is now a test that the two paths agree.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -283,9 +330,6 @@ player id) and surface the tie count rather than hiding it.
 - **`floor_noise` is not threaded into `waivers._lineup_scores` (`:388`) or
   `portfolio._column` (`:367`)**, so those two surfaces still credit an empty seat a constant
   where `title` credits a draw. Same shape as #1.
-- **`edges/portfolio._floors_for:216` duplicates `title._floors_for:1001`** — extract one
-  shared helper. `tests/test_portfolio.py:664` is deliberately written to fail when
-  `leave_one_out` is fixed; resolve both together.
 - **Unify the `championship_table` baseline** (user already approved). `fq odds` scores an
   empty slot at zero while every recommendation surface floors it at the wire — two baselines
   for one league, disclosed today in a CLI footer ("baseline: championship_table (unfilled slot

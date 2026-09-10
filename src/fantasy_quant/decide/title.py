@@ -908,7 +908,7 @@ class TitleEngine:
         # Assembled a franchise at a time through the same helper `_rerun` uses, rather
         # than through `season.team_week_scores`, so that the baseline arm and the
         # candidate arm are the *same code* -- which is what makes the paired difference
-        # exact -- and so the empty-group floor correction in `_floors_for` lands on both.
+        # exact -- and so the empty-group floor correction in `_floors` lands on both.
         self._base_scores = np.zeros((draw.n_sims, len(state.weeks), state.size), np.float32)
         for t, franchise in enumerate(state.franchises):
             self._base_scores[:, :, t] = self._franchise_column(franchise, t)
@@ -1149,46 +1149,6 @@ class TitleEngine:
             self._plan_cache[key] = plan
         return plan
 
-    def _floors_for(self, plan: LineupPlan) -> tuple[Mapping[int, float] | float | None, float]:
-        """Floors it is safe to hand this roster's plan, and the points a week they omit.
-
-        `lineup.monotone_floor` raises a slot's floor to that of every slot whose eligible
-        set it contains, and eligibility is computed against **this roster**, not against
-        the position table. A roster with nobody at a position leaves that group's
-        eligible set empty; the empty set is contained in every other group; and so every
-        slot on the team is lifted to the missing position's floor. It is not a small
-        error: dropping the only quarterback off the user's Blacksburg roster lifts all
-        nine slots to the QB replacement level and produces a 137.6-point-a-week team with
-        *zero* variance and a 93% title probability, against 5.8% before the drop. Every
-        candidate that empties a position -- trading away the only tight end, cutting the
-        kicker -- lands on it, and those are candidates a search proposes by the hundred.
-
-        So an empty group is handed a floor of zero, which lifts nothing, and the points
-        its slots really stream are returned separately to be added back to the team's
-        weekly total. That is exact rather than approximate: a group with nothing eligible
-        takes its floor in every week of every simulation, so the omission is a constant.
-        """
-        floors = self.replacement
-        if not isinstance(floors, Mapping):
-            # A scalar floor is uniform, so the lift is a no-op and there is nothing to
-            # correct; `None` is the empty-seat baseline and has no floors at all.
-            return floors, 0.0
-        empty = [g for g in range(plan.n_groups) if not plan._eligible[g].any()]
-        if not empty:
-            return floors, 0.0
-        safe = dict(floors)
-        omitted = 0.0
-        for g in empty:
-            slot = plan.group_slot_ids[g]
-            level = floors[slot]
-            # The floors may be WireLevels; the omission correction is a MEAN, because
-            # a group with nothing eligible takes its floor in every week of every
-            # simulation and the constant part is what the guard adds back. Zeroing the
-            # entry still zeroes the credit, because `_floors` derives both from here.
-            omitted += float(getattr(level, "mean", level)) * plan.group_counts[g]
-            safe[slot] = WireLevel(0.0, 0.0, 0.0) if isinstance(level, WireLevel) else 0.0
-        return safe, omitted
-
     def _franchise_column(self, franchise: S.Franchise, team: int) -> np.ndarray:
         """One franchise's `(sims, weeks)` starting-lineup total, efficiency applied.
 
@@ -1201,17 +1161,19 @@ class TitleEngine:
             self.state.slot_eligibility,
             self.state.pool.positions_of(franchise.player_ids),
         )
-        floors, omitted = self._floors_for(plan)
+        # The empty-group guard lives in `sim/season._floors` now, and `_franchise_scores`
+        # adds back what it holds out. This used to hand down a doctored copy of
+        # `self.replacement` and correct the total here.
         solo = S._franchise_scores(
             self.state.pool,
             franchise,
             plan,
             self._points,
             self._rank,
-            floors,
+            self.replacement,
             floor_noise=self._noise.for_plan(plan, team),
         )
-        return (solo + np.float32(omitted)) * self._factors[:, team : team + 1]
+        return solo * self._factors[:, team : team + 1]
 
     def _roster_moments(self, player_ids: Sequence[int]) -> tuple[np.ndarray, np.ndarray]:
         """`(mean, variance)` per remaining week for this roster's starting lineup.
@@ -1242,8 +1204,7 @@ class TitleEngine:
         n_weeks, size = mu.shape
 
         plan = self._plan_for(self._positions[cols])
-        floors, omitted = self._floors_for(plan)
-        groups, per_slot, credit = S._floors(plan, floors)
+        groups, per_slot, credit, omitted = S._floors(plan, self.replacement)
         floor_var = np.zeros(plan.n_slots) if credit is None else np.asarray(credit.variance)
         rank = np.where(avail > 0.0, mu, -np.inf)
         assignment = plan.solve(rank, floor=groups, assignment=True).assignment
@@ -1297,7 +1258,7 @@ class TitleEngine:
 
         # The floor of any group with nothing eligible, held out of the solve so it
         # cannot lift every other slot. Deterministic, so it moves the mean and not the
-        # variance. See `_floors_for`.
+        # variance. See `sim/season._floors`.
         mean += omitted
         out = (mean, variance)
         self._moment_cache[key] = out
@@ -1319,7 +1280,12 @@ class TitleEngine:
         cols = self._columns(player_ids)
         mu, sd = self._mu[:, cols], self._sd[:, cols]
         plan = self._plan_for(self._positions[cols])
-        groups, per_slot, _credit = S._floors(plan, self.replacement)
+        # This path was the one place the empty-group guard was NEVER applied: it read
+        # `self.replacement` raw while its two siblings went through `_floors_for`. It
+        # gets the guard for free now. The omission itself is already in `mean`, which
+        # came from `_roster_moments`; the Clark bonus corrects solved slots only, and an
+        # empty group has no starter to correct.
+        groups, per_slot, _credit, _omitted = S._floors(plan, self.replacement)
         rank = np.where(self._avail[:, cols] > 0.0, mu, -np.inf)
         assignment = plan.solve(rank, floor=groups, assignment=True).assignment
         assert assignment is not None

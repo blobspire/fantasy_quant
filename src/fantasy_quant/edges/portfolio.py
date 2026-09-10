@@ -115,15 +115,15 @@ it reordered **39 of 40** rows of `exposures`: Harrison Butker sat 11 places abo
 he belongs and Justin Jefferson two below. That is the same inversion `decide/wire.py`
 was extracted to eliminate, arriving here through the caller rather than the definition.
 
-There is a live trap behind that choice which `sim/season.leave_one_out` does not guard:
-`lineup.monotone_floor` raises every slot's floor to that of any slot whose eligible set
-it contains, eligibility is computed against *this roster*, and a roster with nobody at a
-position has an empty eligible set that is contained in every other. Delete the user's
-only quarterback and all nine slots lift to the QB replacement level. `decide/title.py`
-documents the damage (a 137-point-a-week team with zero variance at 93% title odds); the
-same fix is reimplemented here as `_floors_for`, because all three of the user's rosters
-carry exactly one quarterback, one kicker and one defence, so this fires on the first
-interesting exposure rather than on an edge case.
+There is a live trap behind that choice: `lineup.monotone_floor` raises every slot's
+floor to that of any slot whose eligible set it contains, eligibility is computed against
+*this roster*, and a roster with nobody at a position has an empty eligible set that is
+contained in every other. Delete the user's only quarterback and all nine slots lift to
+the QB replacement level -- a 137-point-a-week team with zero variance at 93% title odds.
+All three of the user's rosters carry exactly one quarterback, one kicker and one defence,
+so this fires on the first interesting exposure rather than on an edge case. The guard now
+lives in `sim/season._floors`, which is the one place every floor in the system is built;
+this module and `decide/title.py` each used to carry a private copy of it.
 
 **4. Diversification, with the two objectives that disagree.** `E[titles]` is a sum of
 three marginals and is therefore *completely blind* to how the leagues covary -- linearity
@@ -152,7 +152,7 @@ from ..espn.client import EspnClient
 from ..pipeline import LeagueSim, build, client_from_env
 from ..sim import season as S
 from ..sim.distributions import DEFAULT_SEED, Draw
-from ..sim.lineup import LineupPlan, plan_from_slots
+from ..sim.lineup import plan_from_slots
 
 log = logging.getLogger(__name__)
 
@@ -218,41 +218,6 @@ CORR_BOOTSTRAP = 500
 
 class PortfolioError(ValueError):
     """The three leagues cannot be combined into one portfolio as posed."""
-
-
-# --------------------------------------------------------------------------------------
-# Floors, and the empty-position trap
-# --------------------------------------------------------------------------------------
-
-
-def _floors_for(
-    plan: LineupPlan, replacement: Mapping[int, float] | float | None
-) -> tuple[Mapping[int, float] | float | None, float]:
-    """Floors safe to hand this roster, and the points a week they leave out.
-
-    Reimplements `decide/title.TitleEngine._floors_for`, and it has to be here rather
-    than imported because the engine's copy is a private method on a class this module
-    has no reason to build. See the module docstring: a slot group with nothing eligible
-    on *this* roster has an empty eligible set, `lineup.monotone_floor` lifts every other
-    slot to its floor, and the whole team turns into a deterministic replacement-level
-    machine. Every exposure that empties a position lands on it, and on these rosters
-    that is the quarterback, the kicker and the defence.
-
-    An empty group takes its floor in every week of every simulation, so holding it out
-    of the solve and adding the points back afterwards is exact, not an approximation.
-    """
-    if not isinstance(replacement, Mapping):
-        return replacement, 0.0
-    empty = [g for g in range(plan.n_groups) if not plan._eligible[g].any()]
-    if not empty:
-        return replacement, 0.0
-    safe = dict(replacement)
-    omitted = 0.0
-    for g in empty:
-        slot = plan.group_slot_ids[g]
-        omitted += float(replacement[slot]) * plan.group_counts[g]
-        safe[slot] = 0.0
-    return safe, omitted
 
 
 # --------------------------------------------------------------------------------------
@@ -385,9 +350,11 @@ class LeagueStake:
             self.state.slot_eligibility,
             self.state.pool.positions_of(franchise.player_ids),
         )
-        floors, omitted = _floors_for(plan, self.replacement)
-        solo = S._franchise_scores(self.state.pool, franchise, plan, points, rank_source, floors)
-        return solo + np.float32(omitted)
+        # The empty-group guard lives in `sim/season._floors`, and `_franchise_scores`
+        # adds back what it holds out. This module used to carry its own copy of both.
+        return S._franchise_scores(
+            self.state.pool, franchise, plan, points, rank_source, self.replacement
+        )
 
 
 def _starting_shares(
@@ -407,8 +374,7 @@ def _starting_shares(
     cols = state.pool.columns(franchise.player_ids)
     positions = state.pool.positions_of(franchise.player_ids)
     plan = plan_from_slots(state.lineup_slot_counts, state.slot_eligibility, positions)
-    floors, _ = _floors_for(plan, replacement)
-    groups, _per_slot, _credit = S._floors(plan, floors)
+    groups, _per_slot, _credit, _omitted = S._floors(plan, replacement)
     mean = np.asarray(draw.panel.mean, dtype=np.float64)[:, cols]
     playing = np.asarray(draw.panel.has_game)[:, cols]
     rank = np.where(playing, mean, -np.inf)

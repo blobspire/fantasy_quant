@@ -679,7 +679,7 @@ def _franchise_scores(
     if not franchise.player_ids:
         return np.zeros((n_sims, n_weeks), dtype=np.float32)
     cols = pool.columns(franchise.player_ids)
-    floor, per_slot, credit = _floors(plan, replacement)
+    floor, per_slot, credit, omitted = _floors(plan, replacement)
     chosen = plan.solve(rank_source[:, :, cols], floor=floor, assignment=True).assignment
     assert chosen is not None  # assignment=True always populates it
     started = np.broadcast_to(chosen, (n_sims, n_weeks, chosen.shape[-1]))
@@ -694,7 +694,10 @@ def _franchise_scores(
         filled = np.where(empty, per_slot, got)
     else:
         filled = np.where(empty, credit.credit(floor_noise), got)
-    return filled.sum(axis=-1, dtype=np.float32)
+    total = filled.sum(axis=-1, dtype=np.float32)
+    # A slot group with nothing eligible was held out of the solve so it could not lift
+    # every other slot; what it really streams is added back here. See `_floors`.
+    return total + np.float32(omitted) if omitted else total
 
 
 class FloorNoise:
@@ -806,8 +809,8 @@ def _as_levels(replacement: Mapping[int, Any]) -> dict[int, WireLevel]:
 
 def _floors(
     plan: LineupPlan, replacement: Mapping[int, float] | float | None
-) -> tuple[np.ndarray | None, np.ndarray]:
-    """`(group floors for the solver, per-slot-instance points for an unfilled slot)`.
+) -> tuple[np.ndarray | None, np.ndarray, _CreditParams | None, float]:
+    """`(solver floors, per-slot points for an unfilled slot, credit params, omitted)`.
 
     `None` means an unfilled slot scores zero, which prices every roster player against
     an *empty* seat. That is the right baseline for "how good is my lineup" and the
@@ -829,33 +832,70 @@ def _floors(
     waiver level and vice versa. On a real roster that is several points a week landing
     on the wrong position, which is exactly the number `leave_one_out(replacement=...)`
     is reporting.
+
+    **The empty-group guard lives here, and it did not used to.** `monotone_floor` raises
+    a slot's floor to that of every slot whose eligible set it CONTAINS, eligibility is
+    computed against this roster, and a roster with nobody at a position leaves that
+    group's eligible set empty -- the empty set being contained in every other. So every
+    slot on the team lifts to the missing position's floor. It is not a small error:
+    dropping the only quarterback off the user's Blacksburg roster lifted all nine slots
+    to the QB replacement level and produced a 137.6-point-a-week team with *zero*
+    variance at 93% title probability, against 5.8% before the drop. All three real
+    rosters carry exactly one quarterback, one kicker and one defence, so it fires on the
+    first interesting candidate rather than on an edge case.
+
+    An empty group is therefore handed a floor of zero, which lifts nothing, and the
+    points its slots really stream come back as `omitted` for the caller to add to the
+    team's weekly total. That is exact rather than approximate: a group with nothing
+    eligible takes its floor in every week of every simulation, so the omission is a
+    constant. `_franchise_scores` adds it for you; the two callers that reach past it into
+    this function have to add it themselves.
+
+    This was reimplemented twice -- `title.TitleEngine._floors_for` and
+    `portfolio._floors_for` -- precisely because it was missing from the one place both
+    of them route through. Two private copies of a guard is the shape of a guard living
+    at the wrong altitude.
     """
     if replacement is None:
         zeros = np.zeros(plan.n_slots, dtype=np.float32)
-        return None, zeros, None
+        return None, zeros, None, 0.0
 
     # The solve sees MEANS only. The lift is a statement about which body a wider slot
     # could reach, so applying it to a draw would let a manager gain points by leaving
     # the FLEX empty -- hindsight through the back door. Lift the mean; sample around it.
     if not isinstance(replacement, Mapping):
-        # A bare scalar asserts a number, not a distribution. Unchanged path.
+        # A bare scalar asserts a number, not a distribution, and it is uniform -- so the
+        # lift is a no-op and there is no empty group to guard against. Unchanged path.
         groups = monotone_floor(plan, replacement)[0]
         index = {slot: g for g, slot in enumerate(plan.floor_slot_ids)}
-        return groups, np.array([groups[index[s]] for s in plan.slot_ids], dtype=np.float32), None
+        per_slot = np.array([groups[index[s]] for s in plan.slot_ids], dtype=np.float32)
+        return groups, per_slot, None, 0.0
 
     levels = _as_levels(replacement)
+    omitted = 0.0
+    for g in range(plan.n_groups):
+        if plan._eligible[g].any():
+            continue
+        slot = int(plan.group_slot_ids[g])
+        # A MEAN, because the group takes its floor in every week of every simulation and
+        # the constant part is what the caller adds back. Zeroing the level here zeroes
+        # the credit too, since both the solve floor and the hurdle derive from `levels`.
+        omitted += float(levels[slot].mean) * plan.group_counts[g]
+        levels[slot] = WireLevel(0.0, 0.0, 0.0)
+
     means = {slot: level.mean for slot, level in levels.items()}
     groups = monotone_floor(plan, means)[0]
     index = {slot: g for g, slot in enumerate(plan.floor_slot_ids)}
     per_slot = np.array([groups[index[s]] for s in plan.slot_ids], dtype=np.float32)
 
     if not any(level.sd > 0.0 for level in levels.values()):
-        return groups, per_slot, None
+        return groups, per_slot, None, omitted
     # `per_slot` is the LIFTED mean, so the credit must be re-solved against it rather
     # than against the slot's own unlifted mean, or E[credit] != the solve floor.
     spread = np.array([levels[s].sd for s in plan.slot_ids], dtype=np.float64)
     hurdle = np.array([levels[s].p_zero for s in plan.slot_ids], dtype=np.float64)
-    return groups, per_slot, _CreditParams.solve(per_slot.astype(np.float64), spread, hurdle)
+    credit = _CreditParams.solve(per_slot.astype(np.float64), spread, hurdle)
+    return groups, per_slot, credit, omitted
 
 
 def measure_hindsight_ratio(state: LeagueState, draw: Draw) -> float:
