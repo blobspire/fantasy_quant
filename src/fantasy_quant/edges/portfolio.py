@@ -190,6 +190,12 @@ NOT_ACTIONABLE_TAGS: frozenset[str] = frozenset(
 
 #: Tags that mean the move is real but somebody else has to agree to it, or that it is
 #: priced as an add with no drop. Kept out of `blockers` for `hold`, which is legitimate.
+#:
+#: `counterparty-loses-unclear` is deliberately NOT here. It is the honest reading of a
+#: counterparty delta too noisy to have a sign, and on the live leagues that describes
+#: nearly every trade -- 45 of 120 carried the old bare-sign tag and not one of the 50
+#: negative impacts behind it cleared the selection-adjusted threshold. A blocker that
+#: fires on "cannot tell" blocks the whole board and stops meaning anything.
 CONTESTED_TAGS: frozenset[str] = frozenset(
     {"counterparty-loses", "unilateral", "roster_size", "partially-unpriced"}
 )

@@ -329,6 +329,38 @@ def selection_threshold(n_candidates: int, *, alpha: float = SELECTION_ALPHA) ->
     return float(NormalDist().inv_cdf(1.0 - alpha / (2.0 * n)))
 
 
+def _resolve(delta: float, stderr: float, z: float, falls: str) -> str:
+    """`falls` or `f"{falls}-unclear"` -- two names for one already-negative delta.
+
+    The distinction the surface was missing. A paired title delta near zero has a sign,
+    and printing that sign as a flat assertion is the difference between a measurement
+    and a coin flip: measured on the live leagues, of **50 counterparty impacts that read
+    negative, not one cleared the selection-adjusted threshold** and only 4 cleared even
+    a naive two sigma, while the tag was asserted on 45 trades.
+
+    `z` rather than 2.0 because the trade being labelled won a search -- the same
+    argument `selection_threshold` makes, applied to the side effects of the winner and
+    not only to the winner. A zero standard error means the estimate carries no Monte
+    Carlo at all (an unconfirmed or structurally exact impact), and there the sign is the
+    answer.
+    """
+    return falls if _resolved_loss(delta, stderr, z) else f"{falls}-unclear"
+
+
+def _resolved_loss(delta: float, stderr: float, z: float) -> bool:
+    """Whether a non-positive paired delta is a measurement rather than a sign.
+
+    A zero standard error means no Monte Carlo went into the number -- an unconfirmed or
+    structurally exact impact -- and there the sign is the answer.
+
+    `>=` rather than `>` so that `z = 0` is EXACTLY the bare sign test this replaced,
+    which is what makes the negative control a control: at zero threshold a delta of
+    exactly 0.0 has to resolve rather than fall through to "cannot tell". At any real
+    threshold the two spellings differ only on exact equality.
+    """
+    return stderr <= 0.0 or abs(delta) >= z * stderr
+
+
 # --------------------------------------------------------------------------------------
 # The trade itself
 # --------------------------------------------------------------------------------------
@@ -1504,16 +1536,34 @@ class TradeFinder:
             elif len(mine.received) > len(mine.given):
                 tags.append("expanding")
             if ev.confirmed:
+                # The screen said Pareto and the simulation disagreed. Both of these
+                # used to be BARE SIGN TESTS on a paired estimate the module's own
+                # `TradeEvaluation.title_pareto` docstring already calls noise -- "the
+                # per-side deltas are individually noisy at affordable simulation counts,
+                # and a gate on a noisy quantity is a gate on noise" -- and then tagged
+                # on exactly that. Measured across three seeds on the live leagues they
+                # disagreed with themselves on 42-78% (`harmful`) and 35-75%
+                # (`counterparty-loses`) of the same forty trades. So each gets three
+                # states rather than two, against the selection-adjusted `z`.
                 if mine.delta_title <= 0.0:
-                    # The screen said Pareto and the simulation disagreed about *this*
-                    # team. That happens often enough on the user's real leagues that it
-                    # cannot be left to the reader to spot in the prose: on Wine
-                    # Wednesday at 20,000 simulations, 13 to 17 of the 51 Pareto
-                    # candidates cut the user's title probability by more than two of
-                    # their own standard errors.
-                    tags.append("harmful")
-                if any(i.delta_title < 0.0 for i in ev.impacts if i.team_id != team):
-                    tags.append("counterparty-loses")
+                    tags.append(_resolve(mine.delta_title, mine.delta_title_stderr, z, "harmful"))
+                # STRICTLY negative, as before: a counterparty the trade leaves exactly
+                # where it found it has not lost anything, and `min` over an empty
+                # sequence is the only other thing that could go here.
+                worst = min(
+                    (i for i in ev.impacts if i.team_id != team and i.delta_title < 0.0),
+                    key=lambda i: i.delta_title,
+                    default=None,
+                )
+                if worst is not None:
+                    tags.append(
+                        _resolve(
+                            worst.delta_title,
+                            worst.delta_title_stderr,
+                            z,
+                            "counterparty-loses",
+                        )
+                    )
             if ev.title_pareto:
                 tags.append("title-pareto")
             rec = Recommendation(
@@ -1587,14 +1637,31 @@ class TradeFinder:
                 )
             # The pitch quotes each counterparty its *points* gain, which is the gate.
             # If the simulation says that side's title odds fall anyway, saying so is the
-            # difference between a trade offer and a trick.
-            losers = [i for i in ev.impacts if i.team_id != team and i.delta_title < 0.0]
-            if losers:
+            # difference between a trade offer and a trick. But it has to be able to
+            # tell: this printed the standard error beside a number it had not tested
+            # against it, and on the live leagues not one of the fifty negative
+            # counterparty deltas cleared `z`. Separated into what is measured and what
+            # is merely the sign of noise.
+            down = [i for i in ev.impacts if i.team_id != team and i.delta_title <= 0.0]
+            resolved = [i for i in down if _resolved_loss(i.delta_title, i.delta_title_stderr, z)]
+            unclear = [i for i in down if i not in resolved]
+            if resolved:
                 body += " Simulated title odds fall for " + ", ".join(
                     f"{i.name} ({i.delta_title * 100:+.2f}pp +/- {i.delta_title_stderr * 100:.2f})"
-                    for i in losers
+                    for i in resolved
                 )
                 body += " even though its starting lineup gains points."
+            if unclear:
+                body += (
+                    " Simulated title odds read slightly down for "
+                    + ", ".join(
+                        f"{i.name} ({i.delta_title * 100:+.2f}pp +/- "
+                        f"{i.delta_title_stderr * 100:.2f})"
+                        for i in unclear
+                    )
+                    + f", but none of those clears {z:.2f} standard errors, so the "
+                    "simulation cannot tell whether that side gains or loses."
+                )
         else:
             body += " Screened only; not yet confirmed by simulation."
         if mine.dropped:

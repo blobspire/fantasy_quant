@@ -1015,6 +1015,105 @@ def test_a_counterparty_the_simulation_says_loses_is_named_not_buried():
     assert finder.team_names[2] in rec.rationale
 
 
+def _tagged(delta_mine, delta_other, stderr, *, n_candidates=40):
+    """One confirmed evaluation with hand-set impacts, run through `recommend`."""
+    finder = _finder(CONSOLIDATION, WIRE)
+    rb = _by_name(finder, "RB traded")
+    elite = _by_name(finder, "WR elite")
+    ev = finder.evaluate(TradeProposal(42, (TradeLeg(1, 2, (rb,)), TradeLeg(2, 1, (elite,)))))
+    impacts = tuple(
+        dataclasses.replace(
+            i,
+            delta_title=(delta_mine if i.team_id == 1 else delta_other),
+            delta_title_stderr=stderr,
+        )
+        for i in ev.impacts
+    )
+    confirmed = dataclasses.replace(ev, impacts=impacts, confirmed=True)
+    # `recommend` derives `z` from how many confirmed candidates competed, so padding the
+    # list is how the selection correction is exercised rather than asserted.
+    padding = [confirmed] * (n_candidates - 1)
+    return finder, finder.recommend([confirmed, *padding], for_team=1)[0]
+
+
+class TestANoisySignIsNotAnAssertion:
+    """`counterparty-loses` and `harmful` were bare sign tests on a noisy paired delta.
+
+    `TradeEvaluation.title_pareto`'s own docstring already said the quantity was noise --
+    "the per-side deltas are individually noisy at affordable simulation counts, and a
+    gate on a noisy quantity is a gate on noise" -- and then two tags gated on exactly
+    that, and `report.py` rendered one of them as a flat assertion that a counterparty's
+    odds FALL.
+
+    Measured across three seeds on the live leagues, the same forty trades disagreed with
+    themselves about `counterparty-loses` on 75% / 52% / 35% of them and about `harmful`
+    on 42% / 78% / 18%. Of the 50 counterparty impacts that read negative, **not one
+    cleared the selection-adjusted threshold** and only four cleared a naive two sigma --
+    while the tag was asserted on 45 trades.
+    """
+
+    def test_a_five_sigma_loss_is_still_asserted(self):
+        _finderer, rec = _tagged(0.01, -0.005, 0.0002)
+        assert "counterparty-loses" in rec.tags
+        assert "counterparty-loses-unclear" not in rec.tags
+        assert "Simulated title odds fall for" in rec.rationale
+
+    def test_a_coin_flip_says_it_cannot_tell(self):
+        _finderer, rec = _tagged(0.01, -0.0005, 0.002)
+        assert "counterparty-loses-unclear" in rec.tags
+        assert "counterparty-loses" not in rec.tags
+        assert "cannot tell whether that side gains or loses" in rec.rationale
+        assert "Simulated title odds fall for" not in rec.rationale
+
+    def test_a_counterparty_that_gains_is_not_tagged_either_way(self):
+        _finderer, rec = _tagged(0.01, 0.004, 0.002)
+        assert not any(t.startswith("counterparty-loses") for t in rec.tags)
+
+    def test_my_own_side_gets_the_same_three_states(self):
+        _f1, resolved = _tagged(-0.01, 0.004, 0.0002)
+        assert "harmful" in resolved.tags and "harmful-unclear" not in resolved.tags
+        _f2, unclear = _tagged(-0.0005, 0.004, 0.002)
+        assert "harmful-unclear" in unclear.tags and "harmful" not in unclear.tags
+        # The protection does not depend on the tag: an unconfirmed gain is still low.
+        assert unclear.confidence == "low"
+        assert resolved.confidence == "low"
+
+    def test_the_threshold_is_selection_adjusted_not_two_sigma(self):
+        """The trade being labelled won a search, so its side effects did too."""
+        # 2.5 sigma: significant for one pre-specified candidate, not for the winner of 40.
+        _f, of_forty = _tagged(0.01, -0.0025, 0.001, n_candidates=40)
+        assert "counterparty-loses-unclear" in of_forty.tags
+        _f2, of_one = _tagged(0.01, -0.0025, 0.001, n_candidates=1)
+        assert "counterparty-loses" in of_one.tags
+        assert selection_threshold(40) > 2.0 > 0.0
+        assert selection_threshold(1) < 2.5
+
+    def test_a_zero_threshold_is_exactly_the_old_sign_test(self, monkeypatch):
+        """The negative control, and it has to be exact.
+
+        With `z = 0` every `-unclear` must collapse back into the bare sign test this
+        replaced. Verified on the live leagues too: at `z = 0` no `-unclear` tag survives
+        and the resolved counts land exactly on the `-unclear` counts at the real
+        threshold (14/10/21 counterparty, 27/29/5 harmful).
+        """
+        import fantasy_quant.decide.trades as trades_mod
+
+        monkeypatch.setattr(trades_mod, "selection_threshold", lambda *a, **k: 0.0)
+        for mine, other in ((0.01, -0.0005), (-0.0005, 0.004), (0.01, -1e-9)):
+            _f, rec = _tagged(mine, other, 0.002)
+            assert not any(t.endswith("-unclear") for t in rec.tags), (mine, other, rec.tags)
+        # ... and the bare signs it produces are the ones the old code produced.
+        _f, rec = _tagged(0.01, -0.0005, 0.002)
+        assert "counterparty-loses" in rec.tags
+        _f, rec = _tagged(-0.0005, 0.004, 0.002)
+        assert "harmful" in rec.tags
+
+    def test_an_impact_with_no_monte_carlo_keeps_its_sign(self):
+        """A zero standard error is an exact result, not an unmeasured one."""
+        _f, rec = _tagged(0.01, -0.005, 0.0)
+        assert "counterparty-loses" in rec.tags
+
+
 # --------------------------------------------------------------------------------------
 # The front door
 # --------------------------------------------------------------------------------------

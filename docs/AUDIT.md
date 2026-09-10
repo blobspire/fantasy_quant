@@ -1,7 +1,7 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Eight findings are fixed and pushed -- six from the original nine,
-plus two the audit did not have. Three remain, all located. Read the **Remaining work**
+Status as of 2026-09-10. Nine findings are fixed and pushed -- seven from the original nine,
+plus two the audit did not have. Two remain, all located. Read the **Remaining work**
 section to continue.
 
 ## Why this file exists
@@ -377,6 +377,69 @@ the parent commit's every `ros_vorp` and `playoff_vorp` to a **byte-identical di
 `rosters={}` and an explicit `DEFAULT_BENCH_HOARDING` give the same. Five new tests fail on
 the parent commit and pass here.
 
+### #8 — a noisy sign printed as a flat assertion, twice
+
+`trades.py` tagged on two bare sign tests over a paired title delta:
+
+```python
+if mine.delta_title <= 0.0:
+    tags.append("harmful")
+if any(i.delta_title < 0.0 for i in ev.impacts if i.team_id != team):
+    tags.append("counterparty-loses")
+```
+
+and `report.py` rendered the second as *"a counterparty's simulated title odds FALL under
+this"*. **The module already knew.** `TradeEvaluation.title_pareto`'s own docstring says of
+that exact quantity: *"the per-side deltas are individually noisy at affordable simulation
+counts, and a gate on a noisy quantity is a gate on noise."* Two properties later, both tags
+gate on it.
+
+Measured across three seeds, on the forty trades all three runs found:
+
+| | Blacksburg | Wine Wednesday | Type shi |
+|---|---|---|---|
+| `counterparty-loses` disagrees with itself | **75%** | 52% | 35% |
+| `harmful` disagrees with itself | 42% | **78%** | 18% |
+| `title-pareto` disagrees with itself | 25% | 58% | 40% |
+
+And the reason, which is worse than instability. The tag fired on **45 of 120** trades. Of
+the **50 counterparty impacts that read negative, not one cleared the selection-adjusted
+threshold** (z = 3.23 at forty candidates) and only four cleared even a naive two sigma. The
+median |delta|/stderr is 0.71–1.18. Every one of those 45 assertions was the sign of noise.
+
+Both tags now have three states against the `z` that was already computed two lines above
+them — *falls* / *cannot tell* / *nothing to say* — and the rationale prints the two cases in
+different sentences instead of quoting a standard error beside a number it had not tested
+against it. After the fix, on the same three seeds:
+
+| | fires | disagrees across seeds |
+|---|---|---|
+| `counterparty-loses` | **0 / 120** | **0%** |
+| `harmful` | 0 / 120 | 0–2% |
+| `counterparty-loses-unclear` | 45 / 120 | 35–75% |
+| `harmful-unclear` | 61 / 120 | 18–78% |
+
+The instability is all in the `-unclear` rows, which is where it belongs: those say they did
+not resolve. **No protection was lost** — `_confidence` returns `"low"` on the sign
+independently of the tag, and both `-unclear` names are in `report._LOW_CONFIDENCE_TAGS`, so
+the reader still gets the warning and now gets an honest reason for it.
+`counterparty-loses-unclear` is deliberately **not** in `portfolio.CONTESTED_TAGS`: a blocker
+that fires on "cannot tell" blocks the whole board.
+
+**Negative control:** with `z` forced to 0 every `-unclear` collapses and the resolved counts
+land exactly on the `-unclear` counts at the real threshold — 14 / 10 / 21 for the
+counterparty and 27 / 29 / 5 for `harmful`. `_resolved_loss` uses `>=` rather than `>`
+precisely so `z = 0` reproduces the old test on an exactly-zero delta too. Three of the seven
+new tests fail on the parent commit.
+
+> **Left as a tradeoff rather than patched: `title_pareto`.** It is a sign test over every
+> impact and it disagrees with itself 25–58% of the time. Its own docstring already declares
+> it *"reported rather than gated on... Still not the gate"*, and the surface's actual gate is
+> the points Pareto, so the noise is disclosed rather than acted on. Gating it on `z` would
+> empty it — no per-side delta on these leagues clears the threshold — which is a decision
+> about what the tag is *for*, not a bug fix. The stale claim in that docstring ("24 to 27 of
+> every 40") is now 14 / 10 / 21 of 40 on today's rosters.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -390,16 +453,6 @@ the parent commit and pass here.
 ## Remaining work
 
 Ranked. Everything below is located and measured; none is started.
-
-### #8 MAJOR — `counterparty-loses` is a coin flip printed as fact
-
-`trades.py:1515`: `any(i.delta_title < 0.0 for i in ev.impacts if i.team_id != team)` — a bare
-sign test on a noisy paired estimate that two seeds disagree about 75% / 60% of the time.
-`report.py:402` renders it as a flat assertion.
-
-`TeamImpact.delta_title_stderr` is already populated (`trades.py:1465`) and the module already
-computes a selection-adjusted `z` (`trades.py:1490`). Gate the tag on that, and give the
-caveat three states rather than one: *falls*, *cannot tell*, *does not fall*.
 
 ### #9 MAJOR — `settle`'s forced cut is decided by ESPN's roster order
 

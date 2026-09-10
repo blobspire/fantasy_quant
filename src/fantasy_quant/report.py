@@ -389,7 +389,14 @@ _NULL_TAGS = frozenset({"null-plan"})
 #: Tags a surface attaches when it sets `confidence="low"`, named in the verdict note so
 #: "the surface does not stand behind this" is a reason rather than an assertion.
 _LOW_CONFIDENCE_TAGS = frozenset(
-    {"not-streamable", "action-suppressed", "harmful", "counterparty-loses"}
+    {
+        "not-streamable",
+        "action-suppressed",
+        "harmful",
+        "harmful-unclear",
+        "counterparty-loses",
+        "counterparty-loses-unclear",
+    }
 )
 
 #: Tags meaning the number is real and somebody else still has to agree to it, or that
@@ -398,10 +405,22 @@ _LOW_CONFIDENCE_TAGS = frozenset(
 #: writes `counterparty-loses` when the simulation says a counterparty's title odds FALL
 #: under a trade its own points gate called Pareto-improving, and its rationale calls
 #: printing that without saying so "the difference between a trade offer and a trick".
+#:
+#: Both of those come in a `-unclear` form too, and the pair matters more than either.
+#: They used to be bare sign tests on a paired estimate too noisy to have a sign: across
+#: three seeds on the live leagues the same forty trades disagreed with themselves 35-75%
+#: of the time about `counterparty-loses` and 42-78% about `harmful`. "Cannot tell" is a
+#: different sentence from "falls", and a reader deciding whether to send a trade offer
+#: needs to know which one they are being handed.
 _CAVEAT_TAGS: Mapping[str, str] = {
     "counterparty-loses": "a counterparty's simulated title odds FALL under this; "
     "the points gate it passed is not the same test",
+    "counterparty-loses-unclear": "a counterparty's simulated title odds read slightly "
+    "down, but not by enough to tell from noise -- the points gate it passed is a "
+    "different test and this one did not resolve",
     "harmful": "the simulation disagrees with the screen about your own side",
+    "harmful-unclear": "the simulation does not confirm the screen about your own side, "
+    "and cannot separate the difference from noise",
     "partially-unpriced": "later weeks have no closing line yet and use the "
     "projection-only fit; those numbers will move",
     "not-streamable": "the fitted within-week spread at this position is below the "
