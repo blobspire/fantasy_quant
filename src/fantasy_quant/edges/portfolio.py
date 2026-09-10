@@ -105,6 +105,16 @@ same disagreement, same reason, as `decide/waivers.WaiverReport.baseline_title`.
 deltas across surfaces, never levels. `build_portfolio(stream_replacement=False)` returns
 to the empty-seat convention if a caller wants to reconcile.
 
+It fits that floor **off `sim.outlooks`**, and the argument is load-bearing rather than
+tidy. Omitting it hands `streaming_replacement` the panel instead, `pipeline.build` pools
+only rostered players, so the wire reads empty at every slot and the whole board falls
+through to the VOLS roster-bottom rank -- which is not merely too high but too high at
+some positions and too LOW at others, so it does not cancel. Measured on the three live
+leagues it put RB at 9.22 against a true 4.55 and D/ST at 5.29 against a true 7.39, and
+it reordered **39 of 40** rows of `exposures`: Harrison Butker sat 11 places above where
+he belongs and Justin Jefferson two below. That is the same inversion `decide/wire.py`
+was extracted to eliminate, arriving here through the caller rather than the definition.
+
 There is a live trap behind that choice which `sim/season.leave_one_out` does not guard:
 `lineup.monotone_floor` raises every slot's floor to that of any slot whose eligible set
 it contains, eligibility is computed against *this roster*, and a roster with nobody at a
@@ -528,7 +538,9 @@ def build_portfolio(
     `stream_replacement` fits `decide/title.streaming_replacement` for each league, so an
     unfilled starting slot streams a body off the wire instead of scoring zero. Leave it
     on unless you are reconciling against `pipeline.championship_table`, whose levels this
-    deliberately does not match -- see the module docstring.
+    deliberately does not match -- see the module docstring. It is fitted off
+    `sim.outlooks`; passing the state and draw alone reads a pool with no free agents in
+    it and silently returns the VOLS roster-bottom rank instead of the wire.
 
     The manager's currently submitted lineup is captured here and nowhere else, because
     `pipeline.build` closes the client it opened and `League.rosters` is not memoised, so
@@ -555,7 +567,15 @@ def build_portfolio(
                 seed=seed,
                 **build_kwargs,  # type: ignore[arg-type]
             )
-            floors = streaming_replacement(sim.state, sim.draw) if stream_replacement else None
+            # `outlooks=` is the WIRE, and it is not optional -- see the warning
+            # `title.streaming_levels` addresses to this caller by name. Without it the
+            # pool comes from the panel, `pipeline.build` pools only ROSTERED players,
+            # and every slot falls through to the VOLS roster-bottom rank.
+            floors = (
+                streaming_replacement(sim.state, sim.draw, outlooks=sim.outlooks)
+                if stream_replacement
+                else None
+            )
             stakes.append(
                 _stake(
                     sim,

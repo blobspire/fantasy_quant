@@ -80,6 +80,7 @@ def build_sim(
     my_id_offset: int | None = None,
     n_sims: int = N_SIMS,
     strength: list[float] | None = None,
+    wire_strength: float | None = None,
 ) -> LeagueSim:
     """A whole synthetic league as a `pipeline.LeagueSim`, deterministic in `seed`.
 
@@ -92,6 +93,13 @@ def build_sim(
     `streaming_replacement` fits the wire off the pool, so on a league where the user has
     the worst quarterback the replacement level *is* his quarterback, deleting him costs
     nothing, and every concentration test would pass for the wrong reason.
+
+    `wire_strength` adds two UNROSTERED players per position at that strength -- present
+    in `outlooks`, absent from `state.pool`. That is the live shape (`pipeline.build`
+    pools only rostered players while `league_projections` reads the whole corpus) and
+    without it this fixture cannot tell the wire from the roster bottom, which is exactly
+    why it did not catch `build_portfolio` reading the panel. Default `None` keeps every
+    existing expectation in this file unchanged.
     """
     strength = strength or [1.08 - 0.04 * i for i in range(n_teams)]
     mine = id_offset if my_id_offset is None else my_id_offset
@@ -117,6 +125,24 @@ def build_sim(
                 )
             )
         rosters.append(tuple(ids))
+
+    if wire_strength is not None:
+        # `outlooks` only. These have no column in `state.pool`, which is what makes them
+        # free agents rather than a thirteenth roster.
+        for k, pos in enumerate(sorted(set(POSITIONS))):
+            for d in range(2):
+                pid = id_offset + 900_000 + 10 * k + d
+                nfl = ((pid // 1000 + k) % 30) + 1
+                mean = max(_BASE_POINTS[pos] * wire_strength * (1.0 - 0.05 * d), 0.5)
+                outlooks.append(
+                    PlayerOutlook(
+                        player_id=pid,
+                        name=f"fa{pid}",
+                        position_id=pos,
+                        pro_team_id=nfl,
+                        weeks={w: _weekly(pid, w, pos, mean, nfl) for w in WEEKS},
+                    )
+                )
 
     order = list(range(n_teams))
     games = []
@@ -149,6 +175,8 @@ def build_sim(
         playoff_rounds=ROUNDS,
         my_team_id=1,
     )
+    # `panel_for` indexes on `state.pool`, so the free agents drop out here on their own
+    # -- which is the whole point: the panel is the ROSTER and `outlooks` is the wire.
     draw = WeeklySampler(S.panel_for(state, outlooks), seed=seed).draw(n_sims)
     return LeagueSim(
         league=None,  # type: ignore[arg-type]
@@ -164,7 +192,11 @@ def make_portfolio(sims, *, stream_replacement: bool = True) -> PF.Portfolio:
     """A `Portfolio` from pre-built sims, bypassing the ESPN client."""
     stakes = []
     for sim in sims:
-        floors = streaming_replacement(sim.state, sim.draw) if stream_replacement else None
+        floors = (
+            streaming_replacement(sim.state, sim.draw, outlooks=sim.outlooks)
+            if stream_replacement
+            else None
+        )
         stakes.append(PF._stake(sim, 1, floors, None))
     return PF.Portfolio(stakes=tuple(stakes), seed=sims[0].seed, n_sims=sims[0].n_sims)
 
@@ -610,6 +642,68 @@ class TestConcentration:
     def test_a_player_nobody_rosters_changes_nothing(self, overlapping):
         stake = overlapping.stakes[0]
         assert np.array_equal(stake.champions_without([-999]), stake.champions)
+
+
+@pytest.fixture(scope="module")
+def wired():
+    """One league that has a wire: free agents in `outlooks`, absent from `state.pool`."""
+    return build_sim(701, seed=5, wire_strength=0.55)
+
+
+class TestTheFloorIsFittedOffTheWireAndNotThePanel:
+    """`build_portfolio` must hand `streaming_replacement` the wire, not the roster.
+
+    `decide/title.streaming_levels` warns this caller by name: without `outlooks=` the
+    pool comes from the panel, `pipeline.build` pools only ROSTERED players, the wire
+    reads 0.00 at every slot and the whole board silently falls through to the VOLS
+    roster-bottom rank. Measured on the three live leagues that put RB at 9.22 against a
+    true 4.55 and D/ST at 5.29 against a true 7.39 -- wrong in both directions, so it does
+    not cancel -- and reordered 39 of 40 rows of `exposures`.
+
+    The old fixture could not see any of it, because every synthetic player was on a
+    roster and so the panel and the wire were the same set. `build_sim(wire_strength=...)`
+    is what makes the two distinguishable; these tests are worthless without it.
+    """
+
+    def test_the_fixture_really_has_a_wire(self, wired):
+        """Guards the guard: free agents in `outlooks`, absent from `state.pool`."""
+        pool = set(wired.state.pool.player_ids)
+        free = [o for o in wired.outlooks if o.player_id not in pool]
+        assert free, "no free agents, so neither test below can fail"
+        assert all(o.player_id not in pool for o in free)
+
+    def test_the_panel_and_the_wire_give_different_floors(self, wired):
+        panel = streaming_replacement(wired.state, wired.draw)
+        wire = streaming_replacement(wired.state, wired.draw, outlooks=wired.outlooks)
+        assert set(panel) == set(wire)
+        # The wire here is deliberately weaker than the roster bottom, which is the live
+        # direction at RB/WR/QB/FLEX. The point is that they DISAGREE, not the sign.
+        assert panel != wire
+        assert any(wire[s] < panel[s] for s in panel)
+
+    def test_build_portfolio_fits_the_floor_off_the_wire(self, wired, monkeypatch):
+        """The regression guard on `portfolio.py`'s own call, not on a helper's.
+
+        Driven through `build_portfolio` rather than `make_portfolio` because the helper
+        is the thing that mirrored the bug: a test that only exercised the helper would
+        have passed both before and after the fix.
+        """
+        monkeypatch.setattr(PF, "build", lambda *a, **kw: wired)
+        # A non-None client keeps `build_portfolio` from reaching for real credentials,
+        # and `_submitted_lineup` swallows the AttributeError off `league=None`.
+        got = PF.build_portfolio([(701, 1)], 2026, client=object(), n_sims=wired.n_sims)
+        assert got.stakes[0].replacement == streaming_replacement(
+            wired.state, wired.draw, outlooks=wired.outlooks
+        )
+        assert got.stakes[0].replacement != streaming_replacement(wired.state, wired.draw)
+
+    def test_turning_the_floor_off_still_means_off(self, wired, monkeypatch):
+        """The negative control: `stream_replacement=False` is untouched by any of this."""
+        monkeypatch.setattr(PF, "build", lambda *a, **kw: wired)
+        got = PF.build_portfolio(
+            [(701, 1)], 2026, client=object(), n_sims=wired.n_sims, stream_replacement=False
+        )
+        assert got.stakes[0].replacement is None
 
 
 class TestEmptyPositionFloorTrap:

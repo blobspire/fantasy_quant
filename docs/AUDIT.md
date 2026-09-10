@@ -1,7 +1,8 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Four of nine verified findings are fixed and pushed; five remain,
-all located, none started. Read the **Remaining work** section to continue.
+Status as of 2026-09-10. Five findings are fixed and pushed -- four from the original nine,
+plus one the audit did not have. Five remain, all located. Read the **Remaining work**
+section to continue.
 
 ## Why this file exists
 
@@ -142,6 +143,71 @@ rather than deletes.
 > `week_leverage`, which never touches the fit. This is a latent correctness fix, not a change
 > to what any surface prints today. The audit ranked it CRITICAL partly on the premise that it
 > changes recommendations. It does not, yet.
+
+### #1 again, in the portfolio (`edges/portfolio.py`)
+
+**Not one of the nine.** Found while reading for #5. `build_portfolio` fitted its floor with
+
+```python
+floors = streaming_replacement(sim.state, sim.draw) if stream_replacement else None
+```
+
+-- no `outlooks=`. That is the exact omission `cc624f6` fixed elsewhere, in the one surface
+whose whole purpose is ranking a move in one league against a move in another, and
+`title.streaming_levels` warns this caller by name: *"Callers holding `sim.outlooks` must
+pass it."* Without it the pool comes from `_outlooks_from_panel`, `pipeline.build` pools only
+rostered players, the wire reads 0.00 at every slot and the board falls through to
+`_vols_replacement`. `sim` was bound six lines above.
+
+The tell was an invariant again, and a sharper one than "identical across leagues":
+**Blacksburg and Type shi came back byte-identical at six of seven slots** -- 15.286786281772235
+at QB, 8.805586651381187 at RB -- because reading the demand-rank player off a *rostered* pool
+reads the same NFL players in every league. Wine Wednesday differed only in size.
+
+Per-slot floor, week 1 of 2026:
+
+| slot | Blacksburg | | Wine Wednesday | | Type shi | |
+|---|---|---|---|---|---|---|
+| | before | after | before | after | before | after |
+| QB | 15.29 | 14.01 | 15.10 | 13.59 | 15.29 | 14.01 |
+| RB | 8.81 | 5.57 | **9.22** | **4.55** | 8.81 | 4.98 |
+| WR | 8.73 | 6.31 | 9.91 | 5.25 | 8.73 | 5.77 |
+| TE | 6.56 | 6.13 | 7.78 | 7.68 | 6.56 | 6.74 |
+| D/ST | **5.29** | **7.39** | 5.29 | 7.26 | 5.29 | 7.45 |
+| K | 8.16 | 8.82 | 8.14 | 8.68 | 8.14 | 8.87 |
+| FLEX | 8.16 | 6.69 | 9.24 | 7.71 | 8.16 | 6.82 |
+
+RB 9.22 against a true 4.55 is `decide/wire.py`'s own docstring figure, arrived at from the
+other direction. **The error is not a level shift and does not cancel:** skill floors were too
+high, K and D/ST too low, so it reorders *across* positions.
+
+What it moved:
+
+| | before | after |
+|---|---|---|
+| Blacksburg P(title) | 5.30% | 6.83% |
+| Wine Wednesday | 3.17% | 4.40% |
+| Type shi | 7.42% | 9.38% |
+| P(>=1 title) | 15.07% | **19.10%** |
+
+and **39 of 40 rows of `exposures` change rank**. Harrison Butker sat 11 places above where he
+belongs (14 -> 25, 0.80pp -> 0.40pp) and the Chargers D/ST five (11 -> 16); Jalen Hurts rose
+6 -> 4 (3.60 -> 6.60pp) and Justin Jefferson 8 -> 6. That is the kicker-over-a-first-round-back
+inversion `decide/wire.py` exists to prevent, arriving through the caller rather than the
+definition.
+
+> **Scope, honestly:** the ranked **action queue is byte-identical** before and after, top to
+> bottom. Every surface adapter (`_waiver_recs`, `_trade_recs`, `_lineup_recs`,
+> `_streaming_recs`) takes `stake.sim` and rebuilds its own draw and its own floors, exactly as
+> `QueueItem.baseline_title` documents. So this is a *levels and exposures* fix, not a change
+> to what the queue tells the user to do today. `_starting_shares` also moves (5/12, 3/10 and
+> 3/14 players change recorded slot or share), and that feeds `exposures`.
+
+Nothing caught it because `tests/test_portfolio.py` put **every** synthetic player on a roster,
+so the panel and the wire were the same set and the two calls could not disagree. The fixture
+now takes `wire_strength=` and grows free agents that are in `outlooks` and absent from
+`state.pool`; the regression guard drives `build_portfolio` itself rather than the test helper,
+because the helper mirrored the bug and would have passed either way.
 
 ### Also fixed along the way
 
