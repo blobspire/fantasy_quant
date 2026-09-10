@@ -158,7 +158,7 @@ and `If-None-Match`.
 
 ## Calibration constants **[measured]**
 
-From our own corpus, 23,999 paired player-weeks, ESPN PPR, seasons 2022–2025.
+From our own corpus, 28,309 paired player-weeks, ESPN PPR, seasons 2022–2025.
 Regenerate with `fq backfill`. **These supersede the research figures.**
 
 | pos | n | MAE | RMSE | weekly slope | P(actual ≤ 0) | skew | excess kurt |
@@ -167,6 +167,27 @@ Regenerate with `fq backfill`. **These supersede the research figures.**
 | RB | 6,312 | 4.10 | 5.76 | 0.921 | **18.5%** | 1.40 | 2.13 |
 | WR | 10,004 | 4.27 | 5.92 | 0.943 | **25.9%** | 1.45 | 2.31 |
 | TE | 5,473 | 3.24 | 4.65 | 0.961 | **32.5%** | 1.79 | 4.02 |
+| K | 2,166 | 3.70 | 4.67 | 0.847 | **3.6%** | 0.56 | 0.31 |
+| D/ST | 2,144 | 4.71 | 6.07 | **1.424** | **18.7%** | 0.45 | 0.39 |
+
+**K and D/ST are the two rows that were missing, and D/ST is why it mattered.** Its weekly
+slope is **1.424** — the one position ESPN projects too *flat* — where every skill position
+sits at 0.92–0.96. They used to be run through the pooled skill line (0.941), so a defence
+was being shrunk when it needed expanding. Held out, that pushed the level bias from −0.67 to
+−0.81 a week, about −13.7 points across a season, on a position every roster starts every
+week. Both are fitted positions now.
+
+The kicker is a different problem: its level fit has **r² = 0.014** and the slope swings
+0.67–1.22 across leave-one-season-out folds, so the slope is not identified and applying it
+makes the held-out slope calibration *worse* (1.414 against a raw 1.018, target 1.0). K gets
+a level shift of **+0.289** with the slope pinned at 1.0. The rule is `r² < 0.05`, measured
+from the gap: K 0.014, D/ST 0.112, QB 0.211.
+
+**The acceptance criterion is bias, not MAE**, and at K and D/ST they disagree. MAE prefers
+no correction at all (D/ST 4.7058 raw against 4.7193 fitted) while bias prefers the fit by
+two orders of magnitude (−0.6715 against −0.0034). The simulator draws from a distribution
+whose mean is exactly the calibrated value and then sums nine starters over seventeen weeks:
+a level error is paid every week in the same direction, a per-week absolute error cancels.
 
 **σ(μ) = 3.67 + 0.273·μ** (research claimed 2.5 + 0.30·μ).
 

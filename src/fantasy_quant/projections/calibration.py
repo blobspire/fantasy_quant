@@ -29,6 +29,34 @@ Three corrections, each measured on our own corpus rather than assumed:
    for the pooled `3.67 + 0.273*mu` in RESEARCH.md. Position-specific wins at all
    four positions; use the pooled line only as a fallback.
 
+**K and D/ST are fitted positions, and the criterion is bias, not MAE.** They used to
+fall through to the pooled skill line, which is not a small approximation on a defence
+-- it is the wrong *sign*. Pooled shrinks a projection (slope 0.9414) where a defence
+has to be expanded (1.4237); ESPN under-projects D/ST by 0.67 a week and the shrink
+made it 0.81, about -13.7 points across a season, on a position every roster starts
+every week. The rows to fit it were in the corpus the whole time and `load_pairs`
+filtered them out. Note the two criteria disagree here: leave-one-season-out, MAE
+prefers no correction at all (D/ST 4.7058 raw against 4.7193 fitted) while bias
+prefers the fit by two orders of magnitude (-0.6715 against -0.0034). **Bias wins**,
+because the simulator draws from a distribution whose mean is exactly `calibrate`'s
+output and then sums nine starters over seventeen weeks: a level error is paid every
+week in the same direction, and a per-week absolute error mostly cancels. Fitted D/ST
+also happens to win on held-out MAE and RMSE on 2025 (-0.19% and -1.20%).
+
+An independent check that this is the right number: `decide/streaming.MATCHUP_MODELS`
+fitted D/ST separately for the streaming grid and got `proj_only_coef = 1.440` against
+the 1.4237 here -- two fits of the same quantity, on the same rows, agreeing to two
+decimals. A test pins them together so they cannot drift apart again.
+
+**What is still approximated at D/ST**: 14.0% of D/ST weeks are strictly negative and
+18.7% are `<= 0`, and a hurdle gamma cannot draw a negative. `HurdleCurve` fits
+`P(actual <= 0)`, so the negative mass lands on the zero spike and
+`hurdle_gamma_from_moments` still reproduces the mean and SD exactly -- the first two
+moments, which are what the sim consumes, are right by construction. What is wrong is
+the third: a -4 week is drawn as 0, so the positive part is a touch light. Fixing that
+means a location-shifted family, which would touch common random numbers and every
+other position for a skewness gain. Measured and left alone, deliberately.
+
 The corpus definition matters and is easy to get wrong. Pairing every weekly
 projection row with its actual gives 41,970 rows and a QB MAE of 2.37 -- because
 20,729 of those rows are deep-bench players projected for ~0 who scored ~0, which
@@ -70,7 +98,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from ..core import QB, RB, SKILL_POSITIONS, TE, WR, WeeklyOutlook
+from ..core import DST, FITTED_POSITIONS, QB, RB, SKILL_POSITIONS, TE, WR, K, WeeklyOutlook
 from ..espn.statrows import SOURCE_ACTUAL, SOURCE_PROJECTED, SPLIT_GAME
 
 log = logging.getLogger(__name__)
@@ -78,7 +106,7 @@ log = logging.getLogger(__name__)
 DEFAULT_SNAPSHOT_ROOT = Path("data/snapshots/espn")
 DEFAULT_REFERENCE_DIR = Path("data/reference")
 
-POSITION_NAMES: Mapping[int, str] = {QB: "QB", RB: "RB", WR: "WR", TE: "TE"}
+POSITION_NAMES: Mapping[int, str] = {QB: "QB", RB: "RB", WR: "WR", TE: "TE", K: "K", DST: "DST"}
 
 #: Bump when the persisted shape changes incompatibly.
 SCHEMA_VERSION = 1
@@ -316,9 +344,14 @@ class CalibrationSet:
     def for_position(self, position_id: int) -> PositionCalibration:
         """The fitted curves for a position, or the pooled ones if it was not fitted.
 
-        K and D/ST fall through to pooled. They are not modelled here -- their score
-        distributions are nothing like a skill player's -- so a caller relying on
-        this for them is getting a placeholder, not a projection.
+        K and D/ST are fitted positions now. They used to fall through to pooled with a
+        docstring conceding that a caller was "getting a placeholder, not a projection"
+        -- and every league did, on the two positions every roster starts every week.
+        Their distributions really are nothing like a skill player's, which is the
+        argument for fitting them, not for averaging them into one.
+
+        Pooled is still the answer for a position with too few rows to fit, and for an
+        id we have never seen.
         """
         return self.positions.get(position_id, self.pooled)
 
@@ -515,7 +548,8 @@ def _position_from_dict(raw: Mapping[str, Any]) -> PositionCalibration:
 # Shipped defaults
 # --------------------------------------------------------------------------------------
 
-#: What `fit()` produced on the 2022-2025 PPR corpus (23,999 paired player-weeks).
+#: What `fit()` produced on the 2022-2025 PPR corpus (28,309 paired player-weeks; the
+#: pooled row stays on the 23,999 skill rows, see `fit_from_pairs`).
 #: Carried in source so a fresh checkout with no Parquet and no fitted JSON still
 #: gets the measured numbers instead of an identity transform. Regenerate with
 #: `fit(write=True)` and paste the printed block back here.
@@ -526,6 +560,19 @@ _DEFAULT_ROWS: Mapping[int, tuple[float, ...]] = {
     RB: (0.2928, 0.9212, 0.4861, 2.4695, -2.1251, 0.3277, 20.6169, 0.1850, 2.4439, 0.3851, 6312),
     WR: (0.0637, 0.9434, 0.4160, 2.2126, -1.5725, 0.1206, 19.3886, 0.2592, 2.7112, 0.4085, 10004),
     TE: (0.2108, 0.9609, 0.3810, 2.4091, -1.7228, 0.5671, 15.0049, 0.3251, 2.1996, 0.4492, 5473),
+    # K and D/ST used to fall through to pooled, which is a line fitted on skill players.
+    # For a defence that is not a small error, it is the wrong sign: pooled SHRINKS a
+    # projection (slope 0.9414) where a defence has to be EXPANDED (1.4237). ESPN
+    # under-projects both -- D/ST by 0.67 a week, K by 0.29 -- so the shrink pushed the
+    # bias from -0.67 to -0.81 a week, about -13.7 points across a season, on the two
+    # positions every roster starts every week.
+    #
+    # The kicker's slope is exactly 1.0 because it is not identified (r2 0.014) and
+    # `_fit_level` pins it there; the +0.2892 intercept is the whole correction, and it
+    # is the whole measured bias. Do not "improve" this by unpinning it -- see
+    # LEVEL_SLOPE_MIN_R2 for what the fitted slope does out of sample.
+    K: (0.2892, 1.0000, 0.0139, 5.9534, -3.2918, 6.1438, 9.2345, 0.0365, 4.8807, -0.0280, 2166),
+    DST: (-1.5643, 1.4237, 0.1115, 1.5735, -1.3169, 1.5818, 10.5843, 0.1866, 5.1385, 0.1401, 2144),
 }
 _DEFAULT_POOLED = (
     0.1742,
@@ -543,6 +590,13 @@ _DEFAULT_POOLED = (
 
 #: The measured floor. Even a projected-zero player who plays has this much spread.
 SD_FLOOR = 1.0
+
+#: Below this level-fit r2 the slope is not identified and only the level is corrected.
+#: Picked from the gap in the measured values, not by taste: K sits at 0.014 and its
+#: fitted slope swings 0.67-1.22 across leave-one-season-out folds, while the lowest
+#: position that is worth a slope is D/ST at 0.112 (QB, the lowest skill position, is at
+#: 0.211). 0.05 sits between them with a factor of two of headroom on both sides.
+LEVEL_SLOPE_MIN_R2 = 0.05
 
 
 def _position_from_row(position_id: int, row: Sequence[float]) -> PositionCalibration:
@@ -562,7 +616,9 @@ def default_calibration(variant: str = "ppr") -> CalibrationSet:
         variant=variant,
         seasons=(2022, 2023, 2024, 2025),
         fitted_at="2026-09-07",
-        n_pairs=int(_DEFAULT_POOLED[-1]),
+        # Every fitted row, not just the pooled block's -- pooled is skill-only by
+        # design and is no longer the whole corpus.
+        n_pairs=sum(int(row[-1]) for row in _DEFAULT_ROWS.values()),
         source="defaults",
         positions={p: _position_from_row(p, row) for p, row in _DEFAULT_ROWS.items()},
         pooled=_position_from_row(0, _DEFAULT_POOLED),
@@ -627,6 +683,7 @@ def load_pairs(
     variant: str = "ppr",
     seasons: Sequence[int] | None = None,
     min_projection: float = 0.0,
+    positions: Sequence[int] | None = FITTED_POSITIONS,
 ) -> pl.DataFrame:
     """Paired weekly (projection, actual) rows from the Parquet corpus.
 
@@ -643,6 +700,14 @@ def load_pairs(
     * `projection > min_projection` -- see the module docstring. At the default of 0
       this yields exactly the 23,999 rows and every constant in RESEARCH.md; keeping
       the projected-zero rows yields 41,970 rows and a QB MAE of 2.37.
+
+    `positions` defaults to `FITTED_POSITIONS`, which includes K and D/ST. It used to be
+    hard-coded to the four skill positions, and that is how a defence ended up being
+    corrected by a line fitted on wide receivers -- the rows to fit it properly were in
+    the corpus all along (2,144 D/ST and 2,166 K player-weeks, against QB's 2,210) and
+    this filter threw them away before anything could see them. `None` means every
+    position; the pooled fallback is fitted on skill rows only regardless, in
+    `fit_from_pairs`.
     """
     files = sorted(root.glob(f"season=*/variant={variant}/*.parquet"))
     if not files:
@@ -655,7 +720,11 @@ def load_pairs(
         (pl.col("stat_season") == pl.col("request_season"))
         & (pl.col("stat_split_type_id") == SPLIT_GAME)
         & (pl.col("scoring_period_id") > 0)
-        & pl.col("default_position_id").is_in(list(SKILL_POSITIONS))
+        & (
+            pl.lit(True)
+            if positions is None
+            else pl.col("default_position_id").is_in(list(positions))
+        )
         & pl.col("applied_total").is_not_null()
         & pl.col("espn_id").is_not_null()
     )
@@ -697,6 +766,22 @@ def load_pairs(
 
 
 def _fit_level(proj: np.ndarray, actual: np.ndarray) -> LevelLine:
+    """`E[actual|proj] = a + b*proj`, dropping to a level shift when `b` is not identified.
+
+    The slope is only worth fitting if the projection carries signal about the actual.
+    At a kicker it does not -- `r2 = 0.014` -- and the fitted slope swings 0.67 to 1.22
+    depending on which season is held out. Applying that swing makes the *slope*
+    calibration worse than doing nothing: leave-one-season-out, regressing actual on the
+    fitted value gives 1.414 against a raw 1.018, where 1.0 is the target. So below
+    `LEVEL_SLOPE_MIN_R2` the slope is pinned at 1.0 and only the level is corrected,
+    which is the part that is identified -- and it is the part the simulator consumes.
+    That takes the kicker's held-out bias from -0.289 to 0.000 while leaving the slope at
+    the 1.018 it already had.
+
+    D/ST is the other side of the same test and passes it: `r2 = 0.112`, a train slope
+    stable at 1.33-1.54, and a full fit that takes the held-out slope from 1.430 to 1.014
+    and the bias from -0.674 to -0.005. The rule is measured, not a list of positions.
+    """
     n = int(proj.size)
     if n < 30 or float(np.ptp(proj)) < 1e-9:
         return LevelLine.identity()
@@ -705,6 +790,17 @@ def _fit_level(proj: np.ndarray, actual: np.ndarray) -> LevelLine:
     ss_res = float(np.sum((actual - pred) ** 2))
     ss_tot = float(np.sum((actual - actual.mean()) ** 2))
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+    if r2 < LEVEL_SLOPE_MIN_R2:
+        shift = float(np.mean(actual - proj))
+        log.info(
+            "level slope not identified (r2 %.4f < %.2f) over %d rows; "
+            "correcting the level only, by %+.4f",
+            r2,
+            LEVEL_SLOPE_MIN_R2,
+            n,
+            shift,
+        )
+        return LevelLine(intercept=shift, slope=1.0, r2=r2, n=n)
     return LevelLine(intercept=float(intercept), slope=float(slope), r2=r2, n=n)
 
 
@@ -790,7 +886,14 @@ def _fit_position(position_id: int, proj: np.ndarray, actual: np.ndarray) -> Pos
 def fit_from_pairs(
     pairs: pl.DataFrame, variant: str = "ppr", source: str = "fit"
 ) -> CalibrationSet:
-    """Fit every position plus the pooled fallback from an in-memory pair table."""
+    """Fit every position plus the pooled fallback from an in-memory pair table.
+
+    **The pooled fallback is fitted on skill rows only, deliberately**, even when the
+    table carries K and D/ST. Pooled is what a position with too few rows falls back to,
+    and a fallback built by averaging a kicker into a wide receiver describes neither.
+    Keeping it skill-only also means widening `load_pairs` moves no existing number:
+    every shipped skill coefficient and the pooled block reproduce bit-for-bit.
+    """
     if pairs.height == 0:
         log.warning("no paired player-weeks; returning shipped defaults")
         return default_calibration(variant)
@@ -800,13 +903,14 @@ def fit_from_pairs(
     pos = pairs["position_id"].to_numpy()
 
     positions: dict[int, PositionCalibration] = {}
-    for pid in SKILL_POSITIONS:
+    for pid in FITTED_POSITIONS:
         mask = pos == pid
         if int(mask.sum()) < 200:
             log.warning("only %d rows for position %d; leaving it to pooled", mask.sum(), pid)
             continue
         positions[pid] = _fit_position(pid, proj[mask], actual[mask])
 
+    skill = np.isin(pos, np.asarray(SKILL_POSITIONS))
     seasons = tuple(sorted(int(s) for s in pairs["season"].unique().to_list()))
     return CalibrationSet(
         variant=variant,
@@ -815,7 +919,7 @@ def fit_from_pairs(
         n_pairs=int(pairs.height),
         source=source,
         positions=positions,
-        pooled=_fit_position(0, proj, actual),
+        pooled=_fit_position(0, proj[skill], actual[skill]),
     )
 
 
@@ -862,6 +966,21 @@ class DecileRow:
 
 @dataclass(frozen=True, slots=True)
 class PositionReport:
+    """Held-out accuracy at one position, on both criteria -- they disagree.
+
+    `bias` is the mean signed error, and it is the criterion that matters here even
+    though `mae` is the one everybody reports. The season simulator never sees a single
+    week's error: it draws from a hurdle gamma whose mean is exactly what `calibrate`
+    returns, sums nine starters over seventeen weeks, and decides from that total. A
+    level bias is therefore paid every week in the same direction and compounds; a
+    per-week absolute error mostly cancels.
+
+    Measured leave-one-season-out on D/ST, the two criteria give opposite answers: MAE
+    prefers no correction at all (4.7058 raw against 4.7193 fitted, a 0.3% cost) while
+    bias prefers the fit by two orders of magnitude (-0.6715 raw against -0.0034). Pay
+    the MAE.
+    """
+
     position_id: int
     n_train: int
     n_test: int
@@ -869,6 +988,8 @@ class PositionReport:
     mae_calibrated: float
     rmse_raw: float
     rmse_calibrated: float
+    bias_raw: float
+    bias_calibrated: float
     slope_raw: float
     slope_calibrated: float
     deciles: tuple[DecileRow, ...]
@@ -891,6 +1012,11 @@ class PositionReport:
     def improves_mae(self) -> bool:
         return self.mae_calibrated < self.mae_raw
 
+    @property
+    def improves_bias(self) -> bool:
+        """The acceptance criterion. Strictly closer to zero than doing nothing."""
+        return abs(self.bias_calibrated) < abs(self.bias_raw)
+
 
 @dataclass(frozen=True, slots=True)
 class CalibrationReport:
@@ -905,8 +1031,16 @@ class CalibrationReport:
         return all(p.improves_mae for p in self.positions)
 
     @property
+    def all_positions_improve_bias(self) -> bool:
+        return all(p.improves_bias for p in self.positions)
+
+    @property
     def regressions(self) -> tuple[str, ...]:
         return tuple(p.name for p in self.positions if not p.improves_mae)
+
+    @property
+    def bias_regressions(self) -> tuple[str, ...]:
+        return tuple(p.name for p in self.positions if not p.improves_bias)
 
 
 def _decile_rows(
@@ -966,6 +1100,8 @@ def _position_report(
         mae_calibrated=float(np.mean(np.abs(test_actual - cal))),
         rmse_raw=float(np.sqrt(np.mean((test_actual - test_proj) ** 2))),
         rmse_calibrated=float(np.sqrt(np.mean((test_actual - cal) ** 2))),
+        bias_raw=float(np.mean(test_proj - test_actual)),
+        bias_calibrated=float(np.mean(cal - test_actual)),
         slope_raw=float(np.polyfit(test_proj, test_actual, 1)[0]),
         slope_calibrated=float(np.polyfit(cal, test_actual, 1)[0]),
         deciles=_decile_rows(test_proj, test_actual, calibration, position_id),
@@ -1004,7 +1140,7 @@ def calibration_report(
     fitted = fit_from_pairs(train, variant=variant, source="report")
 
     reports: list[PositionReport] = []
-    for pid in SKILL_POSITIONS:
+    for pid in FITTED_POSITIONS:
         tr = train.filter(pl.col("position_id") == pid)
         te = test.filter(pl.col("position_id") == pid)
         if te.height < 50 or tr.height < 200:
@@ -1018,11 +1154,15 @@ def calibration_report(
                 fitted,
             )
         )
+    # Pooled is scored on skill rows only, to match what it is fitted on. Scoring the
+    # skill fallback against kickers would report a number that describes no caller.
+    skill_train = train.filter(pl.col("position_id").is_in(list(SKILL_POSITIONS)))
+    skill_test = test.filter(pl.col("position_id").is_in(list(SKILL_POSITIONS)))
     pooled = _position_report(
         0,
-        train["projection"].to_numpy(),
-        test["projection"].to_numpy(),
-        test["actual"].to_numpy(),
+        skill_train["projection"].to_numpy(),
+        skill_test["projection"].to_numpy(),
+        skill_test["actual"].to_numpy(),
         fitted,
     )
     return CalibrationReport(
@@ -1045,25 +1185,38 @@ def render_report(report: CalibrationReport, fitted: CalibrationSet | None = Non
     lines.append("")
     lines.append(
         f"{'pos':<5}{'n_tr':>7}{'n_te':>7}{'MAE raw':>9}{'MAE cal':>9}{'d%':>7}"
-        f"{'RMSE raw':>10}{'RMSE cal':>10}{'d%':>7}{'slope raw':>11}{'slope cal':>11}"
+        f"{'RMSE raw':>10}{'RMSE cal':>10}{'d%':>7}{'bias raw':>10}{'bias cal':>10}"
+        f"{'slope raw':>11}{'slope cal':>11}"
     )
-    lines.append("-" * 92)
+    lines.append("-" * 113)
     for p in (*report.positions, report.pooled):
         name = "ALL" if p.position_id == 0 else p.name
         lines.append(
             f"{name:<5}{p.n_train:>7}{p.n_test:>7}{p.mae_raw:>9.3f}{p.mae_calibrated:>9.3f}"
             f"{p.mae_delta_pct:>+7.2f}{p.rmse_raw:>10.3f}{p.rmse_calibrated:>10.3f}"
-            f"{p.rmse_delta_pct:>+7.2f}{p.slope_raw:>11.3f}{p.slope_calibrated:>11.3f}"
+            f"{p.rmse_delta_pct:>+7.2f}{p.bias_raw:>+10.3f}{p.bias_calibrated:>+10.3f}"
+            f"{p.slope_raw:>11.3f}{p.slope_calibrated:>11.3f}"
         )
     lines.append("")
+    # Bias leads, because it is what the simulator consumes. MAE follows, because it is
+    # what the reader expects -- and at K and D/ST the two disagree, so printing only
+    # the one that flatters the fit would be the same mistake in reverse.
+    if report.bias_regressions:
+        lines.append(
+            "!! held-out BIAS did NOT improve at: "
+            + ", ".join(report.bias_regressions)
+            + " -- this is the acceptance criterion; the sim consumes the mean."
+        )
+    else:
+        lines.append("held-out bias improved at every position (the acceptance criterion).")
     if report.regressions:
         lines.append(
-            "!! held-out MAE did NOT improve at: "
+            "   held-out MAE did NOT improve at: "
             + ", ".join(report.regressions)
             + " -- reported as measured, not tuned away."
         )
     else:
-        lines.append("held-out MAE improved at every position.")
+        lines.append("   held-out MAE improved at every position.")
     lines.append("")
 
     for p in report.positions:

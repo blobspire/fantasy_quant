@@ -55,8 +55,10 @@ Three things measured here that the research notes get wrong, reality winning:
   draft-rank block, so the market screen runs on ADP, percent rostered and auction
   value. `MarketQuote.draft_rank` is wired through for when the capture is widened.
 * **Weekly projections in the corpus do not zero out byes.** Every 2026 player has
-  eighteen weekly projection rows, bye included. That is the projection layer's
-  problem to fix -- this module reads `WeeklyOutlook.playing` and trusts it.
+  eighteen weekly projection rows, bye included -- and for a D/ST the row carries the
+  full projection rather than a token 0.06, which is how every defence used to play
+  seventeen games. `pipeline.build` now passes ESPN's bye table to `panel_for`, so
+  `has_game` is the authority; this module reads `WeeklyOutlook.playing` and trusts it.
 
 Everything is per week rather than from a season total, deliberately: a player who
 misses six weeks and is elite in eleven is not the same asset as a mediocre one who

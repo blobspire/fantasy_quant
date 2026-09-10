@@ -1740,10 +1740,10 @@ def _grid_outlooks(
     ESPN's level correction a second time.
     """
     by_id = {s.player_id: i for i, s in enumerate(grid.streamers)}
-    # The same position id the pipeline compiled with. K and D/ST have no fitted curve
-    # of their own and fall through to the pooled one inside the calibration set, so
-    # this is a label rather than a switch -- but a mismatched label would change the
-    # correlation block the sampler puts the player in.
+    # The same position id the pipeline compiled with. K and D/ST now carry fitted
+    # curves of their own, so this is a live switch and not just a label: it selects the
+    # hurdle and spread the seat is drawn from, as well as the correlation block the
+    # sampler puts the player in. It used to fall through to the pooled skill curve.
     pos = grid.position_id
     out: list[PlayerOutlook] = []
     for o in base:

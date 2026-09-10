@@ -85,15 +85,17 @@ per-simulation difference against the group's own biggest holding: +1.00pp +/- 0
 KC, and +0.00pp for PHI, whose five deleted roster spots are Jalen Hurts and four
 players worth nothing at all.
 
-Byes are the exception, and the finding there is narrower and more useful than the one
-this module was originally written to report. `pipeline.build` passes no bye table, so
-`SimPanel`'s `has_game` is True in all seventeen weeks -- but the byes arrive anyway
-through the projections, which ESPN collapses to 0.06-0.29 points in a player's bye
-week, and the lineup solver duly benches him. Byes *are* priced, indirectly, for every
-skill position and for kickers. They are **not** priced at D/ST: the Jaguars defence
-projects 3.28 points in week 7, its own bye, against a season mean of 4.71, and all
-three of the user's teams roster exactly one defence. `ByeExposure.unpriced` names the
-offenders per week rather than asserting the shape of the gap.
+Byes were the exception, and this module is where the gap was found and reported for
+long enough that it eventually got fixed at the source. `pipeline.build` now passes
+ESPN's own bye table, so `has_game` is False on a player's bye and the seat is left
+empty. Before that it passed nothing, and byes reached the simulation only *indirectly*,
+through the projection: ESPN collapses a skill player's or a kicker's bye week to
+0.06-0.29 points and the lineup solver duly benched him. That worked for five positions
+out of six and silently failed at the sixth -- ESPN projects a defence normally on its
+own bye (the Jaguars at 3.28 in week 7 against a season mean of 4.71), so every defence
+played seventeen games. `ByeExposure.unpriced` still names offenders per week, and now
+reads `has_game` rather than the projection alone, so a properly modelled bye does not
+report itself forever.
 
 **Two floors, and picking the wrong one makes a kicker the most valuable asset the user
 owns.** An unfilled starting slot streams a replacement; it does not score zero. This
@@ -1490,25 +1492,23 @@ def pro_team_concentration(portfolio: Portfolio, *, limit: int = 5) -> tuple[Con
 class ByeExposure:
     """One NFL bye week, seen across all three teams at once.
 
-    Byes reach the simulated season by an unobvious route, and it matters which one,
-    because only one of them is complete. `SimPanel.from_outlooks` marks a bye as "no
-    game" only when it is handed a `byes=` table, and `pipeline.build` does not hand it
-    one -- so `has_game` is True in all seventeen weeks for every player in all three
-    live leagues. Byes arrive anyway, through the *projection*: ESPN's weekly numbers
-    collapse a player's bye week to almost nothing, the calibrated outlook inherits it,
-    and the lineup solver benches him because his rank for that week is a projected 0.06
-    rather than his usual 11.65. Measured on the user's Wine Wednesday roster, every
-    quarterback, back, receiver, tight end and kicker's bye week projects **0.06 to 0.29
-    points against a season mean of 2.2 to 17.1**. So the bye is priced, indirectly and
-    adequately.
+    Byes reach the simulated season by two routes and this audit exists because for a
+    long time only one of them was live. `SimPanel.from_outlooks` marks a bye as "no
+    game" when it is handed a `byes=` table; `pipeline.build` now hands it one, so that
+    route is the primary and correct one. The second route is the *projection*: ESPN's
+    weekly numbers collapse a skill player's or kicker's bye to almost nothing, the
+    calibrated outlook inherits it, and the lineup solver benches him because his rank
+    that week is 0.06 rather than his usual 11.65. Measured on the user's Wine Wednesday
+    roster, every quarterback, back, receiver, tight end and kicker's bye week projects
+    **0.06 to 0.29 points against a season mean of 2.2 to 17.1**.
 
-    **Except at D/ST, where it is not.** The Jaguars defence projects **3.28 points in
-    week 7, its own bye**, against a season mean of 4.71 -- ESPN does not zero a team
-    defence's bye and nothing downstream does it either. A defence on bye is therefore
-    started and scores in this model, and every one of the user's three teams rosters
-    exactly one D/ST. `unpriced` names any starter whose bye week keeps more than
-    `BYE_ZERO_TOLERANCE` of his usual projection, so the gap is reported per player
-    rather than left as a claim about the pipeline.
+    **That second route never covered D/ST**, which is why relying on it was a bug: the
+    Jaguars defence projects **3.28 points in week 7, its own bye**, against a season
+    mean of 4.71. With no bye table, a defence on bye was started and scored, and every
+    one of the user's three teams rosters exactly one D/ST. `unpriced` names any starter
+    whose bye week keeps more than `BYE_ZERO_TOLERANCE` of his usual projection **and is
+    still marked as playing**, so it reports a real gap rather than re-reporting the
+    projection quirk the bye table already handles.
 
     There is deliberately no title-probability figure here. Converting one would mean
     removing a starter for one week from a season that already prices his bye at 0.06,
@@ -1627,7 +1627,12 @@ def bye_concentration(
                 # being compared against.
                 others = np.delete(np.asarray(panel.mean[:, col], dtype=np.float64), w)
                 season_mean = float(others.mean()) if others.size else 0.0
-                bye_mean = float(panel.mean[w, col])
+                # What the SIM scores this week, not what the projection says. `has_game`
+                # is the switch a bye actually flips, and `panel.mean` is written before
+                # it -- so a properly modelled bye still carries a five-point mean here.
+                # Reading the mean alone would make this audit fire forever on exactly the
+                # defences it was written to catch, which is worse than not having it.
+                bye_mean = float(panel.mean[w, col]) if bool(panel.has_game[w, col]) else 0.0
                 names.append(name)
                 usual += season_mean
                 here += bye_mean

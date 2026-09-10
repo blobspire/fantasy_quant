@@ -17,7 +17,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from fantasy_quant.core import QB, RB, SKILL_POSITIONS, TE, WR
+from fantasy_quant.core import DST, FITTED_POSITIONS, QB, RB, SKILL_POSITIONS, TE, WR, K
 from fantasy_quant.projections import calibration as cal
 
 # Anchored to the repo, NOT to the working directory. A relative path here means the
@@ -201,10 +201,44 @@ def test_level_correction_shrinks_high_projections_and_lifts_low_ones():
     assert fitted.calibrate(-5.0, WR) == 0.0
 
 
-def test_unknown_positions_fall_through_to_pooled():
+def test_k_and_dst_are_fitted_positions_and_not_the_skill_fallback():
+    """The pooled line is fitted on skill players and has the slope the WRONG WAY for
+    a defence -- it shrinks (0.941) where a defence has to be expanded (1.424). These
+    two used to fall through to it on every league, every week."""
     fitted = cal.default_calibration()
-    assert fitted.for_position(16) is fitted.pooled  # D/ST
-    assert fitted.for_position(5) is fitted.pooled  # K
+    for pid in (K, DST):
+        assert fitted.for_position(pid) is not fitted.pooled
+        assert pid in fitted.positions
+    assert fitted.for_position(DST).level.slope > 1.0 > fitted.pooled.level.slope
+
+
+def test_a_position_nobody_has_ever_fitted_still_falls_through_to_pooled():
+    fitted = cal.default_calibration()
+    assert fitted.for_position(99) is fitted.pooled
+
+
+def test_the_kicker_slope_is_pinned_because_it_is_not_identified():
+    """r2 0.014, and the fitted slope swings 0.67-1.22 depending on the held-out season.
+    `_fit_level` corrects the level only. If this ever reads anything but 1.0, somebody
+    unpinned a coefficient the data does not support -- see LEVEL_SLOPE_MIN_R2."""
+    fitted = cal.default_calibration()
+    assert fitted.for_position(K).level.slope == 1.0
+    assert fitted.for_position(K).level.r2 < cal.LEVEL_SLOPE_MIN_R2
+    assert fitted.for_position(DST).level.r2 > cal.LEVEL_SLOPE_MIN_R2
+
+
+def test_the_dst_level_slope_agrees_with_the_streaming_grids_own_fit():
+    """Two independent fits of one quantity, on the same rows, must not drift apart.
+
+    `decide/streaming.MATCHUP_MODELS[DST].proj_only_coef` was fitted for the streaming
+    grid off the same D/ST player-weeks `load_pairs` used to throw away. It landed on
+    1.440; this lands on 1.4237. That agreement is the evidence the number is real, so
+    it is worth failing on rather than rediscovering.
+    """
+    from fantasy_quant.decide.streaming import MATCHUP_MODELS
+
+    fitted = cal.default_calibration().for_position(DST).level.slope
+    assert fitted == pytest.approx(MATCHUP_MODELS[DST].proj_only_coef, abs=0.05)
 
 
 # --------------------------------------------------------------------------------------
@@ -316,7 +350,7 @@ def test_params_round_trip_through_json(tmp_path: Path):
 def test_load_falls_back_to_defaults_when_no_file(tmp_path: Path):
     loaded = cal.load("ppr", tmp_path / "nothing-here")
     assert loaded.source == "defaults"
-    assert loaded.n_pairs == 23999
+    assert loaded.n_pairs == 28309
 
 
 def test_load_falls_back_on_a_corrupt_or_stale_file(tmp_path: Path):
@@ -585,13 +619,20 @@ def test_reproduces_research_constants(corpus: pl.DataFrame):
     defined by `projection > 0`, and only that definition lands on the table in
     RESEARCH.md. If this drifts, some other filter changed, not football.
     """
-    assert corpus.height == 23_999
+    # 23,999 skill rows plus the 4,310 K and D/ST rows this filter used to discard.
+    assert corpus.height == 28_309
+    assert corpus.filter(pl.col("position_id").is_in(list(SKILL_POSITIONS))).height == 23_999
 
     expected = {  # pos: (n, MAE, weekly slope, P(actual <= 0))
         QB: (2210, 5.87, 0.948, 0.032),
         RB: (6312, 4.10, 0.921, 0.185),
         WR: (10004, 4.27, 0.943, 0.259),
         TE: (5473, 3.24, 0.961, 0.325),
+        # A defence's weekly slope is 1.424 -- it is the one position ESPN projects
+        # too FLAT, and the pooled skill line's 0.941 pushed it further the wrong way.
+        # 18.7% of D/ST weeks are <= 0 and most of those are strictly negative.
+        K: (2166, 3.70, 0.847, 0.036),
+        DST: (2144, 4.71, 1.424, 0.187),
     }
     for pid, (n, mae, slope, p_zero) in expected.items():
         s = corpus.filter(pl.col("position_id") == pid)
@@ -622,19 +663,55 @@ def test_calibration_improves_held_out_mae(corpus: pl.DataFrame):
 
     So: TE is allowed to be flat, bounded at 0.5%. Nothing else is, and no position
     may lose RMSE.
+
+    **K is the second exception, and it is the reason `test_bias` below exists.** MAE
+    and bias disagree at a kicker: MAE prefers no correction at all (+0.33% here) while
+    bias prefers one (-0.255 to +0.046). MAE is minimised by the conditional median and
+    the simulator consumes the conditional MEAN, so bias is the criterion that decides
+    and MAE is the one that gets reported. K is bounded at 0.5% like TE.
     """
     report = cal.calibration_report(corpus)
     assert report.pooled.improves_mae, cal.render_report(report)
 
     for p in report.positions:
         assert p.rmse_calibrated <= p.rmse_raw, f"{p.name} lost RMSE\n{cal.render_report(report)}"
-        if p.position_id == TE:
+        if p.position_id in (TE, K):
             assert p.mae_delta_pct < 0.5, cal.render_report(report)
         else:
             assert p.improves_mae, f"{p.name} lost MAE\n{cal.render_report(report)}"
 
-    assert set(report.regressions) <= {"TE"}, cal.render_report(report)
-    assert {p.name for p in report.positions} == {"QB", "RB", "WR", "TE"}
+    assert set(report.regressions) <= {"TE", "K"}, cal.render_report(report)
+    assert {p.position_id for p in report.positions} == set(FITTED_POSITIONS)
+
+
+@needs_corpus
+def test_calibration_improves_held_out_bias(corpus: pl.DataFrame):
+    """THE acceptance test. Bias, not MAE, is what the season simulator pays for.
+
+    A week's projection becomes a hurdle gamma whose mean is exactly `calibrate`'s
+    output; the sim then sums nine starters over seventeen weeks and decides from the
+    total. A level error is paid every week in the same direction and compounds into
+    the decision. A per-week absolute error mostly cancels and the sim never sees it.
+
+    Measured on this split, the correction takes the held-out bias from +0.664 to +0.181
+    at QB, +0.343 to +0.004 at RB, +0.577 to +0.325 at WR, -0.255 to +0.046 at K and
+    -0.632 to -0.013 at D/ST. TE is the one regression and it is tiny (-0.100 to -0.121)
+    on a position whose weeklies ESPN already has mean-calibrated -- reported, not tuned
+    away, exactly as its MAE regression is.
+    """
+    report = cal.calibration_report(corpus)
+    for p in report.positions:
+        if p.position_id == TE:
+            assert abs(p.bias_calibrated) < 0.25, cal.render_report(report)
+            continue
+        assert p.improves_bias, f"{p.name} lost bias\n{cal.render_report(report)}"
+    assert set(report.bias_regressions) <= {"TE"}, cal.render_report(report)
+
+    # The two positions this fix was for: the level error must be essentially gone,
+    # not merely smaller. Both sat past half a point a week under the pooled line.
+    for pid in (K, DST):
+        p = next(x for x in report.positions if x.position_id == pid)
+        assert abs(p.bias_calibrated) < 0.1, cal.render_report(report)
 
 
 @needs_corpus
@@ -650,6 +727,12 @@ def test_calibrated_slope_is_closer_to_one_than_the_raw_slope(corpus: pl.DataFra
     """
     report = cal.calibration_report(corpus)
     for p in report.positions:
+        if p.position_id == K:
+            # The kicker's slope is pinned at 1.0 because it is not identified, so the
+            # correction is a pure level shift and MUST leave the slope exactly alone.
+            # Equality here is the proof the pin is working, not a weakened assertion.
+            assert p.slope_calibrated == pytest.approx(p.slope_raw, rel=1e-9), p.name
+            continue
         assert abs(p.slope_calibrated - 1.0) < abs(p.slope_raw - 1.0), p.name
 
 
@@ -659,7 +742,7 @@ def test_shipped_defaults_match_a_fresh_fit(corpus: pl.DataFrame):
     fitted = cal.fit_from_pairs(corpus)
     shipped = cal.default_calibration()
     assert fitted.n_pairs == shipped.n_pairs
-    for pid in SKILL_POSITIONS:
+    for pid in FITTED_POSITIONS:
         got, want = fitted.for_position(pid), shipped.for_position(pid)
         assert got.n == want.n
         assert got.level.slope == pytest.approx(want.level.slope, abs=5e-4)
@@ -668,6 +751,14 @@ def test_shipped_defaults_match_a_fresh_fit(corpus: pl.DataFrame):
         assert got.hurdle.intercept == pytest.approx(want.hurdle.intercept, abs=5e-4)
         assert got.spread.slope == pytest.approx(want.spread.slope, abs=5e-4)
         assert got.spread.intercept == pytest.approx(want.spread.intercept, abs=5e-4)
+
+    # NEGATIVE CONTROL for widening `load_pairs` to K and D/ST: pooled is fitted on skill
+    # rows only, so adding two positions to the corpus must move it by exactly nothing.
+    assert fitted.pooled.n == 23_999
+    assert fitted.pooled.level.slope == pytest.approx(shipped.pooled.level.slope, abs=5e-4)
+    assert fitted.pooled.level.intercept == pytest.approx(
+        shipped.pooled.level.intercept, abs=5e-4
+    )
 
 
 @needs_corpus
@@ -704,5 +795,6 @@ def test_report_renders_and_names_its_regressions(corpus: pl.DataFrame):
     text = cal.render_report(report, cal.fit_from_pairs(corpus))
     assert "MAE raw" in text
     assert "reliability by projection decile" in text
-    assert "did NOT improve at: TE" in text
+    assert "did NOT improve at: TE, K" in text
+    assert "the acceptance criterion" in text
     assert "sigma(mu)" in text

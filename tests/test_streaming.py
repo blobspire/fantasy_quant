@@ -232,7 +232,14 @@ class TestBuildGrid:
         assert g.held_index == (list(g.streamers).index(next(s for s in g.streamers if s.mine)),)
 
     def test_a_bye_is_marked_unplayable_even_though_espn_still_projects_it(self):
-        """The corpus does not zero byes: every 2026 player has eighteen weekly rows."""
+        """A D/ST projection survives its own bye, so the grid must not trust it.
+
+        ESPN zeroes skill players and kickers on a bye but projects 31 of 32 defences
+        normally -- every 2026 player has eighteen weekly rows and a defence's bye row
+        is a full one. `pipeline.build` handles that with a bye table now, and this grid
+        independently re-derives it from `market.plays`. Both belts, deliberately: this
+        module is fed by callers that do not all go through the pipeline.
+        """
         outs = [_player(-16001, "A D/ST", DST, 1, {1: 9.0, 2: 9.0})]
         market = _market((1, 2), ("ATL",), bye={"ATL": 2})
         g = ST.build_grid(
@@ -1283,8 +1290,11 @@ class TestAgainstTheRealLeagues:
             my_team_id=my_team,
             market=market,
         )
-        # 32 defenses, one per team, minus the ones rivals roster.
-        assert 32 - size >= g.n >= 32 - 2 * size
+        # 32 defenses minus the ones RIVALS roster -- my own is a candidate, because
+        # holding it is one of the choices the plan is picking between. So the ceiling is
+        # `size - 1` rostered, not `size`. The old bound only held while some rival was
+        # carrying no defence at all, and it started failing the week they all had one.
+        assert 32 - (size - 1) >= g.n >= 32 - 2 * size
         plan = ST.solve(g)
         assert_executable(g, plan, 1)
         assert plan.optimal

@@ -111,6 +111,36 @@ class TestFillUnprojected:
         assert len(P._fill_unprojected(given, state, 2026)) == 1
 
 
+class TestByes:
+    def test_the_bye_table_is_read_from_espns_own_settings(self):
+        """32 teams, every one with a bye. Cached to disk, so no network after run one."""
+        table = P._byes(2026)
+        assert table is not None
+        assert len(table) == 32
+        assert all(1 <= w <= 18 for w in table.values())
+
+    def test_a_missing_bye_table_warns_rather_than_killing_the_build(self, monkeypatch, caplog):
+        """A fresh checkout with no cache and no network should still get a league.
+
+        Slightly wrong about defences beats no league at all -- but it has to SAY so,
+        because a silent None here is exactly how every defence came to play seventeen
+        games in the first place.
+        """
+        def boom(_season: int):
+            raise RuntimeError("no settings")
+
+        monkeypatch.setattr(P, "espn_bye_weeks", boom)
+        with caplog.at_level("WARNING"):
+            assert P._byes(2026) is None
+        assert "defences will play every week" in caplog.text
+
+    def test_an_empty_bye_table_is_treated_as_no_table(self, monkeypatch, caplog):
+        monkeypatch.setattr(P, "espn_bye_weeks", lambda _season: {})
+        with caplog.at_level("WARNING"):
+            assert P._byes(2026) is None
+        assert "empty bye table" in caplog.text
+
+
 @pytest.mark.network
 class TestAgainstTheRealLeagues:
     """The end-to-end acceptance test. These are the user's actual leagues."""
@@ -130,6 +160,76 @@ class TestAgainstTheRealLeagues:
         assert sum(r["championship"] for r in table) == pytest.approx(1.0, abs=1e-6)
         assert any(r["is_me"] for r in table)
         assert all(0.0 <= r["playoffs"] <= 1.0 for r in table)
+
+    @pytest.mark.parametrize("league_id,name,my_team,size", LEAGUES)
+    def test_a_defense_does_not_play_on_its_own_bye(self, client, league_id, name, my_team, size):
+        """`pipeline.build` used to pass no bye table at all.
+
+        ESPN zeroes skill players and kickers on a bye but projects 31 of 32 DEFENCES
+        normally -- the Rams at 7.46 against a 6.57 season mean -- so every defence
+        played a seventeen-game season and the lineup solver duly started it. Worth
+        about five points per D/ST season, in the wrong direction.
+
+        The second assertion is the one that matters: it is not enough for the bye to be
+        off, the surrounding weeks have to still be on, or a bug that zeroed everything
+        would pass.
+        """
+        from fantasy_quant.core import DST
+
+        sim = P.build(league_id, 2026, my_team_id=my_team, client=client, n_sims=200)
+        panel = sim.draw.panel
+        ids = list(sim.state.pool.player_ids)
+        positions = np.asarray(sim.state.pool.positions_of(ids))
+        byes = P._byes(2026)
+        assert byes is not None
+
+        on_bye = played = 0
+        for col in np.where(positions == DST)[0]:
+            for w, week in enumerate(sim.state.weeks):
+                if byes.get(int(panel.pro_team_ids[w, col])) == week:
+                    on_bye += 1
+                    assert not bool(panel.has_game[w, col]), (
+                        f"{sim.state.pool.name(int(ids[col]))} is playing on its own bye"
+                    )
+                else:
+                    played += int(bool(panel.has_game[w, col]))
+        assert on_bye > 0, "no defence has a bye in the remaining horizon; test proves nothing"
+        assert played > 0, "no defence plays at all; the bye table zeroed the whole season"
+
+    def test_a_defense_is_projected_like_a_defense_and_not_like_a_receiver(
+        self, client
+    ):
+        """K and D/ST used to be run through the pooled SKILL calibration line.
+
+        For a defence that is the wrong sign, not a small error: pooled shrinks a
+        projection by 6% where a defence has to be expanded by 42%. Measured on this
+        league it was worth about -19 points per D/ST season.
+        """
+        import dataclasses
+
+        from fantasy_quant.core import DST, K
+        from fantasy_quant.projections import calibration as cal
+
+        fitted = cal.load("ppr")
+        assert {K, DST} <= set(fitted.positions)
+        pooled_only = dataclasses.replace(
+            fitted, positions={p: c for p, c in fitted.positions.items() if p not in (K, DST)}
+        )
+
+        def season(calibration):
+            sim = P.build(
+                161496047, 2026, my_team_id=1, client=client, n_sims=200,
+                calibration=calibration,
+            )
+            panel = sim.draw.panel
+            ids = list(sim.state.pool.player_ids)
+            positions = np.asarray(sim.state.pool.positions_of(ids))
+            mean = np.asarray(panel.mean)
+            playing = np.asarray(panel.has_game)
+            cols = np.where(positions == DST)[0]
+            return float(np.where(playing[:, cols], mean[:, cols], 0.0).sum(axis=0).mean())
+
+        assert season(fitted) > season(pooled_only) + 10.0
 
     def test_the_same_seed_reproduces_exactly(self, client):
         """Common random numbers: two candidate rosters must meet identical football."""

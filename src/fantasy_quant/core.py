@@ -30,6 +30,13 @@ K, DST = 5, 16
 
 SKILL_POSITIONS: tuple[int, ...] = (QB, RB, WR, TE)
 
+#: Every position that carries a calibration curve of its own. K and D/ST are here and
+#: SKILL_POSITIONS is not enough, because the two are not interchangeable: the pooled
+#: skill line SHRINKS a projection (slope 0.94) and a defence needs it EXPANDED (slope
+#: 1.42). Measured leave-one-season-out on 2,144 D/ST player-weeks, the pooled line
+#: leaves a -0.81/week level bias where the position's own line leaves -0.003.
+FITTED_POSITIONS: tuple[int, ...] = (QB, RB, WR, TE, K, DST)
+
 
 class Objective(StrEnum):
     """What a league actually pays for.

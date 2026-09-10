@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,7 +36,7 @@ import numpy as np
 import polars as pl
 
 from . import corpus
-from .core import Objective, PlayerOutlook, WeeklyOutlook
+from .core import FITTED_POSITIONS, Objective, PlayerOutlook, WeeklyOutlook
 from .espn.client import EspnClient
 from .espn.endpoints import league_url
 from .espn.league import League
@@ -44,15 +44,15 @@ from .espn.scoring import LeagueScoring
 from .projections.calibration import CalibrationSet
 from .projections.calibration import load as load_calibration
 from .sim import season as S
-from .sim.distributions import Draw, WeeklySampler
+from .sim.distributions import Draw, WeeklySampler, espn_bye_weeks
 
 log = logging.getLogger(__name__)
 
-#: Positions we carry a fitted weekly distribution for. K and D/ST are simulated
-#: from their projections with the pooled calibration -- they are genuinely
-#: startable (all three leagues start both) and dropping them would understate a
-#: team's weekly score by roughly 13-14 points.
-CALIBRATED_POSITIONS = (1, 2, 3, 4)
+#: Positions we carry a fitted weekly distribution for -- now including K and D/ST,
+#: which are genuinely startable (all three leagues start both) and used to be run
+#: through the pooled skill line instead. See `projections/calibration`: for a defence
+#: the pooled line has the slope the wrong way round, and this is where it reached it.
+CALIBRATED_POSITIONS = FITTED_POSITIONS
 
 
 class PipelineError(RuntimeError):
@@ -181,19 +181,21 @@ def calibrated_outlooks(
 ) -> list[PlayerOutlook]:
     """Turn scored projections into calibrated hurdle-gamma outlooks.
 
-    Positions without a fitted curve (K, D/ST) fall back to the pooled fit rather
-    than being dropped, because both are started every week in a normal league.
+    Every position is passed through with its own id. There used to be a `pos` local
+    here meant to route K and D/ST to the pooled fit, and it never did anything -- it
+    computed 0 for them and then `pos or p.position_id` handed back the real id anyway.
+    The routing happened one layer down, in `CalibrationSet.for_position`, and both
+    positions now have fitted curves of their own there.
     """
     cal = calibration or load_calibration(variant)
     by_player: dict[int, dict[int, WeeklyOutlook]] = {}
     meta: dict[int, WeeklyProjection] = {}
     for p in projections:
-        pos = p.position_id if p.position_id in CALIBRATED_POSITIONS else 0
         outlook = cal.outlook(
             player_id=p.player_id,
             season=season,
             week=p.week,
-            position_id=pos or p.position_id,
+            position_id=p.position_id,
             projection=max(p.points, 0.0),
             pro_team_id=p.pro_team_id,
         )
@@ -224,10 +226,21 @@ def _fill_weeks(
 ) -> list[PlayerOutlook]:
     """Ensure every outlook covers every remaining week, zeroing the gaps.
 
-    ESPN emits no projection row for a bye, so a defense's outlook covers 17 of 18
-    weeks. `panel_for` refuses a partial outlook rather than silently drawing the
-    gap as zero -- correctly, because a silent zero would make the whole team score
-    nothing that week -- so the gaps have to be filled explicitly as "not playing".
+    `panel_for` refuses a partial outlook rather than silently drawing the gap as zero
+    -- correctly, because a silent zero would make the whole team score nothing that
+    week -- so the gaps have to be filled explicitly as "not playing".
+
+    This used to claim ESPN emits no projection row on a bye and that filling the gaps
+    was therefore how byes got handled. That is false, and believing it is how every
+    defence came to play seventeen games. Measured on the 2026 pool: 32 defences x 18
+    weeks is 576 rows and 575 are present -- the one absentee is New Orleans in week 8,
+    which is exactly NO's bye, and that single accident is what the sentence was
+    generalised from. The other 31 defences all carry a full projection on their own
+    bye, averaging 5.00 against a 5.05 season mean. Skill players and kickers are saved
+    only because ESPN happens to project them at exactly 0.00 on a bye.
+
+    Byes are handled where they belong, by passing a bye table to `panel_for`, which
+    sets `has_game=False`. See `build`.
     """
     want = set(weeks)
     out: list[PlayerOutlook] = []
@@ -317,6 +330,25 @@ class LeagueSim:
         return S.simulate(self.state, self.draw, **kw)
 
 
+def _byes(season: int) -> Mapping[int, int] | None:
+    """proTeamId -> bye week, or None if the table cannot be read.
+
+    A missing bye table is a warning rather than a failure: `data/reference/
+    platform_settings_{season}.json` is normally on disk and needs no network, but a
+    fresh checkout that is offline should still get a league it can reason about,
+    slightly wrong about defences, rather than no league at all.
+    """
+    try:
+        table = espn_bye_weeks(season)
+    except Exception as exc:  # noqa: BLE001 - any read failure degrades the same way
+        log.warning("no bye table for %d (%s); defences will play every week", season, exc)
+        return None
+    if not table:
+        log.warning("empty bye table for %d; defences will play every week", season)
+        return None
+    return table
+
+
 def build(
     league_id: int,
     season: int,
@@ -329,8 +361,17 @@ def build(
     root: Path | str = corpus.DEFAULT_ROOT,
     calibration: CalibrationSet | None = None,
     objective: Objective | str = Objective.CHAMPIONSHIP,
+    byes: Mapping[int, int] | None = None,
 ) -> LeagueSim:
-    """Assemble one league end to end, ready to simulate."""
+    """Assemble one league end to end, ready to simulate.
+
+    `byes` maps proTeamId -> bye week and is resolved from ESPN's own platform-settings
+    table when not given. It is not optional in spirit: without it `SimPanel.has_game`
+    is True in all seventeen weeks and every defence plays a full season, because ESPN
+    projects 31 of 32 defences normally on their own bye. See `_fill_weeks` for the
+    false premise that hid this, and `edges/portfolio.ByeExposure` for the audit that
+    kept reporting it.
+    """
     check_objective_supported(objective)
     own_client = client is None
     client = client or client_from_env()
@@ -342,7 +383,7 @@ def build(
             projections, season=season, calibration=calibration, variant=variant
         )
         outlooks = _fill_unprojected(outlooks, state, season)
-        panel = S.panel_for(state, outlooks)
+        panel = S.panel_for(state, outlooks, byes=byes if byes is not None else _byes(season))
         draw = WeeklySampler(panel, seed=seed).draw(n_sims)
     finally:
         if own_client:
