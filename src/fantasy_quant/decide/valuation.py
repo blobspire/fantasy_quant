@@ -46,10 +46,23 @@ Three things measured here that the research notes get wrong, reality winning:
 * **The bench-hoarding priors are internally inconsistent.** RB 0.5 / WR 0.7 /
   TE 0.2 / QB 0.4 sums to 1.8 bench players per team. All three of the user's
   leagues carry **seven** bench slots, and their real week-1 rosters average
-  RB 4.5-4.6 and WR 5.75-5.9 per team -- a bench of 7.0 to 7.1, four times the
+  RB 4.6-4.8 and WR 5.7-5.9 per team -- a bench of 7.07 to 7.25, four times the
   prior. `bench_hoarding_from_rosters` measures it from the league instead;
   `DEFAULT_BENCH_HOARDING` is kept only as the documented starting guess, and
-  `sum(beta) == bench slots per team` is the sanity check worth running.
+  `sum(beta) == bench slots per team` is the sanity check `value_league` now runs
+  and logs.
+
+  For a long time this paragraph was the whole of the fix: the estimator existed,
+  said so here, and **had no caller anywhere**. Passing `rosters=` to `value_league`
+  is what closes it. The prior does not merely shift every value down, it reorders
+  players *across* positions, because it understates the bench most at the positions
+  a bench is actually made of. Measured on the three live leagues at week 1 of 2026
+  the replacement level moves RB 8.26 -> 3.55 and WR 7.95 -> 5.15 points a week while
+  K moves 8.75 -> 8.63 and D/ST 6.47 -> 6.31, so a kicker gains almost nothing and a
+  running back gains 4.7 points a week of VORP. **543 to 552 of the ~598 valued
+  players change rank**, all 16-17 of the user's own among them: Harrison Butker
+  falls 120 -> 188 and the Chargers D/ST 148 -> 214, while Jordan Mason rises
+  156 -> 76 and Tank Bigsby 288 -> 177.
 * **`draftRanksByRankType` is not in the snapshot corpus.** `snapshot._flatten`
   captures `ownership` (percent owned/started, ADP, auction value) but never the
   draft-rank block, so the market screen runs on ADP, percent rostered and auction
@@ -1300,12 +1313,54 @@ def bench_hoarding_from_rosters(
 # --------------------------------------------------------------------------------------
 
 
+def _measured_bench_hoarding(
+    ctx: LeagueContext,
+    outlooks: Sequence[PlayerOutlook],
+    rosters: Mapping[int, TeamRoster],
+    *,
+    from_week: int,
+    initial_shares: Mapping[int, Mapping[int, float]] | None,
+    damping: float,
+    bench_slots: int | None,
+) -> dict[int, float]:
+    """beta from this league's real rosters. The first of `value_league`'s two passes."""
+    first = build_replacement_model(
+        ctx,
+        outlooks,
+        from_week=from_week,
+        initial_shares=initial_shares,
+        damping=damping,
+    )
+    beta = bench_hoarding_from_rosters(
+        rosters, {pos: lv.demand for pos, lv in first.levels.items()}
+    )
+    total = sum(beta.values())
+    if bench_slots is not None and abs(total - bench_slots) > 1.0:
+        log.warning(
+            "league %s: measured bench hoarding sums to %.2f against %d bench slots a "
+            "team; the difference is IR or a slot this does not model",
+            ctx.league_id,
+            total,
+            bench_slots,
+        )
+    log.info(
+        "league %s: bench hoarding measured at %s (sum %.2f) against the prior's %.2f",
+        ctx.league_id,
+        {POSITION_ABBREV.get(p, p): round(v, 2) for p, v in sorted(beta.items())},
+        total,
+        sum(DEFAULT_BENCH_HOARDING.values()),
+    )
+    return beta
+
+
 def value_league(
     ctx: LeagueContext,
     outlooks: Sequence[PlayerOutlook],
     *,
     from_week: int = 1,
     bench_hoarding: Mapping[int, float] | None = None,
+    rosters: Mapping[int, TeamRoster] | None = None,
+    bench_slots: int | None = None,
     quotes: Mapping[int, MarketQuote] | Sequence[MarketQuote] | None = None,
     market_metric: str = "adp",
     market_limit: int | None = None,
@@ -1318,7 +1373,45 @@ def value_league(
     Nothing here is memoized across contexts and nothing is stored on the module:
     call it twice with two leagues and you get two genuinely different answers,
     which is the property `test_valuation.py` exists to defend.
+
+    **Pass `rosters` whenever you have them.** `bench_hoarding` decides how deep the
+    rostered pool goes and therefore where replacement level sits, and the fallback
+    `DEFAULT_BENCH_HOARDING` is a population prior summing to 1.8 against a real bench
+    of 7.07-7.25. It is not a level error that cancels: it understates the bench most at
+    the positions a bench is made of, so it reorders players *across* positions. With
+    rosters in hand the coefficient is measured from the league instead.
+
+    It has to be two passes, and that is structural rather than sloppy:
+    `bench_hoarding_from_rosters` needs a `PositionDemand` per position to subtract the
+    starters from what is carried, and demand only exists once a model has been solved.
+    So: solve on the prior, measure beta against it, re-solve. The second solve is the
+    one that is returned and it is the only one anything downstream sees.
+
+    `bench_slots` is the league's bench count, for the sanity check the estimator's own
+    docstring names -- `sum(beta)` must land near it. It is *not* on
+    `ctx.lineup_slot_counts`, which is `settings.roster.starting_slots` and has the bench
+    filtered out; the caller reads it off `settings.roster.lineup_slot_counts[SLOT_BENCH]`.
+    A mismatch is logged rather than raised: it means the league carries IR or an odd
+    slot, not that the valuation is unusable.
     """
+    if bench_hoarding is None and rosters:
+        bench_hoarding = _measured_bench_hoarding(
+            ctx,
+            outlooks,
+            rosters,
+            from_week=from_week,
+            initial_shares=initial_shares,
+            damping=damping,
+            bench_slots=bench_slots,
+        )
+    elif bench_hoarding is None:
+        log.info(
+            "no rosters for league %s; valuing against DEFAULT_BENCH_HOARDING, which sums "
+            "to %.2f against a real bench nearer seven. Replacement level will sit too "
+            "shallow and the board will rank kickers and defences too high.",
+            ctx.league_id,
+            sum(DEFAULT_BENCH_HOARDING.values()),
+        )
     model = build_replacement_model(
         ctx,
         outlooks,

@@ -1161,6 +1161,107 @@ class TestBenchHoarding:
                 deep.levels[position].demand.rostered > prior.levels[position].demand.rostered + 10
             ), position
 
+    def test_value_league_measures_beta_when_it_is_given_rosters(
+        self, half_ppr_outlooks: list[PlayerOutlook]
+    ) -> None:
+        """The estimator had no caller. This is the caller.
+
+        `bench_hoarding_from_rosters` existed, the module docstring named it as the fix,
+        and nothing in `src/` called it -- so every valuation ran on a prior summing to
+        1.8 against a real bench of seven. Passing `rosters=` is what closes it, and it
+        has to be two passes: the estimator needs a `PositionDemand` to subtract starters
+        from what is carried, and demand only exists once a model has been solved.
+        """
+        ctx = make_context()
+        rosters = self._rosters({QB: 2, RB: 5, WR: 5, TE: 2, K: 1, DST: 1})
+        prior = build_replacement_model(ctx, half_ppr_outlooks)
+        measured = bench_hoarding_from_rosters(
+            rosters, {p: lv.demand for p, lv in prior.levels.items()}
+        )
+
+        got = value_league(ctx, half_ppr_outlooks, rosters=rosters)
+        want = value_league(ctx, half_ppr_outlooks, bench_hoarding=measured)
+        assert {p: lv.demand.rostered for p, lv in got.replacement.levels.items()} == {
+            p: lv.demand.rostered for p, lv in want.replacement.levels.items()
+        }
+        # And it is genuinely not the prior.
+        on_prior = value_league(ctx, half_ppr_outlooks)
+        for position in (RB, WR):
+            assert (
+                got.replacement.levels[position].demand.rostered
+                > on_prior.replacement.levels[position].demand.rostered + 10
+            ), position
+
+    def test_the_prior_reorders_players_across_positions_not_merely_down(
+        self, half_ppr_outlooks: list[PlayerOutlook]
+    ) -> None:
+        """Why this is a correctness bug and not a calibration nicety.
+
+        The prior understates the bench most at the positions a bench is made of, so it
+        pushes RB and WR replacement level far too shallow while barely moving K and D/ST.
+        On the three live leagues at week 1 of 2026 it moved RB 8.26 -> 3.55 and WR
+        7.95 -> 5.15 points a week against K 8.75 -> 8.63 and D/ST 6.47 -> 6.31, and
+        543-552 of the ~598 valued players changed rank. A kicker sat 68 places above
+        where he belongs.
+        """
+        ctx = make_context()
+        rosters = self._rosters({QB: 2, RB: 5, WR: 5, TE: 2, K: 1, DST: 1})
+        on_prior = value_league(ctx, half_ppr_outlooks)
+        measured = value_league(ctx, half_ppr_outlooks, rosters=rosters)
+
+        def rank(report):
+            order = sorted(report.values, key=lambda v: (-v.ros_vorp, v.player_id))
+            return {v.player_id: i for i, v in enumerate(order, 1)}
+
+        a, b = rank(on_prior), rank(measured)
+        moved = sum(1 for pid in a if a[pid] != b[pid])
+        assert moved > 0.5 * len(a), f"only {moved} of {len(a)} moved; expected most of them"
+
+        # The direction, which is the part that matters: skill positions gain VORP
+        # against the kickers and defences they were being ranked below.
+        by_id = {v.player_id: v for v in on_prior.values}
+        after = {v.player_id: v for v in measured.values}
+        gains = {}
+        for pid, v in by_id.items():
+            gains.setdefault(v.position_id, []).append(after[pid].ros_vorp - v.ros_vorp)
+        mean_gain = {pos: sum(g) / len(g) for pos, g in gains.items()}
+        assert mean_gain[RB] > mean_gain[K]
+        assert mean_gain[WR] > mean_gain[DST]
+
+    def test_without_rosters_nothing_changes_at_all(
+        self, half_ppr_outlooks: list[PlayerOutlook]
+    ) -> None:
+        """The negative control: the new argument absent is the old behaviour, exactly."""
+        ctx = make_context()
+        plain = value_league(ctx, half_ppr_outlooks)
+        explicit = value_league(ctx, half_ppr_outlooks, bench_hoarding=DEFAULT_BENCH_HOARDING)
+        empty = value_league(ctx, half_ppr_outlooks, rosters={})
+        for other in (explicit, empty):
+            assert [
+                (v.player_id, v.ros_vorp, v.playoff_vorp) for v in other.values
+            ] == [(v.player_id, v.ros_vorp, v.playoff_vorp) for v in plain.values]
+
+    def test_an_explicit_beta_still_wins_over_the_rosters(
+        self, half_ppr_outlooks: list[PlayerOutlook]
+    ) -> None:
+        ctx = make_context()
+        rosters = self._rosters({QB: 2, RB: 5, WR: 5, TE: 2, K: 1, DST: 1})
+        forced = {QB: 0.0, RB: 0.0, WR: 0.0, TE: 0.0, K: 0.0, DST: 0.0}
+        got = value_league(ctx, half_ppr_outlooks, rosters=rosters, bench_hoarding=forced)
+        want = value_league(ctx, half_ppr_outlooks, bench_hoarding=forced)
+        assert [v.ros_vorp for v in got.values] == [v.ros_vorp for v in want.values]
+
+    def test_a_bench_slot_mismatch_warns_and_values_anyway(
+        self, half_ppr_outlooks: list[PlayerOutlook], caplog
+    ) -> None:
+        """A league carrying IR is not a league that cannot be valued."""
+        ctx = make_context()
+        rosters = self._rosters({QB: 2, RB: 5, WR: 5, TE: 2, K: 1, DST: 1})
+        with caplog.at_level("WARNING"):
+            report = value_league(ctx, half_ppr_outlooks, rosters=rosters, bench_slots=2)
+        assert report.values
+        assert any("bench slots" in r.getMessage() for r in caplog.records)
+
     def test_recalibrating_deepens_the_baseline(
         self, half_ppr_outlooks: list[PlayerOutlook]
     ) -> None:

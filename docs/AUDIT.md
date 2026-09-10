@@ -1,7 +1,7 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Seven findings are fixed and pushed -- five from the original nine,
-plus two the audit did not have. Four remain, all located. Read the **Remaining work**
+Status as of 2026-09-10. Eight findings are fixed and pushed -- six from the original nine,
+plus two the audit did not have. Three remain, all located. Read the **Remaining work**
 section to continue.
 
 ## Why this file exists
@@ -332,6 +332,51 @@ bottomless: the depth-2 floor equals the depth-1 pick, signing one is worth exac
 and every test measured zero. That was the fixture being degenerate for the question, not the
 floor being wrong. It is a descending ladder now, like a real wire.
 
+### #6 — the bench-hoarding estimator had no caller anywhere
+
+`DEFAULT_BENCH_HOARDING` sums to **1.80**. `bench_hoarding_from_rosters` existed to replace
+it, the module docstring named it as the fix, and `grep` over `src/` found **zero callers** —
+not merely none outside its own module, none at all. Every valuation ran on the prior.
+
+Measured on the live rosters at week 1 of 2026:
+
+| | Blacksburg | Wine Wednesday | Type shi |
+|---|---|---|---|
+| carried RB/team | 4.58 | 4.57 | 4.83 |
+| carried WR/team | 5.67 | 5.86 | 5.83 |
+| **sum(beta)** | **7.25** | **7.07** | **7.17** |
+| prior | 1.80 | 1.80 | 1.80 |
+
+**It is not a level error and does not cancel.** The prior understates the bench most at the
+positions a bench is made of, so replacement level moves very unevenly (Blacksburg, points a
+week): RB **8.26 → 3.55**, WR **7.95 → 5.15**, QB 15.05 → 13.54, TE 7.18 → 5.91, but K only
+8.75 → 8.63 and D/ST 6.47 → 6.31. A running back gains 4.7 points a week of VORP and a kicker
+gains 0.13.
+
+So it reorders *across* positions: **543–552 of the ~598 valued players change rank**, and all
+16–17 of the user's own in every league. Harrison Butker falls 120 → 188, the Chargers D/ST
+148 → 214, Chris Boswell 151 → 235; Jordan Mason rises 156 → 76, Tank Bigsby 288 → 177,
+MarShawn Lloyd 188 → 80. The live dashboard board changes at the top too — Blacksburg's first
+four go from `[Jefferson (WR), Chase Brown, Etienne, Hurts (QB)]` to
+`[Chase Brown, Etienne, Jefferson, Warren]`.
+
+**Where the fix went.** Into `value_league(rosters=...)` rather than into the one caller. It
+has to be two passes — `bench_hoarding_from_rosters` needs a `PositionDemand` to subtract
+starters from what is carried, and demand only exists once a model is solved — so putting the
+two-pass at the entry point is the difference between a fix and the next caller forgetting
+again. Without rosters it logs, at INFO, that it is falling back to the prior and what that
+costs. `api/server.py` fetches the rosters in their own guard: losing them should cost the
+measured coefficient, not the whole board.
+
+The bench count for the sanity check is **not** on `ctx.lineup_slot_counts` — that is
+`settings.roster.starting_slots`, with the bench filtered out — so it comes from
+`settings.roster.lineup_slot_counts[SLOT_BENCH]` and a mismatch warns rather than raises.
+
+**Negative control:** `value_league` with no `rosters` on the three live leagues reproduces
+the parent commit's every `ros_vorp` and `playoff_vorp` to a **byte-identical digest**;
+`rosters={}` and an explicit `DEFAULT_BENCH_HOARDING` give the same. Five new tests fail on
+the parent commit and pass here.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -345,23 +390,6 @@ floor being wrong. It is a descending ladder now, like a real wire.
 ## Remaining work
 
 Ranked. Everything below is located and measured; none is started.
-
-### #6 MAJOR — the bench-hoarding prior is never overridden
-
-`DEFAULT_BENCH_HOARDING` (`valuation.py:89`) sums to **1.80** against a measured **7.07–7.25**
-on the user's real rosters. The module docstring at `valuation.py:46-52` already says so and
-names the fix. `bench_hoarding_from_rosters` (`valuation.py:1271`) exists and **has no caller
-outside its own module.**
-
-The single live call is `api/server.py:439`:
-
-```python
-valued = valuation_mod.value_league(ctx, sim.outlooks, from_week=from_week or 1)
-```
-
-— no `bench_hoarding`, so the dashboard's `ros_vorp` sort runs on a bench a quarter of the real
-size, which reorders players *across* positions. Wire the measured value through.
-`test_valuation.py:1148` pins the constant's sum, not the caller, and stays valid.
 
 ### #8 MAJOR — `counterparty-loses` is a coin flip printed as fact
 

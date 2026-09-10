@@ -402,12 +402,15 @@ def roster_payload(
     of a built `LeagueSim`), and the current lineup slot and injury status come off
     ESPN's own roster.
 
-    Two degradations are reported rather than hidden. If the live roster cannot be read,
+    Three degradations are reported rather than hidden. If the live roster cannot be read,
     `current_known` is false and no player is marked as starting -- the same distinction
     `report.lineup_payload` draws, and for the same reason: a manager who has not logged
     in since the draft is a different problem from one whose lineup is one point light.
     If the valuation fails, `values_ok` is false and the rows still carry their
-    projections.
+    projections. And if the league's rosters cannot be read, the valuation falls back to
+    the bench-hoarding *prior*, which is a different board rather than a slightly worse
+    one -- it ranks kickers and defences far too high -- so `value_league` logs which
+    coefficient it actually used.
     """
     sim = ws.sim(cfg)
     team_id = ws.my_team_id(cfg)
@@ -436,7 +439,30 @@ def roster_payload(
         from ..edges import market as market_mod
 
         ctx = market_mod.context_from(sim, my_team_id=team_id)
-        valued = valuation_mod.value_league(ctx, sim.outlooks, from_week=from_week or 1)
+        # `rosters` is what lets the valuation MEASURE bench hoarding instead of falling
+        # back to a population prior that sums to 1.8 against a real bench near seven.
+        # It is fetched in its own guard: losing it should cost the measured coefficient,
+        # not the whole board, and `value_league` says in the log which one it used.
+        league_rosters, bench_slots = None, None
+        try:
+            from ..espn.scoring import SLOT_BENCH
+
+            league_rosters = sim.league.rosters(week=from_week or None)
+            roster_settings = sim.league.settings().roster
+            bench_slots = int(roster_settings.lineup_slot_counts.get(SLOT_BENCH, 0)) or None
+        except Exception as err:  # pragma: no cover - live-only path
+            log.info(
+                "no league rosters for %s (%s); bench hoarding falls back to the prior",
+                cfg.league_id,
+                err,
+            )
+        valued = valuation_mod.value_league(
+            ctx,
+            sim.outlooks,
+            from_week=from_week or 1,
+            rosters=league_rosters,
+            bench_slots=bench_slots,
+        )
         values = {v.player_id: v for v in valued.values}
         replacement = [
             {
