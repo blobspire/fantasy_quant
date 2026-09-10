@@ -153,12 +153,27 @@ from .wire import DEFAULT_WIRE_DEPTH, all_rostered, wire_levels
 
 log = logging.getLogger(__name__)
 
-#: Perturbation grid for the surrogate: +/-15 projected points a week in 1-point steps,
+#: Perturbation grid for the surrogate: +/-15 projected points a week in 2-point steps,
 #: and +/-30% on the weekly standard deviation. The mu range covers every realistic
 #: single-move swing (the best-minus-worst starter gap over a season is 225 points at WR,
 #: about 13 a week) and the sigma range covers a whole starter's worth of variance.
-DEFAULT_MU_GRID: tuple[float, ...] = tuple(float(x) for x in range(-15, 16))
+#:
+#: The mu step was 1 and is 2, which pays for the playoff axis below and costs nothing:
+#: measured side by side on the fixture, 16 nodes reproduce 31 nodes to `rmse` 0.00314 vs
+#: 0.00322 and `d_title_d_mu` to four significant figures. A quadratic in the logit does
+#: not need 31 samples of its own smooth curve.
+DEFAULT_MU_GRID: tuple[float, ...] = tuple(float(x) for x in range(-15, 16, 2))
 DEFAULT_SIGMA_GRID: tuple[float, ...] = (0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30)
+
+#: EXTRA points a week in the bracket weeks only, on top of `DEFAULT_MU_GRID`. This is
+#: the axis the surface did not have, and its absence is why a screen priced a week-16
+#: point exactly like a week-3 point.
+#:
+#: Measured on the `tests/test_title.py` fixture at 4,000 simulations, moving the SAME
+#: total points around the calendar: +1.83pp spread evenly, +2.92pp concentrated in the
+#: bracket, +1.25pp concentrated in the regular season. The old two-axis surface answered
+#: +1.83pp to all three. Five nodes is enough for a quadratic plus its two interactions.
+DEFAULT_PLAYOFF_GRID: tuple[float, ...] = (-10.0, -5.0, 0.0, 5.0, 10.0)
 
 #: Simulations used to fit the surface. The fit is over ~200 nodes that share one draw,
 #: so the node-to-node noise is highly correlated and the surface smooths what is left;
@@ -184,10 +199,17 @@ _LOGIT_CLIP = 30.0
 #: league out of three is a screen that under-reports its error.
 SCREEN_RELATIVE_ERROR = 0.22
 
-#: Standardisation for the design matrix. Both are half-widths of the default grid, so
+#: Standardisation for the design matrix. Each is a half-width of its default grid, so
 #: the quadratic terms stay order 1 and the normal equations stay well conditioned.
 _MU_SCALE = 15.0
 _SIGMA_SCALE = 0.30
+_PLAYOFF_SCALE = 15.0
+
+#: Column layout of `_design`. The playoff terms are APPENDED rather than interleaved, so
+#: indices 0-5 keep the meaning they have always had -- `beta[2]` is still the sigma
+#: coefficient the cut-line diagnostic reads, and a caller that hand-indexes the vector
+#: does not silently start reading a different number.
+_TERMS = 10
 
 
 class TitleError(ValueError):
@@ -233,17 +255,33 @@ def clark_bonus(mean: np.ndarray, sd: np.ndarray, floor: np.ndarray) -> np.ndarr
 # --------------------------------------------------------------------------------------
 
 
-def _design(d_mu: np.ndarray | float, sigma_ratio: np.ndarray | float) -> np.ndarray:
-    """`[1, x, s, x^2, xs, s^2]` in the standardised perturbation coordinates.
+def _design(
+    d_mu: np.ndarray | float,
+    sigma_ratio: np.ndarray | float,
+    d_mu_playoff: np.ndarray | float = 0.0,
+) -> np.ndarray:
+    """`[1, x, s, x^2, xs, s^2, p, p^2, xp, sp]` in standardised coordinates.
 
     A quadratic on the *logit* scale rather than a GAM or a spline, for three reasons
-    that are all about what the surface is used for. It has six parameters against ~200
+    that are all about what the surface is used for. It has ten parameters against ~560
     nodes, so it cannot chase the Monte Carlo noise the nodes carry. Its derivatives are
     closed form, and `dP/dsigma` at the origin is the number the cut-line diagnostic
     actually reports -- a smoother would have to be differenced numerically and would
     inherit the node noise doing it. And a logit link keeps every prediction inside
     (0, 1) without clipping, which matters because half the teams in a 14-team league sit
     under 5% and a linear surface walks them negative at the bottom of the mu grid.
+
+    **`p` is extra points a week in the BRACKET weeks only**, on top of the `x` that
+    applies everywhere. Without it the surface has no way to represent "+3 points in week
+    16" and prices it exactly like "+3 points in week 3" -- which is what it did, and
+    which is worth a factor of 2.3 on the fixture and about 4.5 on the live leagues. The
+    module docstring conceded this ("a player who only helps in weeks 15-17 screens as if
+    he helped all year") and `docs/PLAN.md` specified the fix that was never built.
+
+    The playoff terms are appended LAST on purpose: indices 0-5 keep the meaning they
+    have always had, so `beta[2]` is still the sigma coefficient and a caller that hand-
+    indexes the vector -- the pooled-surface test does -- does not silently start reading
+    a different number.
 
     Measured on the user's three leagues: RMSE 0.27-0.55pp on the title surface and
     0.70-0.86pp on the playoff surface, against baseline title probabilities of 2-14%.
@@ -252,8 +290,39 @@ def _design(d_mu: np.ndarray | float, sigma_ratio: np.ndarray | float) -> np.nda
     """
     x = np.asarray(d_mu, dtype=float) / _MU_SCALE
     s = (np.asarray(sigma_ratio, dtype=float) - 1.0) / _SIGMA_SCALE
-    x, s = np.broadcast_arrays(x, s)
-    return np.stack([np.ones_like(x), x, s, x * x, x * s, s * s], axis=-1)
+    p = np.asarray(d_mu_playoff, dtype=float) / _PLAYOFF_SCALE
+    x, s, p = np.broadcast_arrays(x, s, p)
+    one = np.ones_like(x)
+    return np.stack([one, x, s, x * x, x * s, s * s, p, p * p, x * p, s * p], axis=-1)
+
+
+def playoff_mask(state: S.LeagueState) -> np.ndarray:
+    """`(weeks,)` 1.0 on a bracket week, 0.0 elsewhere. The surrogate's third axis.
+
+    Flattened from `state.playoff_rounds`, which `decide/title.py` referenced zero times
+    before this. `trades.py` has had the same idiom since it was written.
+    """
+    bracket = {w for rnd in state.playoff_rounds for w in rnd}
+    return np.array([1.0 if w in bracket else 0.0 for w in state.weeks], dtype=np.float64)
+
+
+def split_by_bracket(delta: np.ndarray, mask: np.ndarray) -> tuple[float, float]:
+    """A per-week delta -> `(points a week everywhere, EXTRA a week in the bracket)`.
+
+    The decomposition the surface is fitted on: `delta_w ~= x + p * mask_w`. Least
+    squares over a two-level factor is just the two block means, so `x` is the regular-
+    season mean and `p` is how much better the bracket weeks are than that.
+
+    Both degenerate cases give `p = 0`, which is right rather than merely safe: with no
+    bracket weeks left there is no tilt to price, and with nothing BUT bracket weeks left
+    every point is a playoff point and `x` already carries it.
+    """
+    delta = np.asarray(delta, dtype=np.float64)
+    bracket = mask > 0.0
+    if not bracket.any() or bracket.all():
+        return float(delta.mean()) if delta.size else 0.0, 0.0
+    regular = float(delta[~bracket].mean())
+    return regular, float(delta[bracket].mean()) - regular
 
 
 def _fit_binomial_surface(
@@ -262,6 +331,7 @@ def _fit_binomial_surface(
     successes: np.ndarray,
     trials: int,
     *,
+    d_mu_playoff: np.ndarray | float = 0.0,
     ridge: float = 1e-6,
     iterations: int = 64,
     tolerance: float = 1e-10,
@@ -276,12 +346,12 @@ def _fit_binomial_surface(
     `(n + 1)` is the Jeffreys posterior mean, keeps every node interior, and moves a
     node with real mass by under 0.03pp.
     """
-    design = _design(d_mu, sigma_ratio).reshape(-1, 6)
+    design = _design(d_mu, sigma_ratio, d_mu_playoff).reshape(-1, _TERMS)
     k = np.asarray(successes, dtype=float).ravel() + 0.5
     n = float(trials) + 1.0
     observed = np.asarray(successes, dtype=float).ravel() / float(trials)
 
-    eye = np.eye(6) * ridge
+    eye = np.eye(_TERMS) * ridge
     start = np.log(k / (n - k))
     beta = np.linalg.solve(design.T @ design + eye, design.T @ start)
     for _ in range(iterations):
@@ -327,46 +397,84 @@ class SurrogateFit:
     mu_grid: tuple[float, ...]
     sigma_grid: tuple[float, ...]
     n_sims: int
-    #: `(len(mu_grid), len(sigma_grid))` simulated probabilities at each node, kept so a
-    #: caller can refit, plot, or -- as the tests do -- pool two teams' nodes and show
-    #: that a single surface across standings must mis-sign one of them.
+    #: `(len(mu_grid), len(sigma_grid), len(playoff_grid))` simulated probabilities at
+    #: each node, kept so a caller can refit, plot, or -- as the tests do -- pool two
+    #: teams' nodes and show that a single surface across standings must mis-sign one.
     title_nodes: np.ndarray
     playoff_nodes: np.ndarray
+    #: Extra points a week in the bracket weeks only. Empty on a league with no bracket
+    #: left, where the axis is degenerate and every node would be a duplicate.
+    playoff_grid: tuple[float, ...] = ()
 
     # -- reading the surface ---------------------------------------------------------
 
-    def title(self, d_mu: float = 0.0, sigma_ratio: float = 1.0) -> float:
-        return float(_sigmoid(_design(d_mu, sigma_ratio) @ self.coefficients))
+    def title(
+        self, d_mu: float = 0.0, sigma_ratio: float = 1.0, d_mu_playoff: float = 0.0
+    ) -> float:
+        return float(_sigmoid(_design(d_mu, sigma_ratio, d_mu_playoff) @ self.coefficients))
 
-    def playoffs(self, d_mu: float = 0.0, sigma_ratio: float = 1.0) -> float:
-        return float(_sigmoid(_design(d_mu, sigma_ratio) @ self.playoff_coefficients))
+    def playoffs(
+        self, d_mu: float = 0.0, sigma_ratio: float = 1.0, d_mu_playoff: float = 0.0
+    ) -> float:
+        return float(
+            _sigmoid(_design(d_mu, sigma_ratio, d_mu_playoff) @ self.playoff_coefficients)
+        )
 
-    def delta_title(self, d_mu: float, sigma_ratio: float = 1.0) -> float:
+    def delta_title(
+        self, d_mu: float, sigma_ratio: float = 1.0, d_mu_playoff: float = 0.0
+    ) -> float:
         """The screened effect: the surface at the candidate minus the surface at zero.
 
         Differenced on the surface rather than against the simulated baseline, so the
         fit's level error -- which is common to both points -- drops out exactly.
         """
-        return self.title(d_mu, sigma_ratio) - self.title(0.0, 1.0)
+        return self.title(d_mu, sigma_ratio, d_mu_playoff) - self.title(0.0, 1.0, 0.0)
 
-    def delta_playoffs(self, d_mu: float, sigma_ratio: float = 1.0) -> float:
-        return self.playoffs(d_mu, sigma_ratio) - self.playoffs(0.0, 1.0)
+    def delta_playoffs(
+        self, d_mu: float, sigma_ratio: float = 1.0, d_mu_playoff: float = 0.0
+    ) -> float:
+        return self.playoffs(d_mu, sigma_ratio, d_mu_playoff) - self.playoffs(0.0, 1.0, 0.0)
 
     # -- derivatives, which is what the cut-line diagnostic reads ---------------------
 
-    def _slope(self, beta: np.ndarray, d_mu: float, sigma_ratio: float, term: int) -> float:
-        p = float(_sigmoid(_design(d_mu, sigma_ratio) @ beta))
+    def _slope(
+        self,
+        beta: np.ndarray,
+        d_mu: float,
+        sigma_ratio: float,
+        term: int,
+        d_mu_playoff: float = 0.0,
+    ) -> float:
+        """d(probability)/d(one raw axis), by the chain rule through the logit.
+
+        Written as a gradient over the standardised coordinates rather than as a pair of
+        hand-expanded branches, because the design now carries three axes and four cross
+        terms and an expansion that missed one would be wrong in a way nothing catches:
+        `d/ds` alone gained `beta[9] * p`.
+        """
+        prob = float(_sigmoid(_design(d_mu, sigma_ratio, d_mu_playoff) @ beta))
         x = d_mu / _MU_SCALE
-        s = (sigma_ratio - 1.0) / _SIGMA_SCALE
-        if term == 1:  # d/dx
-            inner = beta[1] + 2.0 * beta[3] * x + beta[4] * s
-            return p * (1.0 - p) * inner / _MU_SCALE
-        inner = beta[2] + beta[4] * x + 2.0 * beta[5] * s
-        return p * (1.0 - p) * inner / _SIGMA_SCALE
+        sig = (sigma_ratio - 1.0) / _SIGMA_SCALE
+        pl = d_mu_playoff / _PLAYOFF_SCALE
+        inner, scale = {
+            1: (beta[1] + 2.0 * beta[3] * x + beta[4] * sig + beta[8] * pl, _MU_SCALE),
+            2: (beta[2] + beta[4] * x + 2.0 * beta[5] * sig + beta[9] * pl, _SIGMA_SCALE),
+            3: (beta[6] + 2.0 * beta[7] * pl + beta[8] * x + beta[9] * sig, _PLAYOFF_SCALE),
+        }[term]
+        return prob * (1.0 - prob) * inner / scale
 
     def d_title_d_mu(self, d_mu: float = 0.0, sigma_ratio: float = 1.0) -> float:
         """Title probability gained per projected point a week. The screen's leverage."""
         return self._slope(self.coefficients, d_mu, sigma_ratio, 1)
+
+    def d_title_d_playoff_mu(self, d_mu: float = 0.0, sigma_ratio: float = 1.0) -> float:
+        """Title probability gained per EXTRA point a week in the bracket.
+
+        Read against `d_title_d_mu`: the ratio is how much more a playoff point is worth
+        than an ordinary one, measured for this team at this standing rather than assumed.
+        `decide/trades.PLAYOFF_WEIGHT` is a hand-set 1.2 for the same quantity.
+        """
+        return self._slope(self.coefficients, d_mu, sigma_ratio, 3)
 
     def d_title_d_sigma(self, d_mu: float = 0.0, sigma_ratio: float = 1.0) -> float:
         """dP(title) per unit of *relative* weekly SD. Negative for a favourite."""
@@ -375,6 +483,24 @@ class SurrogateFit:
     def d_playoffs_d_sigma(self, d_mu: float = 0.0, sigma_ratio: float = 1.0) -> float:
         """dP(playoffs) per unit of relative weekly SD. This is what flips at the cut."""
         return self._slope(self.playoff_coefficients, d_mu, sigma_ratio, 2)
+
+    @property
+    def playoff_premium(self) -> float:
+        """How much more a bracket point is worth than an ordinary one, for this team.
+
+        `1 + dP/dp / dP/dx`: a point in the bracket earns `dP/dx` like every other week
+        PLUS `dP/dp` on top, so the ratio is the premium. Measured, not assumed -- and it
+        is not small. On the fixture the same total points are worth +2.92pp concentrated
+        in the bracket against +1.25pp concentrated in the regular season.
+
+        1.0 when the axis is degenerate (no bracket left, or nothing but bracket), which
+        is the honest answer there: with no regular-season week to be better than, there
+        is no premium to measure.
+        """
+        ordinary = self.d_title_d_mu()
+        if not self.playoff_grid or len(self.playoff_grid) < 2 or abs(ordinary) < 1e-12:
+            return 1.0
+        return 1.0 + self.d_title_d_playoff_mu() / ordinary
 
     @property
     def wants_variance(self) -> bool:
@@ -702,6 +828,7 @@ class TitleEngine:
         "all_play",
         "draw",
         "mu_grid",
+        "playoff_grid",
         "replacement",
         "sigma_grid",
         "state",
@@ -719,6 +846,7 @@ class TitleEngine:
         all_play: bool = False,
         surrogate_sims: int | None = None,
         mu_grid: Sequence[float] = DEFAULT_MU_GRID,
+        playoff_grid: Sequence[float] = DEFAULT_PLAYOFF_GRID,
         sigma_grid: Sequence[float] = DEFAULT_SIGMA_GRID,
     ) -> None:
         self.state = state
@@ -726,6 +854,7 @@ class TitleEngine:
         self.all_play = all_play
         self.mu_grid = tuple(float(x) for x in mu_grid)
         self.sigma_grid = tuple(float(x) for x in sigma_grid)
+        self.playoff_grid = tuple(float(x) for x in playoff_grid)
 
         # Symmetric by default, matching sim/season.py's shipped default. The haircut is
         # an unverifiable asymmetry that turns the user's below-average teams into title
@@ -931,23 +1060,42 @@ class TitleEngine:
         resid = col - mu_week
         sigma = float(np.sqrt(np.mean(col.var(axis=0, ddof=1))))
 
-        titles = np.zeros((len(self.mu_grid), len(self.sigma_grid)))
+        # The bracket axis is only meaningful while a bracket is still ahead of us. With
+        # none left -- or with nothing BUT bracket weeks left -- every playoff node would
+        # duplicate a node the mu axis already has, and the two columns would be exactly
+        # collinear. Collapse to the single zero node instead of feeding the fit a
+        # singular block and relying on the ridge to hide it.
+        bracket = playoff_mask(self.state)
+        degenerate = not bracket.any() or bool(bracket.all())
+        playoff_grid = (0.0,) if degenerate else tuple(self.playoff_grid)
+
+        shape = (len(self.mu_grid), len(self.sigma_grid), len(playoff_grid))
+        titles = np.zeros(shape)
         playoffs = np.zeros_like(titles)
         grid_mu = np.zeros_like(titles)
         grid_ratio = np.zeros_like(titles)
+        grid_playoff = np.zeros_like(titles)
         for i, d_mu in enumerate(self.mu_grid):
             for j, ratio in enumerate(self.sigma_grid):
-                # A team total cannot go negative; the clip only ever binds at the bottom
-                # corner of the grid for a team scoring under 15 a week, which none do.
-                scores[:, :, t] = np.maximum(mu_week + d_mu + ratio * resid, 0.0)
-                res = S.simulate_from_scores(self.state, scores, all_play=False)
-                titles[i, j] = res.champions[:, t].sum()
-                playoffs[i, j] = res.made_playoffs[:, t].sum()
-                grid_mu[i, j] = d_mu
-                grid_ratio[i, j] = ratio
+                for k, d_po in enumerate(playoff_grid):
+                    # A team total cannot go negative; the clip only ever binds at the
+                    # bottom corner of the grid for a team scoring under 15 a week.
+                    scores[:, :, t] = np.maximum(
+                        mu_week + d_mu + d_po * bracket + ratio * resid, 0.0
+                    )
+                    res = S.simulate_from_scores(self.state, scores, all_play=False)
+                    titles[i, j, k] = res.champions[:, t].sum()
+                    playoffs[i, j, k] = res.made_playoffs[:, t].sum()
+                    grid_mu[i, j, k] = d_mu
+                    grid_ratio[i, j, k] = ratio
+                    grid_playoff[i, j, k] = d_po
 
-        beta, rmse = _fit_binomial_surface(grid_mu, grid_ratio, titles, n)
-        beta_p, rmse_p = _fit_binomial_surface(grid_mu, grid_ratio, playoffs, n)
+        beta, rmse = _fit_binomial_surface(
+            grid_mu, grid_ratio, titles, n, d_mu_playoff=grid_playoff
+        )
+        beta_p, rmse_p = _fit_binomial_surface(
+            grid_mu, grid_ratio, playoffs, n, d_mu_playoff=grid_playoff
+        )
         fit = SurrogateFit(
             team_id=team_id,
             mu=float(mu_week.mean()),
@@ -963,10 +1111,12 @@ class TitleEngine:
             n_sims=n,
             title_nodes=titles / n,
             playoff_nodes=playoffs / n,
+            playoff_grid=playoff_grid,
         )
         log.info(
             "surrogate for team %s: mu %.1f sigma %.1f, title %.2f%% (rmse %.3fpp), "
-            "dP_title/dsigma %+.3fpp dP_playoff/dsigma %+.3fpp per 10%% of SD",
+            "dP_title/dsigma %+.3fpp dP_playoff/dsigma %+.3fpp per 10%% of SD, "
+            "a bracket point worth %.2fx an ordinary one",
             team_id,
             fit.mu,
             fit.sigma,
@@ -974,6 +1124,7 @@ class TitleEngine:
             100.0 * rmse,
             1000.0 * fit.d_title_d_sigma(),
             1000.0 * fit.d_playoffs_d_sigma(),
+            fit.playoff_premium,
         )
         return fit
 
@@ -1293,18 +1444,33 @@ class TitleEngine:
         delta = 0.0
         d_points = 0.0
         others: dict[int, float] = {}
+        bracket = playoff_mask(self.state)
         for team, ids in rosters.items():
             base_mean, base_var = moments(self.state.franchise(team).player_ids)
             new_mean, new_var = moments(ids)
             eff = float(self._factors[:, self._index(team)].mean())
-            d_mu = eff * float(np.mean(new_mean - base_mean))
+            # Split by calendar, not averaged over it. `np.mean(new_mean - base_mean)`
+            # was the whole of the old computation, and it is what made a week-16 point
+            # identical to a week-3 point -- the two are worth +3.82pp and +0.85pp of
+            # title probability on the live leagues, a difference this collapsed to one
+            # number and then screened on.
+            delta_week = new_mean - base_mean
+            d_mu, d_mu_playoff = split_by_bracket(delta_week, bracket)
+            d_mu *= eff
+            d_mu_playoff *= eff
+            # One sigma axis still. A bracket-specific VARIANCE tilt is second order --
+            # the sign flip it would carry is already on the level term -- and a fourth
+            # axis would multiply the fit grid again for it. Noted, not modelled.
             d_var = eff * eff * float(np.mean(new_var - base_var))
             fit = surrogate if team == subject else self.surrogate(team)
             ratio = math.sqrt(max(fit.sigma**2 + d_var, 1e-6)) / max(fit.sigma, 1e-6)
-            own = fit.delta_title(d_mu, ratio)
+            own = fit.delta_title(d_mu, ratio, d_mu_playoff)
             if team == subject:
                 delta += own
-                d_points = d_mu * len(self.state.weeks)
+                # The honest total, summed over the weeks it actually lands in. It was
+                # `d_mu * len(weeks)`, which silently dropped every point of the bracket
+                # tilt -- so a playoff-only upgrade reported ZERO points gained.
+                d_points = eff * float(np.sum(delta_week))
             else:
                 others[team] = own
                 if counterparty:
@@ -1492,14 +1658,34 @@ class TitleEngine:
         +12.8pp move -- so read the top of a long list as the top of a long list.
         """
         screened = self.screen(moves, counterparty=counterparty)
-        keepers = range(len(moves))
+        keepers = list(range(len(moves)))
+        prefer_acceptable = False
+
+        def rank(i: int) -> tuple[float, float]:
+            # Screened-acceptable first when asked, then by the size of the screened
+            # effect. The second key alone is the unconditional order.
+            unilateral = prefer_acceptable and "unilateral" in screened[i].tags
+            return (1.0 if unilateral else 0.0, -abs(screened[i].delta_title))
+
         if acceptable_only:
-            keepers = [
-                i
-                for i in keepers
-                if "unilateral" not in screened[i].tags and "roster_size" not in screened[i].tags
-            ]
-        order = sorted(keepers, key=lambda i: -abs(screened[i].delta_title))
+            # `roster_size` is DELETED: roster-length arithmetic, identical under both
+            # tiers, and free to prune on.
+            keepers = [i for i in keepers if "roster_size" not in screened[i].tags]
+            # `unilateral` only REORDERS. It is derived from the SIGNS of screened deltas
+            # (`_trade_tags`), and deleting on it -- which is what this did -- threw a
+            # candidate away before `confirm` could disagree, irrecoverably. Measured on
+            # the fixture, 10 of 144 candidates the screen calls unacceptable are
+            # acceptable once simulated, against 1 the other way. `decide/trades.py`
+            # gates every sign-dependent statement on `ev.confirmed`; this is that rule.
+            #
+            # Sorting rather than filtering keeps the efficiency the filter was there for
+            # -- the shortlist still leads with the trades the screen thinks are
+            # acceptable -- while leaving the tail recoverable when there are not `keep`
+            # of them. On a board that is all robberies the old code confirmed 25
+            # acceptable-LOOKING moves and this confirms the 25 largest, which is where
+            # a mis-signed one can actually be found.
+            prefer_acceptable = True
+        order = sorted(keepers, key=rank)
         shortlist = order[: max(keep, 0)]
         confirmed = self.confirm([moves[i] for i in shortlist])
         confirmed = [

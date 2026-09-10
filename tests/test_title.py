@@ -11,7 +11,7 @@ once per session; the live-league checks are marked `network`.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
@@ -268,6 +268,120 @@ def near_cut_engine(near_cut):
     return T.TitleEngine(state, draw)
 
 
+class TestAPlayoffPointIsNotAWeekThreePoint:
+    """The axis the surface did not have.
+
+    A screen that averages a per-week delta over the calendar cannot tell "+3 points in
+    week 16" from "+3 points in week 3", and prices both the same. Measured on the live
+    leagues the two are worth roughly +3.1pp and +1.3pp of title probability -- the
+    difference between a trade worth making and one that is not.
+    """
+
+    def _truth(self, state, draw, engine, team, delta, mask):
+        """What the SIMULATOR says a per-week perturbation is worth. No surface."""
+        t = engine._index(team)
+        base = np.array(engine._base_scores[:2000], dtype=np.float32, copy=True)
+        col = base[:, :, t].copy()
+        before = S.simulate_from_scores(state, base, all_play=False).champions[:, t].mean()
+        base[:, :, t] = np.maximum(col + (delta * mask)[None, :], 0.0)
+        after = S.simulate_from_scores(state, base, all_play=False).champions[:, t].mean()
+        return float(after - before)
+
+    def test_the_surface_separates_a_bracket_point_from_a_regular_season_one(
+        self, engine, league
+    ):
+        state, draw = league
+        mask = T.playoff_mask(state)
+        weeks, bracket = len(state.weeks), int(mask.sum())
+        assert 0 < bracket < weeks, "the fixture has no bracket to tilt toward"
+
+        total = 3.0 * weeks
+        even = self._truth(state, draw, engine, 1, total / weeks, np.ones(weeks))
+        tilted = self._truth(state, draw, engine, 1, total / bracket, mask)
+        # The truth. If this ever stops holding, the premise is gone, not the code.
+        assert tilted > even * 1.2, f"even {even:.4f} vs bracket {tilted:.4f}"
+
+        fit = engine.surrogate(1)
+        assert fit.delta_title(total / weeks, 1.0, 0.0) == pytest.approx(even, abs=0.01)
+        assert fit.delta_title(0.0, 1.0, total / bracket) == pytest.approx(tilted, abs=0.01)
+        # And the two really are different NUMBERS now, not one number twice.
+        assert fit.delta_title(0.0, 1.0, total / bracket) > fit.delta_title(
+            total / weeks, 1.0, 0.0
+        ) * 1.2
+
+    def test_the_premium_is_measured_rather_than_assumed(self, engine):
+        """`decide/trades.PLAYOFF_WEIGHT` is a hand-set 1.2 for exactly this quantity."""
+        fit = engine.surrogate(1)
+        assert fit.playoff_premium > 1.0
+        assert fit.d_title_d_playoff_mu() > 0.0
+        # A bracket point earns the ordinary rate PLUS the bracket rate, by construction.
+        assert fit.playoff_premium == pytest.approx(
+            1.0 + fit.d_title_d_playoff_mu() / fit.d_title_d_mu()
+        )
+
+    def test_the_screen_prices_a_playoff_only_upgrade_above_a_uniform_one(
+        self, engine, league
+    ):
+        """End to end through `screen`, which is where the collapse used to happen."""
+        state, _ = league
+        mask = T.playoff_mask(state)
+        mine = state.franchise(1).player_ids
+        # `_roster_moments` is the input `_screen_one` decomposes; drive it directly so
+        # the test does not depend on which players happen to be available.
+        base_mean, _ = engine._roster_moments(mine)
+        uniform = np.full(len(state.weeks), 2.0)
+        playoff_only = mask * (2.0 * len(state.weeks) / max(mask.sum(), 1))
+
+        x_u, p_u = T.split_by_bracket(uniform, mask)
+        x_p, p_p = T.split_by_bracket(playoff_only, mask)
+        assert p_u == pytest.approx(0.0)
+        assert p_p > 0.0
+        assert x_p == pytest.approx(0.0)
+
+        fit = engine.surrogate(1)
+        assert fit.delta_title(x_p, 1.0, p_p) > fit.delta_title(x_u, 1.0, p_u)
+        assert base_mean.shape == (len(state.weeks),)
+
+    def test_the_decomposition_reconstructs_the_weekly_delta(self):
+        """`x + p * mask` must be the delta it came from, or the surface prices fiction."""
+        mask = np.array([0.0, 0.0, 0.0, 1.0, 1.0])
+        delta = np.array([1.0, 1.0, 1.0, 7.0, 7.0])
+        x, p = T.split_by_bracket(delta, mask)
+        assert np.allclose(x + p * mask, delta)
+
+        # A ragged delta is fitted by its two block means, which is the least-squares
+        # answer over a two-level factor and the only thing the surface can represent.
+        ragged = np.array([0.0, 2.0, 4.0, 6.0, 10.0])
+        x, p = T.split_by_bracket(ragged, mask)
+        assert x == pytest.approx(2.0)
+        assert p == pytest.approx(6.0)
+
+    def test_a_degenerate_calendar_has_no_tilt_to_price(self):
+        """No bracket left, or nothing but bracket. Both give p = 0, and both are right."""
+        delta = np.array([3.0, 3.0, 3.0])
+        assert T.split_by_bracket(delta, np.zeros(3)) == (pytest.approx(3.0), 0.0)
+        assert T.split_by_bracket(delta, np.ones(3)) == (pytest.approx(3.0), 0.0)
+
+    def test_the_fit_collapses_the_axis_when_it_cannot_be_identified(self, league):
+        """With no bracket left the two mu columns are collinear.
+
+        Fitting them anyway leaves a singular block for the ridge to paper over, which is
+        the kind of thing that returns a number rather than raising.
+        """
+        state, draw = league
+        no_bracket = replace(state, playoff_rounds=())
+        assert not T.playoff_mask(no_bracket).any()
+
+        engine = T.TitleEngine(no_bracket, draw, surrogate_sims=400)
+        fit = engine.surrogate(1)
+        assert fit.playoff_grid == (0.0,)
+        assert fit.playoff_premium == 1.0
+        # Finite, not nan: with no bracket nobody wins a title, every node is zero, and
+        # the fit still has to come back with numbers rather than a singular-matrix wall.
+        assert np.all(np.isfinite(fit.coefficients))
+        assert np.all(np.isfinite(fit.playoff_coefficients))
+
+
 class TestVarianceDerivativeFlipsAtTheCut:
     """The known failure mode, pinned.
 
@@ -304,16 +418,22 @@ class TestVarianceDerivativeFlipsAtTheCut:
         state, _ = near_cut
         engine = near_cut_engine
         below, above = engine.surrogate(1), engine.surrogate(state.size)
-        grid_mu, grid_ratio = np.meshgrid(
-            np.array(below.mu_grid), np.array(below.sigma_grid), indexing="ij"
+        grid_mu, grid_ratio, grid_po = np.meshgrid(
+            np.array(below.mu_grid),
+            np.array(below.sigma_grid),
+            np.array(below.playoff_grid),
+            indexing="ij",
         )
         pooled, _ = T._fit_binomial_surface(
             np.concatenate([grid_mu, grid_mu]),
             np.concatenate([grid_ratio, grid_ratio]),
             np.concatenate([below.playoff_nodes, above.playoff_nodes]) * below.n_sims,
             below.n_sims,
+            d_mu_playoff=np.concatenate([grid_po, grid_po]),
         )
-        # The pooled slope in the sigma direction at the origin.
+        # The pooled slope in the sigma direction at the origin. `pooled[2]` is still
+        # the sigma coefficient: `_design` appends the bracket terms after the original
+        # six precisely so a hand-indexed read like this one keeps working.
         p = float(T._sigmoid(T._design(0.0, 1.0) @ pooled))
         pooled_slope = p * (1.0 - p) * pooled[2]
         per_team = [below.d_playoffs_d_sigma(), above.d_playoffs_d_sigma()]
