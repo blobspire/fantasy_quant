@@ -498,8 +498,9 @@ def test_a_freed_roster_spot_is_priced_from_the_wire_not_asserted():
     finder = _finder(CONSOLIDATION, WIRE)
     roster = finder.rosters[1]
     short = tuple(roster[:-1])
-    settled, cut, added = finder.settle(1, short)
+    settled, cut, added, tied = finder.settle(1, short)
     assert not cut
+    assert not tied  # nothing was cut, so nothing tied
     # Whatever the wire offers, the seat cannot beat a floor that already assumes you
     # signed the best free agent, so the credit lands at zero rather than at a constant.
     assert finder.value_of(settled) - finder.value_of(short) < 1e-6
@@ -991,6 +992,87 @@ def test_a_precise_win_is_still_only_confident_after_the_selection_correction():
     assert ranked[0].delta_title == pytest.approx(0.01)
     assert ranked[0].confidence == "low"
     assert "out of 40 candidates" in ranked[0].rationale
+
+
+class TestTheForcedCutIsNotDecidedByEspnsOrdering:
+    """`settle` kept the FIRST maximum of a greedy leave-one-out.
+
+    `value_of` is a whole-roster starting-lineup objective, so a deep-bench player who
+    never cracks a lineup contributes exactly zero and removing any of them leaves the
+    objective bit-identical. The scan ran over `dict.fromkeys(player_ids)` -- ESPN's own
+    roster ordering, straight through `self.rosters` -- so the answer to "who do you cut"
+    was whoever ESPN happened to list first.
+
+    Measured on the three live leagues: **65 of 69 forced cuts (94%) had at least two
+    bit-exact ties**, median tie group three to five, maximum six. The spread between the
+    best and worst leave-one-out is 97-140 points, so the choice matters enormously in
+    general; it is only among the top candidates that it is a dead heat.
+    """
+
+    def _over_the_limit(self, finder, team=1):
+        """That team's roster plus enough wire filler to force at least one cut."""
+        roster = list(finder.rosters[team])
+        limit = finder.capacity.get(team, len(roster))
+        wire = [pid for pos in finder._wire for pid, _ in finder._wire[pos]]
+        spare = [p for p in wire if p not in roster]
+        over = roster + spare
+        if len(over) <= limit:
+            pytest.skip("this fixture cannot be pushed over its roster limit")
+        return over
+
+    def test_the_cut_does_not_move_when_the_input_order_does(self):
+        """The defect itself: the answer used to be a function of ESPN's ordering."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        over = self._over_the_limit(finder)
+        forward = finder.settle(1, over)
+        backward = finder.settle(1, list(reversed(over)))
+        assert forward[1] == backward[1], "the cut moved when the input order did"
+        assert sorted(forward[0]) == sorted(backward[0])
+
+    def test_the_cut_is_the_least_valuable_of_the_equals(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        _settled, cut, _added, tied = finder.settle(1, self._over_the_limit(finder))
+        assert cut
+        for dropped, equals in zip(cut, tied, strict=True):
+            for other in equals:
+                assert finder._cut_priority(dropped) <= finder._cut_priority(other)
+
+    def test_the_equals_are_reported_rather_than_hidden(self):
+        '''"Cut this one" and "cut any of these five" are different pieces of advice.'''
+        finder = _finder(CONSOLIDATION, WIRE)
+        _settled, cut, _added, tied = finder.settle(1, self._over_the_limit(finder))
+        assert len(tied) == len(cut)
+        assert all(dropped not in equals for dropped, equals in zip(cut, tied, strict=True))
+        assert any(equals for equals in tied), "this fixture was supposed to produce a tie"
+
+    def test_a_unique_maximum_is_chosen_exactly_as_before(self):
+        """The negative control: where the objective can tell, nothing changed."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        over = self._over_the_limit(finder)
+        scored = [(finder.value_of([p for p in over if p != q]), q) for q in over]
+        best = max(v for v, _ in scored)
+        winners = [q for v, q in scored if v == best]
+        _settled, cut, _added, tied = finder.settle(1, over)
+        if len(winners) == 1:
+            assert cut[0] == winners[0]
+            assert tied[0] == ()
+        else:
+            # The interesting case, and the live one. Every winner must be reported.
+            assert {cut[0], *tied[0]} == set(winners)
+
+    def test_the_tie_is_named_in_the_rationale(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        rb = _by_name(finder, "RB traded")
+        elite = _by_name(finder, "WR elite")
+        ev = finder.evaluate(
+            TradeProposal(42, (TradeLeg(1, 2, (rb,)), TradeLeg(2, 1, (elite,))))
+        )
+        (rec,) = finder.recommend([dataclasses.replace(ev, confirmed=True)], for_team=1)
+        mine = ev.impact_for(1)
+        if any(mine.cut_alternatives):
+            assert "That cut is a tie" in rec.rationale
+        else:
+            assert "That cut is a tie" not in rec.rationale
 
 
 def test_a_counterparty_the_simulation_says_loses_is_named_not_buried():

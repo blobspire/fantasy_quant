@@ -149,6 +149,12 @@ log = logging.getLogger(__name__)
 #: total, so this is a reallocation of emphasis and not a 20% bonus on every trade.
 PLAYOFF_WEIGHT = 1.2
 
+#: How close two leave-one-out values have to be before `settle` calls them equal. The
+#: usual case is BIT-identical -- a bench player who never starts contributes exactly
+#: zero -- so these only catch the near-ties that float arithmetic manufactures.
+_TIE_ATOL = 1e-9
+_TIE_RTOL = 1e-12
+
 #: Measured on 23,999 paired player-weeks: the SD of (my score - opponent's score).
 #: Used only as the fallback when a live tensor is not available to measure it from.
 MEASURED_SD_DIFF = 34.4
@@ -467,6 +473,12 @@ class TeamImpact:
     after_points: float
     delta_title: float = 0.0
     delta_title_stderr: float = 0.0
+    #: `cut_alternatives[i]` is every player that was EXACTLY as good to cut as
+    #: `dropped[i]`. Usually not empty: 94% of forced cuts on the live leagues are ties,
+    #: because a deep-bench player who never starts is worth bit-identical zero to the
+    #: screen objective. Surfaced rather than hidden, since "cut this one" and "cut any
+    #: of these five" are different pieces of advice.
+    cut_alternatives: tuple[tuple[int, ...], ...] = ()
 
     @property
     def delta_points(self) -> float:
@@ -997,29 +1009,55 @@ class TradeFinder:
 
     def settle(
         self, team_id: int, player_ids: Sequence[int]
-    ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
-        """Bring a post-trade roster back to legal size. Returns `(roster, cut, added)`.
+    ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...], tuple[tuple[int, ...], ...]]:
+        """Bring a post-trade roster back to legal size.
+
+        Returns `(roster, cut, added, tied)`, where `tied[i]` is every player that was
+        exactly as good to cut as `cut[i]`.
 
         This is where the consolidation credit is actually charged and paid, and both
         halves are explicit. Over the limit, the team cuts by greedy leave-one-out
         against the same objective -- receiving two for one is not free. Under it, the
         team signs the best wire body it can, which is the freed spot's value stated in
         points rather than asserted as a constant.
+
+        **The cut used to be decided by ESPN's roster ordering.** `value_of` is a
+        whole-roster starting-lineup objective, so a deep-bench player who never cracks a
+        lineup contributes exactly zero and removing any of them leaves the objective
+        BIT-IDENTICAL. `if value > best_value` keeps the first maximum, and `roster` is
+        `dict.fromkeys(player_ids)` over a franchise built from ESPN's own ordering. So
+        the answer to "who do you cut" was whoever ESPN happened to list first.
+
+        It is not an edge case: measured on the three live leagues, **65 of 69 forced
+        cuts (94%) had at least two bit-exact ties**, with a median tie group of three to
+        five players and a maximum of six. The spread between the best and worst
+        leave-one-out is 97-140 points, so the choice matters enormously in general --
+        it is only among the *top* candidates that it is a dead heat.
+
+        Ties break on the least valuable asset: lowest playoff-weighted rest-of-season
+        points, then lowest player id so the result never depends on an input ordering
+        at all. `startable_count` already writes `self._mu[pid] @ self._w` for exactly
+        this quantity. The equals are returned rather than hidden, because "cut Tank
+        Bigsby" and "cut any one of these five, they are indistinguishable" are different
+        pieces of advice.
         """
         roster = list(dict.fromkeys(player_ids))
         limit = self.capacity.get(team_id, len(roster))
         cut: list[int] = []
         added: list[int] = []
+        tied: list[tuple[int, ...]] = []
 
         while len(roster) > limit:
-            best_pid, best_value = None, -math.inf
-            for pid in roster:
-                value = self.value_of([p for p in roster if p != pid])
-                if value > best_value:
-                    best_pid, best_value = pid, value
-            assert best_pid is not None
+            scored = [(self.value_of([p for p in roster if p != pid]), pid) for pid in roster]
+            best = max(v for v, _ in scored)
+            # A relative tolerance rather than exact equality: letting a 1e-12 difference
+            # in a ~100-point objective decide the cut is the same defect one level down.
+            tol = max(_TIE_ATOL, _TIE_RTOL * abs(best))
+            equals = sorted(pid for v, pid in scored if v >= best - tol)
+            best_pid = min(equals, key=self._cut_priority)
             roster.remove(best_pid)
             cut.append(best_pid)
+            tied.append(tuple(p for p in equals if p != best_pid))
 
         held = set(roster)
         while len(roster) < limit:
@@ -1043,7 +1081,16 @@ class TradeFinder:
             held.add(best_pid)
             added.append(best_pid)
 
-        return tuple(roster), tuple(cut), tuple(added)
+        return tuple(roster), tuple(cut), tuple(added), tuple(tied)
+
+    def _cut_priority(self, player_id: int) -> tuple[float, int]:
+        """Sort key for choosing among equally-costly cuts: least valuable asset first.
+
+        Playoff-weighted rest-of-season points, then the player id. The id is not a
+        tie-break of convenience -- it is what guarantees the answer does not depend on
+        the order ESPN returned the roster in, which is the whole defect.
+        """
+        return float(self._mu[player_id] @ self._w), int(player_id)
 
     # -- cheap asset values ------------------------------------------------------------
 
@@ -1170,7 +1217,7 @@ class TradeFinder:
             if missing:
                 raise TradeError(f"team {team} does not have {sorted(missing)}")
             after = [p for p in current if p not in out] + list(proposal.received_by(team))
-            settled, cut, added = self.settle(team, after)
+            settled, cut, added, tied = self.settle(team, after)
             rosters[team] = settled
             impacts.append(
                 TeamImpact(
@@ -1180,6 +1227,7 @@ class TradeFinder:
                     given=proposal.given_by(team),
                     dropped=cut,
                     added=added,
+                    cut_alternatives=tied,
                     before_points=self.value_of(current),
                     after_points=self.value_of(settled),
                 )
@@ -1670,6 +1718,17 @@ class TradeFinder:
                 + ", ".join(self._name.get(p, str(p)) for p in mine.dropped)
                 + "."
             )
+            # 94% of forced cuts are ties, because the screen objective values a
+            # never-started bench player at bit-identical zero. Naming one player as
+            # though the model had picked him out reads as advice it cannot support.
+            equals = sorted({p for group in mine.cut_alternatives for p in group})
+            if equals:
+                body += (
+                    " That cut is a tie: "
+                    + ", ".join(self._name.get(p, str(p)) for p in equals)
+                    + " cost exactly the same, so pick on something this model does not "
+                    "see."
+                )
         return head + body
 
     # -- the MoveEvaluator protocol ----------------------------------------------------

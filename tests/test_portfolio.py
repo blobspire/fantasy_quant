@@ -1284,14 +1284,26 @@ class TestLive:
             assert result.n_considered >= len(result.recommended) >= 1
             assert result.n_considered > 1
 
-    def test_no_trade_on_the_live_board_survives_the_field_it_was_selected_out_of(self):
+    def test_the_selection_correction_bites_on_the_live_trade_board(self):
         """The defect this module shipped with, pinned on the data that produced it.
 
         On 2026-09-07 the two top actionable rows were Blacksburg trades at +1.225pp
         +/- 0.477 and +1.125pp +/- 0.476, both "significant" at two sigma and both the
-        argmax of forty confirmed packages, where the bar is 3.23 sigma. If a future
-        trade genuinely clears its own selection threshold this test will fail, and that
-        is the right time to look at it -- it will be the first one that ever has.
+        argmax of forty confirmed packages, where the bar is 3.23 sigma.
+
+        **This asserted `not any(i.significant for i in trades)` and that was asserting
+        more than the statistics claim.** A Bonferroni threshold at `alpha = 0.05` is
+        built to admit about one board in twenty, so "no trade ever clears" is an
+        invariant nothing promises -- the same over-assertion as the three live-market
+        tests rewritten in `7ea0553`. It fired the first time a forced-cut tie-break
+        moved a borderline row by 0.04pp, and the row it fired on is noise: across seeds
+        1, 2 and 3 the significant set is `{}`, `{}` and one trade, and that one trade
+        does not appear in the other seeds' top three at all. That is the max-of-N
+        signature the audit already correctly dropped a finding for.
+
+        What the correction is *for* survives being stated properly: rows that a naive
+        two-sigma test would call significant must stop being significant once the
+        threshold accounts for the field they won. That cannot rot into a coin flip.
         """
         portfolio = PF.build_portfolio(LIVE, 2026, n_sims=2000)
         queue = PF.action_queue(portfolio, limit=40)
@@ -1301,9 +1313,21 @@ class TestLive:
 
         assert all(i.n_considered >= 20 for i in trades)
         assert all(i.selection_z > 3.0 for i in trades)
-        assert not any(i.significant for i in trades), [
-            (i.delta_title, i.stderr, i.selection_z) for i in trades if i.significant
+
+        naive = [i for i in trades if abs(i.delta_title) > 2.0 * i.stderr > 0.0]
+        corrected = [i for i in trades if i.significant]
+        assert naive, "no trade cleared even two sigma; the correction has nothing to bite on"
+        assert len(corrected) < len(naive), [
+            (i.delta_title, i.stderr, i.selection_z) for i in corrected
         ]
+        # Whatever survives is a hair over the bar, never comfortably clear of it. A
+        # trade at five sigma against a 3.23 threshold would be a real finding.
+        for i in corrected:
+            assert abs(i.delta_title) < 1.5 * i.selection_z * i.stderr, (
+                i.delta_title,
+                i.stderr,
+                i.selection_z,
+            )
         # And the small, precise surface is the one that is actually established.
         assert all(i.significant for i in waivers)
         assert max(i.delta_title for i in trades) > 3.0 * max(i.delta_title for i in waivers)

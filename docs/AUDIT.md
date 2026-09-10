@@ -1,7 +1,7 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Nine findings are fixed and pushed -- seven from the original nine,
-plus two the audit did not have. Two remain, all located. Read the **Remaining work**
+Status as of 2026-09-10. Ten findings are fixed and pushed -- eight from the original nine,
+plus two the audit did not have. One remains, located. Read the **Remaining work**
 section to continue.
 
 ## Why this file exists
@@ -440,6 +440,59 @@ new tests fail on the parent commit.
 > about what the tag is *for*, not a bug fix. The stale claim in that docstring ("24 to 27 of
 > every 40") is now 14 / 10 / 21 of 40 on today's rosters.
 
+### #9 — the forced cut was a function of ESPN's roster ordering
+
+```python
+if value > best_value:          # keeps the FIRST maximum
+    best_pid, best_value = pid, value
+```
+
+over `roster = list(dict.fromkeys(player_ids))`, which traces back to
+`self.rosters = {f.team_id: tuple(f.player_ids) ...}` — ESPN's own ordering, straight
+through. `value_of` is a whole-roster starting-lineup objective, so a deep-bench player who
+never cracks a lineup contributes exactly zero and removing any of them leaves the objective
+**bit-identical**.
+
+Measured on the three live leagues: **65 of 69 forced cuts (94%) had at least two bit-exact
+ties**, median tie group three to five, maximum six. The spread between the best and worst
+leave-one-out is 97–140 points, so the choice matters enormously in general; it is only among
+the *top* candidates that it is a dead heat.
+
+The proof, and the reason this is a defect rather than an untidiness — shuffle the roster
+before handing it to `settle` and see whether the advice changes:
+
+| | before | after |
+|---|---|---|
+| forced cuts whose chosen player moves under a shuffled input | **65 / 69** | **0 / 69** |
+
+Ties now break on the least valuable asset — lowest playoff-weighted rest-of-season points
+(`self._mu[pid] @ self._w`, the expression `startable_count` already writes), then lowest
+player id so the answer cannot depend on an input ordering at all. A relative tolerance
+rather than exact equality, because letting a 1e-12 difference in a ~100-point objective
+decide the cut is the same defect one level down. The equals come back on
+`TeamImpact.cut_alternatives` and the rationale names them: *"cut this one"* and *"cut any of
+these five, they are indistinguishable"* are different pieces of advice, and after the fix
+**all 69 settlements report a tie**.
+
+> **Scope, honestly: this does not make the trades better.** The screen cannot see which of
+> the tied bodies it throws away, but the confirmation can, so a better tie-break might have
+> shown up as better confirmed deltas. It does not. Across three seeds and three leagues the
+> mean confirmed delta moves −0.064 → −0.072pp, +0.095 → +0.092pp and +0.963 → +0.958pp, the
+> best moves +0.900 → +0.858pp, +0.742 → +0.733pp and +2.317 → +2.308pp, and the counts
+> clearing the selection threshold are identical. All of it is inside the noise. What the fix
+> buys is a **determinate and disclosed** answer, not a better one.
+
+**A live test fired, and it was over-asserting.**
+`test_no_trade_on_the_live_board_survives_the_field_it_was_selected_out_of` asserted
+`not any(i.significant for i in trades)`. A Bonferroni threshold at α = 0.05 is built to admit
+about one board in twenty, so "no trade ever clears" is an invariant nothing promises — the
+same over-assertion as the three live-market tests rewritten in `7ea0553`. It fired when the
+tie-break moved a borderline row by 0.04pp, and the row is noise: across seeds 1, 2 and 3 the
+significant set is `{}`, `{}` and one trade, and that trade is not in the other seeds' top
+three. It now asserts what the correction is *for* — rows a naive two-sigma test would call
+significant must stop being significant once the threshold accounts for the field they won,
+and anything that survives must be a hair over the bar rather than comfortably clear of it.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -453,14 +506,6 @@ new tests fail on the parent commit.
 ## Remaining work
 
 Ranked. Everything below is located and measured; none is started.
-
-### #9 MAJOR — `settle`'s forced cut is decided by ESPN's roster order
-
-`trades.py:982-990` picks the cut by greedy leave-one-out with `if value > best_value`, which
-keeps the **first** maximum. **100% of forced cuts have ≥2 bit-exact ties** — deep-bench
-players who never start contribute exactly zero — so the player cut is whoever ESPN happened to
-list first. Break ties on a meaningful key (lowest playoff-weighted ROS value, then lowest
-player id) and surface the tie count rather than hiding it.
 
 ### Leftovers
 
