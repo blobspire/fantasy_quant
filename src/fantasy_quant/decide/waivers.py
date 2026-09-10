@@ -117,7 +117,7 @@ from .wire import DEFAULT_WIRE_DEPTH as _DEFAULT_WIRE_DEPTH
 from .wire import wire_floor as _wire_floor
 
 if TYPE_CHECKING:  # pragma: no cover - only the type checker needs these
-    from ..espn.league import TransactionLog
+    from ..espn.league import Availability, TransactionLog
     from ..pipeline import LeagueSim
 
 log = logging.getLogger(__name__)
@@ -160,12 +160,68 @@ DEFAULT_PROBE = 4.0
 #: threshold from 0.250pp to 0.171pp on no evidence at all.
 MIN_LOG_WEEKS = 3
 
-#: What every claim rationale ends with. The window is real and it is the cheapest edge
-#: in the system: nothing has to be modelled to exploit it.
+#: Fallback timing advice for a CLAIM when the league's own acquisition settings cannot
+#: be read. The edge is real -- claims are blind and information accrues right up to the
+#: deadline -- but the schedule in it is the ESPN default, not this league's.
+#:
+#: It used to be stamped on every row unconditionally, including on players who cost
+#: nothing and are first-come, where "wait until Tuesday" is the opposite of the right
+#: advice. And its schedule is wrong for all three of the user's leagues: every one of
+#: them processes on six days a week at hour 11 with a 24-hour waiver period, and
+#: Tuesday is the one day none of them process. Prefer `timing_note`.
 TIMING_NOTE = (
-    "Submit as late as Tuesday night allows: claims are blind, snap counts and route "
-    "participation post Monday/Tuesday, and ESPN processes around 3-4am ET Wednesday."
+    "Submit as late as the deadline allows: claims are blind, and snap counts and route "
+    "participation post Monday/Tuesday."
 )
+
+#: What a first-come free agent's rationale ends with. The opposite advice, for the
+#: opposite situation: nothing is spent, nobody is bidding blind, and the only risk in
+#: waiting is that somebody else clicks first.
+FREE_AGENT_TIMING_NOTE = (
+    "This one is first-come and costs no waiver priority, so there is nothing to wait "
+    "for -- add now. Waiting only gives a rival the chance to take him."
+)
+
+#: Week order, so a league's process days read as a schedule rather than a set.
+_DAY_ORDER = (
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "SUNDAY",
+)
+
+
+def timing_note(acquisition: object | None, *, on_waivers: bool) -> str:
+    """When to act, from the league's own settings rather than from a folk rule.
+
+    `waiverHours`, `waiverProcessDays` and `waiverProcessHour` have been parsed into
+    `espn.league.AcquisitionConfig` all along and read by nobody, while every row of the
+    board carried a hardcoded "ESPN processes around 3-4am ET Wednesday". Measured on the
+    user's three leagues, that is wrong in both halves: all three run a 24-hour waiver
+    period and process on six days at hour 11, and **Tuesday is the one day none of them
+    process**. A reader who followed the old sentence would submit into a day the league
+    skips.
+
+    A free agent gets the opposite advice, because he is a different kind of decision.
+    """
+    if not on_waivers:
+        return FREE_AGENT_TIMING_NOTE
+    days = tuple(getattr(acquisition, "waiver_process_days", ()) or ())
+    hour = int(getattr(acquisition, "waiver_process_hour", 0) or 0)
+    hours = int(getattr(acquisition, "waiver_hours", 0) or 0)
+    if not days:
+        return TIMING_NOTE
+    ordered = [d for d in _DAY_ORDER if d in {str(x).upper() for x in days}]
+    listed = ", ".join(d.capitalize() for d in ordered) if ordered else "an unlisted day"
+    period = f" A drop sits on waivers for {hours}h before the next run." if hours else ""
+    return (
+        f"Claims are blind and information accrues until they run, so submit as late as "
+        f"you can: this league processes on {listed} at {hour:02d}:00 "
+        f"(ESPN's `waiverProcessHour`, its own clock).{period}"
+    )
 
 
 class WaiverError(ValueError):
@@ -192,10 +248,18 @@ class FreeAgent:
     #: `ros_points` above the wire's own depth at this position. The screen orders on
     #: this rather than on raw points, or every board is quarterbacks.
     above_wire: float = 0.0
+    #: Whether adding him costs a waiver claim. `True` is the SAFE default: an unknown
+    #: availability must not turn into a board full of "add him now, it's free". See
+    #: `waiver_board`, and `espn.league.Availability` for where the truth comes from.
+    on_waivers: bool = True
 
     @property
     def position(self) -> str:
         return POSITION_ABBREV.get(self.position_id, str(self.position_id))
+
+    @property
+    def cost(self) -> str:
+        return "waiver priority" if self.on_waivers else "free"
 
 
 def _weekly_means(outlook: PlayerOutlook, weeks: Sequence[int]) -> list[float]:
@@ -210,6 +274,7 @@ def free_agent_pool(
     limit: int = DEFAULT_CANDIDATES,
     wire_depth: int = DEFAULT_WIRE_DEPTH,
     positions: Iterable[int] | None = None,
+    on_waivers: Iterable[int] | None = None,
 ) -> tuple[FreeAgent, ...]:
     """Every unrostered player with a pulse, best first.
 
@@ -218,8 +283,15 @@ def free_agent_pool(
     best available running back and is worth nothing, because the quarterback slot can
     be refilled for free and the running back slot cannot. Ordering on raw points gives
     a board that is all quarterbacks, and is the standard way this surface goes wrong.
+
+    `rostered` is what makes a player available at all; `on_waivers` is what makes him
+    cost something. They are different questions and this function used to answer only
+    the first, which is how 809 first-come free agents came to be charged the price of a
+    waiver claim. `None` means "we could not find out", and everything unrostered is then
+    marked as costing a claim -- the expensive assumption, deliberately.
     """
     owned = {int(p) for p in rostered}
+    claimed = None if on_waivers is None else {int(p) for p in on_waivers}
     wanted = None if positions is None else {int(p) for p in positions}
     rows: list[FreeAgent] = []
     for o in outlooks:
@@ -238,6 +310,7 @@ def free_agent_pool(
                 pro_team_id=o.pro_team_id,
                 ros_points=float(sum(means)),
                 next_points=float(means[0]),
+                on_waivers=True if claimed is None else o.player_id in claimed,
             )
         )
     by_position: dict[int, list[float]] = {}
@@ -1212,6 +1285,29 @@ class AugmentedSim:
     floor: Mapping[int, float]
 
 
+def _availability(sim: LeagueSim) -> Availability | None:
+    """Ask ESPN who is actually on waivers, or give up loudly.
+
+    One request. A failure is not fatal but it IS expensive: with no answer every
+    unrostered player is treated as costing a claim, which is what this whole split
+    exists to stop doing. So it is logged at warning, not info.
+    """
+    league = getattr(sim, "league", None)
+    getter = getattr(league, "availability", None)
+    if getter is None:
+        return None
+    try:
+        return getter()
+    except Exception as err:  # noqa: BLE001 - offline, unauthed, or a moved endpoint
+        log.warning(
+            "could not read waiver status for league %s (%s); every free agent will be "
+            "priced as if it cost a waiver claim, which understates the board",
+            sim.state.league_id,
+            err,
+        )
+        return None
+
+
 def _all_rostered(state: S.LeagueState) -> set[int]:
     return {p for f in state.franchises for p in f.player_ids}
 
@@ -1344,19 +1440,49 @@ class WaiverReport:
     continuation: ContinuationTable | None
     #: Every confirmed candidate, best first.
     board: tuple[Recommendation, ...]
-    #: The conditional waterfall: everything above the threshold, in submission order.
+    #: The conditional waterfall: everything ON WAIVERS above the threshold, in
+    #: submission order. These cost priority if they land.
     claims: tuple[Recommendation, ...]
     #: Blocking candidates, already discounted by 1/(N-1).
     blocks: tuple[Recommendation, ...]
     hold: Recommendation
     free_agents: tuple[FreeAgent, ...]
+    #: Positive adds that cost NOTHING -- first-come free agents, no priority spent, no
+    #: threshold to clear, available right now. Kept separate from `claims` rather than
+    #: merged into it, because everything downstream prices a claim at "waiver priority"
+    #: (`report._SURFACE_COST`, the queue's `actionable`, `portfolio._waiver_recs`) and
+    #: mixing the two would relabel a free add as costing the thing it does not cost.
+    free_adds: tuple[Recommendation, ...] = ()
+    #: How many unrostered players actually cost a claim, and how many are simply free.
+    #: `None` when ESPN was not asked, in which case every candidate was treated as
+    #: costing one -- the expensive assumption.
+    n_on_waivers: int | None = None
+    n_free_agents_available: int | None = None
     #: False when the waiver order could not be read and `priority` is an assumption
     #: rather than a fact. The threshold is only as good as this.
     priority_known: bool = True
 
     @property
     def best(self) -> Recommendation:
+        """The single thing to do. A free add outranks a claim at equal value.
+
+        Not because it is worth more -- it is worth the same -- but because it costs
+        nothing and cannot be contested, so at a tie it strictly dominates.
+        """
+        if self.free_adds and self.claims:
+            return (
+                self.free_adds[0]
+                if self.free_adds[0].delta_title >= self.claims[0].delta_title
+                else self.claims[0]
+            )
+        if self.free_adds:
+            return self.free_adds[0]
         return self.claims[0] if self.claims else self.hold
+
+    @property
+    def actions(self) -> tuple[Recommendation, ...]:
+        """Everything worth doing, free adds first. Empty means hold."""
+        return (*self.free_adds, *self.claims)
 
     def table(self, limit: int = 12) -> str:
         cost = (
@@ -1463,8 +1589,9 @@ def _rationale(
     lever: float,
     *,
     priority_known: bool = True,
+    acquisition: object | None = None,
 ) -> str:
-    lead = f"Claim {agent.name} ({agent.position})"
+    lead = ("Claim " if agent.on_waivers else "Add ") + f"{agent.name} ({agent.position})"
     lead += f", drop {drop_name}" if drop_name and drop_name != "-" else " into the open spot"
     body = (
         f"{price.delta_points:+.1f} starting-lineup points over the rest of the season, "
@@ -1486,7 +1613,17 @@ def _rationale(
                 "points."
             )
         )
-    if priority is not None:
+    if not agent.on_waivers:
+        # He costs nothing, so there is no continuation value to clear and no threshold
+        # to compare against. Charging him one is what suppressed 24 of 28 profitable
+        # rows on a board where 809 of the 841 available players were free.
+        verdict = (
+            "ESPN has him as a plain free agent, not on waivers: no priority is spent "
+            "and no claim is contested, so any positive number here is worth taking."
+            if price.delta_title > 0.0
+            else "He costs nothing, but he is not worth a roster spot either."
+        )
+    elif priority is not None:
         verdict = (
             f"Above the {threshold * 100:.3f}pp continuation value of holding priority "
             f"{priority}, so spending it is right."
@@ -1507,7 +1644,8 @@ def _rationale(
         if lever > 0.6
         else "; the coming game barely cares, so this is a rest-of-season claim."
     )
-    return " ".join([lead + ".", body, verdict, lever_note, TIMING_NOTE])
+    timing = timing_note(acquisition, on_waivers=agent.on_waivers)
+    return " ".join([lead + ".", body, verdict, lever_note, timing])
 
 
 def _hold_rationale(
@@ -1516,10 +1654,47 @@ def _hold_rationale(
     threshold: float,
     board: Sequence[Recommendation],
     claims: Sequence[Recommendation],
+    free_adds: Sequence[Recommendation] = (),
     *,
     priority_known: bool = True,
+    acquisition: object | None = None,
 ) -> str:
     best = board[0].delta_title if board else 0.0
+    if free_adds:
+        # "Hold" is the wrong word when something on the board costs nothing. This branch
+        # used to be unreachable, because every free agent was charged a waiver claim and
+        # filtered out before it could be reported.
+        #
+        # Singular on purpose. These are ALTERNATIVES: each was priced on its own against
+        # today's roster and most of them drop the same player, so their gains are not
+        # additive and "make all 23" is not a thing anyone can do. Same submodularity the
+        # claim waterfall warns about, in a place where nothing stops the reader acting.
+        drops = {_tag(r, "drop:") for r in free_adds}
+        alternatives = len(free_adds) - 1
+        lead = (
+            f"Add {_tag(free_adds[0], 'add:')} now for "
+            f"{free_adds[0].delta_title * 100:+.2f}pp. He is a plain free agent, not on "
+            "waivers: no priority is spent, no claim can be contested, and there is no "
+            "threshold to clear or deadline to wait for."
+        )
+        if alternatives:
+            lead += (
+                f" {alternatives} other free add(s) also help, but they are alternatives "
+                "to this one rather than additions"
+                + (
+                    " -- every one of them drops the same player."
+                    if len(drops) <= 1
+                    else f": they drop {len(drops)} different players between them, and each "
+                    "was priced on its own against today's roster, so two together are "
+                    "worth less than the sum. Make one, then re-run."
+                )
+            )
+        if not claims:
+            return (
+                f"{lead} Nothing that would cost a claim is worth one: the best is "
+                f"{best * 100:+.2f}pp against a {threshold * 100:.3f}pp continuation value."
+            )
+        return lead
     caveat = (
         ""
         if uses_faab or priority_known
@@ -1534,7 +1709,8 @@ def _hold_rationale(
         )
         return (
             f"Hold. The best claim on the board is worth {best * 100:+.2f}pp and {cost}, "
-            f"so spending now destroys value.{caveat} {TIMING_NOTE}"
+            f"so spending now destroys value.{caveat} "
+            f"{timing_note(acquisition, on_waivers=True)}"
         )
     currency = "budget" if uses_faab else "priority"
     # The "a losing claim is free" argument is exact. "Submit them all" is only exact
@@ -1557,7 +1733,8 @@ def _hold_rationale(
         f"Submit all {len(claims)} claims as one conditional waterfall, best first: a "
         f"losing claim costs nothing, so submitting every candidate above the "
         f"{threshold * 100:.3f}pp threshold weakly dominates submitting one. Only a "
-        f"successful claim spends {currency}.{interaction}{caveat} {TIMING_NOTE}"
+        f"successful claim spends {currency}.{interaction}{caveat} "
+        f"{timing_note(acquisition, on_waivers=True)}"
     )
 
 
@@ -1747,6 +1924,7 @@ def waiver_board(
     blocks: int = 3,
     faab_rivals: int = 1,
     use_log: bool = True,
+    on_waivers: Iterable[int] | None = None,
 ) -> WaiverReport:
     """Rank every plausible claim in one league by `delta_title`, and say whether to make it.
 
@@ -1776,6 +1954,7 @@ def waiver_board(
         log.info(
             "no settings for league %s (%s); using the arguments as given", state.league_id, err
         )
+    acquisition = None if settings is None else settings.acquisition
     if settings is not None:
         uses_faab = settings.acquisition.uses_faab if uses_faab is None else uses_faab
         budget = budget or settings.acquisition.budget
@@ -1783,8 +1962,15 @@ def waiver_board(
             roster_limit = settings.roster.starter_count + settings.roster.bench_slots
     uses_faab = bool(uses_faab)
 
+    availability = _availability(sim) if on_waivers is None else None
+    claimable = on_waivers if on_waivers is not None else getattr(availability, "on_waivers", None)
     agents = free_agent_pool(
-        sim.outlooks, _all_rostered(state), state.weeks, limit=candidates, wire_depth=wire_depth
+        sim.outlooks,
+        _all_rostered(state),
+        state.weeks,
+        limit=candidates,
+        wire_depth=wire_depth,
+        on_waivers=claimable,
     )
     if not agents:
         raise WaiverError(f"league {state.league_id} has no projected free agents")
@@ -1978,11 +2164,25 @@ def waiver_board(
                     bid,
                     lever,
                     priority_known=uses_faab or priority_known,
+                    acquisition=acquisition,
                 ),
             )
         )
 
-    claims = tuple(r for r in finished if r.delta_title > 0.0 and r.delta_title >= threshold)
+    # The split this module existed without. A player ESPN has as FREEAGENT is
+    # first-come and costs nothing, so the only question is whether he helps; a player
+    # on WAIVERS costs a claim, and that claim has a continuation value he has to clear.
+    # Charging the threshold to both is what suppressed 24 of 28 profitable rows on a
+    # board where 809 of 841 available players were free.
+    on_waivers_by_id = {a.player_id: a.on_waivers for a in agents}
+
+    def _costs_a_claim(rec: Recommendation) -> bool:
+        add_id = next((p.player_id for p in rec.move.players if p.to_team is not None), None)
+        return on_waivers_by_id.get(add_id, True) if add_id is not None else True
+
+    positive = [r for r in finished if r.delta_title > 0.0]
+    claims = tuple(r for r in positive if _costs_a_claim(r) and r.delta_title >= threshold)
+    free_adds = tuple(r for r in positive if not _costs_a_claim(r))
     hold = Recommendation(
         move=Move(kind=MoveKind.HOLD, league_id=state.league_id),
         delta_title=0.0,
@@ -1995,7 +2195,9 @@ def waiver_board(
             threshold,
             finished,
             claims,
+            free_adds,
             priority_known=uses_faab or priority_known,
+            acquisition=acquisition,
         ),
         confidence="high",
         tags=("waiver", "hold"),
@@ -2025,6 +2227,9 @@ def waiver_board(
         continuation=table,
         board=tuple(finished),
         claims=claims,
+        free_adds=free_adds,
+        n_on_waivers=None if availability is None else availability.n_on_waivers,
+        n_free_agents_available=None if availability is None else availability.n_free_agents,
         blocks=block_recs,
         hold=hold,
         free_agents=agents,

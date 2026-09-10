@@ -1170,6 +1170,34 @@ def _is_auth_error(err: EspnError) -> bool:
     return str(err).startswith("401")
 
 
+#: One page of the availability probe. 32 players were on waivers on the live league this
+#: was written against, so a single page is the normal case; the client pages anyway.
+_AVAILABILITY_PAGE = 250
+
+
+@dataclass(frozen=True, slots=True)
+class Availability:
+    """Which unrostered players cost a waiver claim, and which are simply free.
+
+    ESPN's `playerStatusTypes` has three values -- FREEAGENT, ONTEAM, WAIVERS -- and only
+    the third costs anything to acquire. `on_waivers` is the set that does. Anything
+    unrostered and absent from it is free by elimination, so a caller never needs to fetch
+    the free-agent ids themselves; `n_free_agents` is carried for reporting, because "809
+    of these cost you nothing" is the answer to "why am I being told to wait until
+    Tuesday".
+    """
+
+    on_waivers: frozenset[int]
+    n_free_agents: int
+
+    @property
+    def n_on_waivers(self) -> int:
+        return len(self.on_waivers)
+
+    def costs_a_claim(self, player_id: int) -> bool:
+        return int(player_id) in self.on_waivers
+
+
 class League:
     """One (league_id, season). Every accessor returns dataclasses.
 
@@ -1363,6 +1391,52 @@ class League:
 
         collected.sort(key=lambda t: (t.scoring_period_id, t.proposed_date or 0))
         return TransactionLog(transactions=tuple(collected), weeks_covered=wanted)
+
+    # -- availability ------------------------------------------------------------------
+
+    def availability(self) -> Availability:
+        """Who is on waivers right now, and how many are simply free.
+
+        The distinction ESPN draws and this codebase did not. A player dropped inside the
+        waiver period is `WAIVERS` and costs a claim; once the period elapses he becomes
+        `FREEAGENT` and anyone can add him first-come at no cost. Nothing upstream of the
+        waiver board knew the difference -- "free agent" meant nothing more than "not on a
+        roster in this league" -- so every unrostered player was charged the continuation
+        value of spending waiver priority. Measured live on one of the user's leagues:
+        809 free agents against 32 on waivers.
+
+        One request, not four: only the `WAIVERS` ids are worth fetching, because anything
+        unrostered that is not on that list is free by elimination -- ESPN's
+        `playerStatusTypes` has exactly three values. The free-agent count comes off the
+        `x-fantasy-filter-player-count` header of a `limit=1` probe, for reporting.
+        """
+        on_waivers = tuple(
+            int(entry["id"])
+            for entry in self._client.player_pool(
+                self._url,
+                limit=_AVAILABILITY_PAGE,
+                extra_filter={"filterStatus": {"value": ["WAIVERS"]}},
+                params={"view": "kona_player_info"},
+            )
+            if entry.get("id") is not None
+        )
+        _, headers = self._client.get(
+            self._url,
+            params={"view": "kona_player_info"},
+            fantasy_filter={
+                "players": {
+                    "limit": 1,
+                    "offset": 0,
+                    "sortPercOwned": {"sortAsc": False, "sortPriority": 1},
+                    "filterStatus": {"value": ["FREEAGENT"]},
+                }
+            },
+        )
+        raw = headers.get("x-fantasy-filter-player-count")
+        return Availability(
+            on_waivers=frozenset(on_waivers),
+            n_free_agents=int(raw) if raw else 0,
+        )
 
 
 def open_league(

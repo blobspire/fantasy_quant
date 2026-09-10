@@ -26,6 +26,7 @@ Everything is offline and fast. No test here touches ESPN.
 
 from __future__ import annotations
 
+import contextlib
 import math
 from types import SimpleNamespace
 
@@ -33,6 +34,7 @@ import numpy as np
 import pytest
 
 from fantasy_quant.core import Move, MoveKind, PlayerOutlook, Recommendation, WeeklyOutlook
+from fantasy_quant.decide import waivers as W
 from fantasy_quant.decide.waivers import (
     DEFAULT_CONTEST_RATE,
     MIN_LOG_WEEKS,
@@ -47,6 +49,7 @@ from fantasy_quant.decide.waivers import (
     _promotion_matrix,
     _rival_gain_after_drop,
     _roster_floor,
+    _tag,
     arrival_rate_from_log,
     blocking_value,
     claim_move,
@@ -1090,6 +1093,23 @@ def _fake_sim(state, outlooks, *, n_sims=200, seed=5, league=None):
     )
 
 
+@contextlib.contextmanager
+def _threshold_pinned_at(value: float):
+    """Force the continuation value, so the suppression case can be exhibited.
+
+    `OpportunityDistribution.from_board` derives the threshold from the board itself, so
+    a fixture with one dominant candidate always clears its own bar. The real leagues do
+    not have that shape -- they have dozens of comparable marginal adds, and the value of
+    holding priority sits above most of them.
+    """
+    original = W.ContinuationTable.threshold
+    try:
+        W.ContinuationTable.threshold = lambda self, week, priority: value  # type: ignore[method-assign]
+        yield
+    finally:
+        W.ContinuationTable.threshold = original  # type: ignore[method-assign]
+
+
 def _board(*, league=None, weeks=(1, 2, 3, 4), **kw):
     extra = tuple(
         _outlook(9000 + i, WR, 90 + i, dict.fromkeys(weeks, mu), name=f"FA{i}")
@@ -1114,11 +1134,91 @@ class TestBoard:
         assert all("waiver" in r.tags for r in report.board)
 
     def test_every_claim_clears_the_threshold_and_nothing_else_does(self):
-        """The stopping rule, applied. This is the one decision the module makes."""
+        """The stopping rule, applied -- to the players it is a rule ABOUT.
+
+        The threshold is the continuation value of spending waiver priority, so it can
+        only be charged to a player who costs waiver priority. This fixture supplies no
+        availability, which means every candidate is assumed to be on waivers, so here
+        the rule really does apply to the whole board. See
+        `test_a_free_agent_is_not_charged_the_price_of_a_claim` for the other case.
+        """
         report = _board(priority=1)
+        assert report.free_adds == (), "the fixture should default to everyone on waivers"
         assert all(r.delta_title >= report.threshold for r in report.claims)
         rejected = [r for r in report.board if r not in report.claims]
         assert all(r.delta_title < report.threshold or r.delta_title <= 0.0 for r in rejected)
+
+    def test_a_free_agent_is_not_charged_the_price_of_a_claim(self):
+        """The bug this split exists for.
+
+        In the user's real leagues 809 of the 841 available players are plain free
+        agents -- first come, no priority spent, no contest. Every one of them was being
+        made to clear the continuation value of a waiver claim, which suppressed 24 of 28
+        profitable rows as "hold". A threshold that high is the right answer to a
+        question nobody asked about these players.
+        """
+        charged = _board(priority=1)
+        free = _board(priority=1, on_waivers=())
+
+        assert charged.threshold == free.threshold, "the threshold itself must not move"
+        assert charged.claims and not charged.free_adds
+        assert free.free_adds and not free.claims
+
+        # THE RULE. When nothing costs anything, every positive row is actionable --
+        # there is no threshold left to fail. When everything costs a claim, only the
+        # rows clearing the continuation value survive. So the free set is always a
+        # superset of the charged set, and the difference is exactly what the bug ate.
+        positive = {_tag(r, "add:") for r in free.board if r.delta_title > 0.0}
+        assert {_tag(r, "add:") for r in free.free_adds} == positive
+        assert {_tag(r, "add:") for r in charged.claims} <= positive
+
+        # The board itself -- the prices -- must be identical. Only the verdict moved.
+        assert [r.delta_title for r in charged.board] == [r.delta_title for r in free.board]
+
+    def test_a_positive_row_below_the_threshold_is_held_when_charged_and_taken_when_free(
+        self,
+    ):
+        """The suppression itself, forced rather than hoped for.
+
+        The fixture's continuation value is derived from its own board, so on a board
+        with one dominant candidate the best row always clears it. Pricing the threshold
+        directly is the only way to exhibit the case that matters -- and it is the case
+        the user's real leagues are full of: 24 of 28 profitable rows sat under it.
+        """
+        best = max(r.delta_title for r in _board(priority=1).board)
+        assert best > 0.0
+
+        with _threshold_pinned_at(best * 1.5):
+            # Nothing is worth a claim at this price...
+            stingy = _board(priority=1)
+            assert stingy.claims == ()
+            assert "Hold" in stingy.hold.rationale
+
+            # ...and the identical board, at the identical price, is all action once
+            # ESPN says those same players cost nothing.
+            freed = _board(priority=1, on_waivers=())
+
+        assert freed.threshold == stingy.threshold
+        assert freed.free_adds
+        assert freed.free_adds[0].delta_title == pytest.approx(best)
+
+    def test_an_unreadable_waiver_status_charges_everyone_rather_than_nobody(self):
+        """The safe default, and it is the expensive one on purpose.
+
+        Getting this backwards would turn "ESPN did not answer" into a board full of
+        "add him now, it is free" -- an irreversible spend on no evidence. Same argument
+        as the unknown-priority default just below.
+        """
+        report = _board(priority=1, on_waivers=None)
+        assert all(a.on_waivers for a in report.free_agents)
+        assert report.free_adds == ()
+        assert report.n_on_waivers is None
+
+    def test_a_free_add_outranks_an_equally_good_claim(self):
+        """At a tie the free one strictly dominates: it cannot be contested or outbid."""
+        free = _board(priority=1, on_waivers=())
+        assert free.best in free.free_adds
+        assert free.best.delta_title == max(r.delta_title for r in free.actions)
 
     def test_the_worst_priority_has_a_zero_threshold_so_every_gain_is_claimable(self):
         report = _board(priority=4)
@@ -1141,7 +1241,37 @@ class TestBoard:
         for rec in report.board:
             assert rec.rationale
             assert "title probability" in rec.rationale
-            assert "3-4am ET Wednesday" in rec.rationale
+            # Timing advice, but no longer a hardcoded "3-4am ET Wednesday". That
+            # sentence was wrong for all three of the user's real leagues -- every one
+            # of them processes on six days at hour 11 and Tuesday is the one day none
+            # of them run -- so the schedule now comes from the league's own settings,
+            # and this fixture has none, so it gets the generic fallback.
+            assert "submit as late as" in rec.rationale.lower()
+
+    def test_a_first_come_free_agent_is_not_told_to_wait_until_tuesday(self):
+        """The advice has to match the cost. It used to be stamped on every row."""
+        report = _board(priority=2, on_waivers=())
+        assert report.free_adds, "nothing was free, so the branch is untested"
+        for rec in report.free_adds:
+            assert "add now" in rec.rationale.lower()
+            assert "costs no waiver priority" in rec.rationale
+            assert "submit as late as" not in rec.rationale.lower()
+
+    def test_the_league_schedule_drives_the_timing_note_rather_than_a_folk_rule(self):
+        class _Acq:
+            waiver_hours = 24
+            waiver_process_days = ("WEDNESDAY", "MONDAY", "FRIDAY")
+            waiver_process_hour = 11
+
+        note = W.timing_note(_Acq(), on_waivers=True)
+        # Week order, not the order ESPN happened to return them in.
+        assert "Monday, Wednesday, Friday" in note
+        assert "11:00" in note
+        assert "24h" in note
+        assert W.timing_note(_Acq(), on_waivers=False) == W.FREE_AGENT_TIMING_NOTE
+        # No settings at all still says something useful, and says nothing false.
+        assert W.timing_note(None, on_waivers=True) == W.TIMING_NOTE
+        assert "Wednesday" not in W.TIMING_NOTE
 
     def test_a_claim_is_an_add_and_a_drop(self):
         report = _board(priority=4)
@@ -1541,3 +1671,74 @@ class TestWireLevelsCarriesADistribution:
 
         level = wire.wire_levels([], [], self.WEEKS, {4: frozenset({3})})[4]
         assert (level.mean, level.sd, level.p_zero) == (0.0, 0.0, 1.0)
+
+
+@pytest.mark.network
+class TestAvailabilityAgainstTheRealLeagues:
+    """ESPN really does draw the distinction; we really were ignoring it."""
+
+    LEAGUES = [
+        (272150391, "Wine Wednesday", 1),
+        (161496047, "Blacksburg Baddies", 1),
+        (634537479, "Type shi season 2 actually", 2),
+    ]
+
+    @pytest.fixture(scope="class")
+    def client(self):
+        from fantasy_quant.pipeline import client_from_env
+
+        c = client_from_env()
+        yield c
+        c.close()
+
+    @pytest.mark.parametrize("league_id,name,my_team", LEAGUES)
+    def test_most_of_the_wire_costs_nothing_at_all(self, client, league_id, name, my_team):
+        """The fact the board was built without.
+
+        Every one of these leagues has an order of magnitude more free agents than
+        players on waivers -- ~780-810 against ~30 -- and each of those 780 used to be
+        charged the continuation value of a waiver claim it does not cost.
+        """
+        from fantasy_quant.espn.league import League
+
+        got = League(client, league_id, 2026).availability()
+        assert got.n_free_agents > 100
+        assert got.n_on_waivers >= 0
+        assert got.n_free_agents > 10 * max(got.n_on_waivers, 1)
+        # An id on waivers is a real player id, not a sentinel.
+        assert all(isinstance(pid, int) for pid in got.on_waivers)
+
+    @pytest.mark.parametrize("league_id,name,my_team", LEAGUES)
+    def test_reading_the_status_unlocks_adds_the_threshold_was_suppressing(
+        self, client, league_id, name, my_team
+    ):
+        """The whole point, measured end to end on the live league.
+
+        Same board, same prices, same threshold -- the only thing that changes is
+        whether a player who costs nothing is made to clear the price of a claim.
+        """
+        from fantasy_quant import pipeline as P
+
+        sim = P.build(league_id, 2026, my_team_id=my_team, client=client, n_sims=600)
+        real = waiver_board(sim, team_id=my_team, candidates=40, confirm=10, screen_sims=200)
+        blind = waiver_board(
+            sim,
+            team_id=my_team,
+            candidates=40,
+            confirm=10,
+            screen_sims=200,
+            # Every player treated as costing a claim -- which is exactly what the module
+            # did before it could ask, and what it still does when ESPN will not answer.
+            on_waivers=[o.player_id for o in sim.outlooks],
+        )
+
+        # `blind` is the old behaviour: nothing is free, so everything is charged. It
+        # must reproduce the old shape exactly -- no free adds at all.
+        assert blind.free_adds == ()
+        assert blind.threshold == pytest.approx(real.threshold)
+        assert [r.delta_title for r in blind.board] == [r.delta_title for r in real.board]
+
+        # And the fix must actually surface something, on every league.
+        assert real.n_on_waivers is not None and real.n_free_agents_available is not None
+        assert real.free_adds, f"{name}: nothing on the wire is free, which cannot be right"
+        assert len(real.actions) >= len(blind.claims)

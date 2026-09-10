@@ -503,6 +503,14 @@ export interface WaiverRow extends Recommendation {
   bracket_title: number;
   bracket_stderr: number;
   agrees: boolean;
+  /**
+   * Whether adding him costs a waiver claim. False means ESPN has him as a plain
+   * FREEAGENT: first come, no priority spent, no threshold to clear. Roughly 780-810
+   * of the ~840 available players in each league are in that state.
+   */
+  on_waivers: boolean;
+  /** "waiver priority" or "free". Derived from `on_waivers`; do not rank on it. */
+  cost: string;
   /** `delta_title >= threshold`, printed as a fact by the CLI -- see `clears_certain`. */
   clears_threshold: boolean;
   clears_margin: number;
@@ -530,12 +538,27 @@ export interface WaiversPayload {
   week_leverage: number;
   sd_diff: number;
   n_free_agents: number;
+  /** How many unrostered players actually cost a claim. Null when ESPN was not asked. */
+  n_on_waivers: number | null;
+  /** How many are simply free. Null when ESPN was not asked. */
+  n_free_agents_available: number | null;
   board: WaiverRow[];
+  /** Costs waiver priority, and clears the continuation value of holding it. */
   claims: WaiverRow[];
+  /**
+   * Positive adds that cost NOTHING. Kept apart from `claims` because everything
+   * downstream prices a claim at "waiver priority", and merging the two would label a
+   * free add as spending the scarcest thing on the board.
+   *
+   * These are ALTERNATIVES, not a shopping list: each was priced on its own against
+   * today's roster and most share a drop, so the gains are not additive.
+   */
+  free_adds: WaiverRow[];
   blocks: WaiverRow[];
   hold: Recommendation;
   best: Recommendation;
   any_claim: boolean;
+  any_action: boolean;
   waterfall_note: string;
 }
 

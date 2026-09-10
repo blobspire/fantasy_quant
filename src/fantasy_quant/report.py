@@ -877,6 +877,7 @@ def waivers_payload(
     team_id = ws.my_team_id(cfg)
     names = ws.names(cfg)
     report = waivers_mod.waiver_board(sim, team_id=team_id, week=week)
+    on_waivers = {a.name: a.on_waivers for a in report.free_agents}
 
     def _row(rec: Recommendation) -> dict[str, Any]:
         price = waivers_mod.price_of(rec)
@@ -896,7 +897,20 @@ def waivers_payload(
                 "verdict": (
                     "act" if price.significant else ("null" if not rec.delta_title else "noise")
                 ),
-                "clears_threshold": rec.delta_title >= report.threshold,
+                # A player who costs no waiver claim has no threshold to clear. Reporting
+                # one against him is the presentation half of the bug in `waiver_board`:
+                # a first-come free agent was being told to wait for a Wednesday run.
+                "on_waivers": on_waivers.get(tag_value(rec, "add:"), True),
+                "cost": (
+                    "waiver priority"
+                    if on_waivers.get(tag_value(rec, "add:"), True)
+                    else "free"
+                ),
+                "clears_threshold": (
+                    rec.delta_title >= report.threshold
+                    if on_waivers.get(tag_value(rec, "add:"), True)
+                    else rec.delta_title > 0.0
+                ),
                 # The `clears?` column was a hard `>=` against a threshold, printed as a
                 # fact, and the claim waterfall is cut on it. Live, the margin over the
                 # threshold is inside the row's own error on the marginal candidate in
@@ -931,12 +945,19 @@ def waivers_payload(
         "week_leverage": report.week_leverage,
         "sd_diff": report.sd_diff,
         "n_free_agents": len(report.free_agents),
+        # What the league actually looks like right now. "809 of these cost you nothing"
+        # is the answer to "why am I being told to wait until Tuesday", and it is the
+        # first thing a reader should see next to a threshold.
+        "n_on_waivers": report.n_on_waivers,
+        "n_free_agents_available": report.n_free_agents_available,
         "board": board,
         "claims": claims,
+        "free_adds": [_row(r) for r in report.free_adds],
         "blocks": [_row(r) for r in report.blocks],
         "hold": rec_payload(report.hold, names, team_id=team_id, surface="waiver"),
         "best": rec_payload(report.best, names, team_id=team_id, surface="waiver"),
         "any_claim": bool(claims),
+        "any_action": bool(claims) or bool(report.free_adds),
         "waterfall_note": (
             "A losing claim is free -- winning moves you to the back of the queue and "
             "losing leaves you where you were -- so submit every candidate above the "
@@ -1572,14 +1593,25 @@ def actions_from(cfg: registry.LeagueConfig, payload: Mapping[str, Any]) -> list
     out: list[Action] = []
 
     claims = _get(payload, "waivers", "claims") or []
+    free_adds = _get(payload, "waivers", "free_adds") or []
     board = _get(payload, "waivers", "board") or []
     priority = _get(payload, "waivers", "priority")
     uses_faab = bool(_get(payload, "waivers", "uses_faab"))
-    top = (claims or board)[:1]
+    # A free add leads over a claim of equal size: same gain, no priority spent, nothing
+    # to contest. Falling back to `board` keeps the "nothing is worth doing" row visible.
+    actions = free_adds or claims
+    top = (actions or board)[:1]
     for row in top:
-        cost = "FAAB" if uses_faab else "waiver priority"
+        free = row.get("on_waivers") is False
+        cost = "free" if free else ("FAAB" if uses_faab else "waiver priority")
         spend = (
-            f" Spends waiver priority {priority}." if priority is not None and not uses_faab else ""
+            ""
+            if free
+            else (
+                f" Spends waiver priority {priority}."
+                if priority is not None and not uses_faab
+                else ""
+            )
         )
         out.append(
             Action(
@@ -1588,7 +1620,8 @@ def actions_from(cfg: registry.LeagueConfig, payload: Mapping[str, Any]) -> list
                 season=cfg.season,
                 team_id=team_id,
                 surface="waiver",
-                headline=f"Claim {row.get('add', '?')} ({row.get('position', '?')}), "
+                headline=("Add " if free else "Claim ")
+                + f"{row.get('add', '?')} ({row.get('position', '?')}), "
                 f"drop {row.get('drop', '-')}.{spend}",
                 delta_title=float(row.get("delta_title") or 0.0),
                 stderr=float(row.get("stderr") or 0.0),
@@ -1597,18 +1630,23 @@ def actions_from(cfg: registry.LeagueConfig, payload: Mapping[str, Any]) -> list
                 verdict=str(row.get("verdict") or "noise"),
                 confidence=str(row.get("confidence") or "medium"),
                 cost=cost,
-                deadline="Tuesday night (ESPN runs waivers ~3-4am ET Wednesday)"
-                if not uses_faab
-                else "Tuesday night",
+                # No hardcoded Wednesday. All three of the user's leagues process on six
+                # days at hour 11 and Tuesday is the one day none of them run, so the
+                # schedule belongs to the league; the surface's own rationale carries it.
+                deadline="now -- first come, no claim" if free else "next waiver run",
                 tags=tuple(row.get("tags") or ()),
                 rationale=str(row.get("rationale") or ""),
                 # A claim can be a real measured gain and still not be worth making: the
                 # threshold it has to clear is the continuation value of *holding* the
                 # priority for a better week. Significance and executability are two
                 # different questions and collapsing them loses the interesting one.
-                actionable=bool(claims),
+                #
+                # A free agent has no such threshold, which is why `actions` and not
+                # `claims` decides this. Charging one to him is what turned 24 of 28
+                # profitable rows into "hold".
+                actionable=bool(actions),
                 blockers=()
-                if claims
+                if actions
                 else ("below the continuation value of holding waiver priority",),
             )
         )
@@ -1717,8 +1755,13 @@ def actions_from(cfg: registry.LeagueConfig, payload: Mapping[str, Any]) -> list
                 significant=bool(stream.get("significant")),
                 verdict=str(stream.get("verdict") or "noise"),
                 confidence=str(stream.get("confidence") or "medium"),
-                cost="waiver priority",
-                deadline="Tuesday night",
+                # Usually free, and the module knows it: `decide/streaming.py` notes
+                # that a 14-team league rosters 15 of the 32 defences, so 17 are plain
+                # free agents costing nothing at all. Flatly labelling every streaming
+                # move "waiver priority" priced a free add as if it spent the scarcest
+                # thing on the board.
+                cost=_streaming_cost(payload, stream),
+                deadline="next waiver run",
                 tags=tuple(stream.get("tags") or ()),
                 rationale=str(stream.get("rationale") or ""),
                 actionable=not held,
@@ -1938,6 +1981,34 @@ def render_lineup(payload: Mapping[str, Any], out: Console | None = None) -> Non
         out.print(Text(f"  guard: {payload['guard']}", style="dim"))
 
 
+def _streaming_cost(payload: Mapping[str, Any], stream: Mapping[str, Any]) -> str:
+    """What the streamed add actually costs, read off the waiver board's availability.
+
+    Falls back to "waiver priority" when the board did not report one, which is the
+    expensive assumption and the right one to make on no information.
+    """
+    on_waivers = _get(payload, "waivers", "board") or []
+    status = {row.get("add"): row.get("on_waivers", True) for row in on_waivers}
+    gets = stream.get("add") or stream.get("gets")
+    if isinstance(gets, str) and status.get(gets) is False:
+        return "free"
+    return "waiver priority"
+
+
+def _availability_note(payload: Mapping[str, Any]) -> str:
+    """"29 on waivers, 782 free" -- the fact that makes the threshold column readable.
+
+    Empty when ESPN was not asked, because the honest reading of a missing answer is that
+    every candidate was priced as if it cost a claim, and saying nothing is better than
+    printing a count we do not have.
+    """
+    on_waivers = payload.get("n_on_waivers")
+    free = payload.get("n_free_agents_available")
+    if on_waivers is None or free is None:
+        return "waiver status unread -- every row priced as if it cost a claim"
+    return f"{on_waivers} on waivers, {free} free"
+
+
 def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> None:
     out = out or console
     if payload["uses_faab"]:
@@ -1953,6 +2024,7 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
             ("waivers  ", "bold"),
             (f"{cost}   "),
             (f"claim threshold {payload['threshold'] * 100:.3f}pp   ", "bold"),
+            (_availability_note(payload) + "\n  ", "dim"),
             (
                 f"title {pct(payload['baseline_title'], 2)} with the wire floor, "
                 f"{payload['title_per_point'] * 100:+.4f}pp per ROS point "
@@ -1980,6 +2052,7 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
     table.add_column("dPts", justify="right")
     table.add_column("dTitle", justify="right")
     table.add_column("+/-", justify="right")
+    table.add_column("cost", justify="right")
     table.add_column("clears?", justify="right")
     if not payload["board"]:
         out.print(Text("  Nothing on the wire projects above replacement.", style="dim"))
@@ -1987,12 +2060,16 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
     fence = 0
     for row in payload["board"]:
         verdict = row["verdict"]
+        on_waivers = row.get("on_waivers", True)
         clears = "yes" if row["clears_threshold"] else "no"
         # A `?` is not decoration: this row's distance from the threshold is inside its
         # own error, so which side of the cut it lands on is a coin flip on this draw.
-        if not row.get("clears_certain", True):
+        # It says nothing about a free agent, who has no threshold to be near.
+        if on_waivers and not row.get("clears_certain", True):
             clears += "?"
             fence += 1
+        if not on_waivers:
+            clears = "n/a"
         table.add_row(
             _cell(str(row["add"]), verdict),
             _cell(str(row["position"]), verdict),
@@ -2000,6 +2077,7 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
             _cell(signed(row["delta_points"]), verdict),
             _cell(pp(row["delta_title"], 3) + _marker(verdict), verdict),
             _cell(f"{row['stderr'] * 100:.3f}pp", verdict),
+            _cell("claim" if on_waivers else "free", verdict),
             _cell(clears, verdict),
         )
     out.print(table)
@@ -2011,6 +2089,36 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
                 "-- and the threshold itself carries an error this does not include. The "
                 "claim count below is that uncertain at its bottom end.",
                 style="yellow",
+            )
+        )
+    free_adds = payload.get("free_adds") or []
+    if free_adds:
+        best = free_adds[0]
+        # ALTERNATIVES, not a shopping list. Every one of these was priced on its own
+        # against today's roster and most of them drop the same player, so they are
+        # mutually exclusive and their gains are emphatically not additive. Printing
+        # "add 23 free agents" would be the same additivity error the claim waterfall
+        # already warns about, in a place where nothing stops the reader acting on it.
+        alternatives = len(free_adds) - 1
+        drops = {str(row.get("drop", "-")) for row in free_adds}
+        tail = ""
+        if alternatives:
+            tail = (
+                f" {alternatives} other free add(s) also help, but they are ALTERNATIVES "
+                f"to this one, not additions"
+                + (
+                    " -- they all drop the same player."
+                    if len(drops) <= 1
+                    else f": they drop {len(drops)} different players between them, and each "
+                    "was priced on its own against today's roster. Make one, then re-run."
+                )
+            )
+        out.print(
+            Text(
+                f"  Add {best['add']} ({best['position']}) NOW for "
+                f"{pp(best['delta_title'], 3)}, dropping {best.get('drop', '-')} -- he is a "
+                f"plain free agent, so no claim, no priority, first come.{tail}",
+                style="green",
             )
         )
     if payload["any_claim"]:
@@ -2025,10 +2133,17 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
                 style="green",
             )
         )
-    else:
+    elif not free_adds:
         out.print(
             Text(
                 "  No claim clears the cost of spending priority. Hold the queue position.",
+                style="dim",
+            )
+        )
+    else:
+        out.print(
+            Text(
+                "  Nothing that would COST a claim is worth one; hold the queue position.",
                 style="dim",
             )
         )

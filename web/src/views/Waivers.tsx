@@ -221,13 +221,34 @@ function claimColumns(withRank: boolean): Array<Column<WaiverRow>> {
       render: (row) => <ErrorBar stderr={row.stderr} digits={WAIVER_DIGITS} />,
     },
     {
+      key: 'cost',
+      header: 'cost',
+      help: 'a plain free agent is first come and spends no waiver priority at all',
+      align: 'center',
+      width: 76,
+      value: (row) => (row.on_waivers ? 1 : 0),
+      render: (row) =>
+        row.on_waivers ? (
+          <span className="faint">claim</span>
+        ) : (
+          <span style={{ color: 'var(--up)' }} title="first come, no priority spent">
+            free
+          </span>
+        ),
+    },
+    {
       key: 'margin',
       header: 'over the bar',
-      help: 'delta_title minus the priority threshold',
+      help: 'delta_title minus the priority threshold; n/a for a player who costs nothing',
       num: true,
       width: 96,
-      value: (row) => row.clears_margin,
-      render: (row) => fmt.pp(row.clears_margin, WAIVER_DIGITS),
+      value: (row) => (row.on_waivers ? row.clears_margin : Number.POSITIVE_INFINITY),
+      render: (row) =>
+        row.on_waivers ? (
+          fmt.pp(row.clears_margin, WAIVER_DIGITS)
+        ) : (
+          <span className="faint">n/a</span>
+        ),
     },
     {
       key: 'resolved',
@@ -235,9 +256,12 @@ function claimColumns(withRank: boolean): Array<Column<WaiverRow>> {
       help: 'is that margin larger than twice this row’s own error?',
       align: 'center',
       width: 84,
-      value: (row) => (row.clears_certain ? 1 : 0),
+      value: (row) => (row.clears_certain || !row.on_waivers ? 1 : 0),
       render: (row) =>
-        row.clears_certain ? (
+        !row.on_waivers ? (
+          // Nothing to resolve: there is no threshold for a free agent to be near.
+          <span className="faint">n/a</span>
+        ) : row.clears_certain ? (
           <span className="faint">yes</span>
         ) : (
           <span
