@@ -110,9 +110,11 @@ from ..core import (
     WireLevel,
 )
 from ..core import leverage as _leverage
+from ..data.etr import EtrRankings
 from ..sim import season as S
 from ..sim.distributions import Draw, WeeklySampler
 from ..sim.lineup import plan_from_slots
+from .opinion import Upgrade, bench_upgrades, tilt_outlooks
 from .valuation import POSITION_ABBREV
 from .wire import DEFAULT_WIRE_DEPTH as _DEFAULT_WIRE_DEPTH
 from .wire import all_rostered as _wire_all_rostered
@@ -144,6 +146,20 @@ DEFAULT_WIRE_DEPTH = _DEFAULT_WIRE_DEPTH
 #: Free agents carried into the simulated pool. The tensor is `(sims, weeks, players)`,
 #: so this is the memory knob: 60 adds about a quarter to a 14-team league's pool.
 DEFAULT_CANDIDATES = 60
+
+#: How far an outside ranking set moves this board when one is supplied. 1.0 adopts
+#: the analyst's within-position ordering outright.
+#:
+#: **This is the one input in the repo that ships without a measured verdict, and the
+#: user chose that deliberately.** Calibration got held-out bias, the ensemble's equal
+#: weights got twelve seasons of head-to-heads, the analyst-dispersion screen got
+#: +0.187 at p=0.004. This gets nothing, because Establish The Run overwrites each
+#: chart in place and publishes no history, so there is no back-test to run: the first
+#: board we hold is the one we are using. `data.etr.archive` starts the record that
+#: makes a verdict possible in a few weeks. Until then `board_weight` is the single
+#: constant that reverses the whole decision, and `0.0` is byte-identical to not
+#: having the board at all.
+DEFAULT_BOARD_WEIGHT = 1.0
 
 #: Simulations for the screen. Under common random numbers a points-for difference
 #: carries ~1000x the variance reduction of a title difference, so a few hundred paired
@@ -1378,6 +1394,7 @@ def augment(
     seed: int | None = None,
     replacement: Mapping[int, float] | None = None,
     wire_depth: int = DEFAULT_WIRE_DEPTH,
+    outlooks: Sequence[PlayerOutlook] | None = None,
 ) -> AugmentedSim:
     """Rebuild the pool, panel and draws with the candidate free agents included.
 
@@ -1409,14 +1426,20 @@ def augment(
     ]
     extra = [(a.player_id, a.position_id, a.pro_team_id, a.name) for a in agents]
     wide = replace(state, pool=S.PlayerPool.of([*rows, *extra]))
-    outlooks = _complete(sim.outlooks, {a.player_id for a in agents}, state.weeks, state.season)
-    panel = S.panel_for(wide, outlooks)
+    # `outlooks` overrides `sim.outlooks` so a caller holding a re-dealt projection set
+    # can hand it in. Passed rather than swapped onto a copy of `sim`: the panel, the
+    # sampler and the wire floor below all have to read the SAME set, and a caller that
+    # tilted one of the three and not the others is the mixed-currency bug this codebase
+    # has already found twice.
+    source = sim.outlooks if outlooks is None else outlooks
+    complete = _complete(source, {a.player_id for a in agents}, state.weeks, state.season)
+    panel = S.panel_for(wide, complete)
     sampler = WeeklySampler(panel, seed=sim.seed if seed is None else seed)
     # `wire_levels`, not `wire_floor`: the mean is what the lineup solver compares a
     # roster player against, but the seat is PAID a draw and the spread is what a bracket
     # is decided by. `wire_floor` is the mean of exactly this, so the level is unchanged.
     floor = replacement or wire_levels(
-        sim.outlooks, _all_rostered(state), state.weeks, state.slot_eligibility, depth=wire_depth
+        source, _all_rostered(state), state.weeks, state.slot_eligibility, depth=wire_depth
     )
     return AugmentedSim(
         state=wide,
@@ -1950,6 +1973,8 @@ def waiver_board(
     faab_rivals: int = 1,
     use_log: bool = True,
     on_waivers: Iterable[int] | None = None,
+    rankings: EtrRankings | None = None,
+    rankings_weight: float = DEFAULT_BOARD_WEIGHT,
 ) -> WaiverReport:
     """Rank every plausible claim in one league by `delta_title`, and say whether to make it.
 
@@ -1965,7 +1990,19 @@ def waiver_board(
     the plug-in and keeps the bracket beside it -- see `default_evaluator` for the
     measurement that says a bracket-ranked board at 4,000 simulations is a noise-ranked
     board, and `ClaimPrice` for why.
+
+    `rankings` is an outside ranking set -- see `decide/opinion.py`. It is applied here
+    and nowhere upstream: every surface in this repo reads `sim.outlooks`, so tilting them in
+    `pipeline.build` would move the odds table, the streaming plan and the lineup advice
+    along with the wire. This board's remit is the wire and the trade board, so this is
+    where it enters. `board=None` or `board_weight=0.0` is exactly today's answer.
+
+    The tilt lands on `free_agent_pool`'s ordering -- points above the wire's own depth
+    at the position -- and then on everything `augment` rebuilds from the same outlooks,
+    so the claim price, the FAAB bid and the continuation table all reprice off one
+    change rather than several.
     """
+    outlooks = _redealt(sim.outlooks, rankings, rankings_weight)
     state = sim.state
     team_id = team_id if team_id is not None else state.my_team_id
     if team_id is None:
@@ -1990,7 +2027,7 @@ def waiver_board(
     availability = _availability(sim) if on_waivers is None else None
     claimable = on_waivers if on_waivers is not None else getattr(availability, "on_waivers", None)
     agents = free_agent_pool(
-        sim.outlooks,
+        outlooks,
         _all_rostered(state),
         state.weeks,
         limit=candidates,
@@ -2000,7 +2037,12 @@ def waiver_board(
     if not agents:
         raise WaiverError(f"league {state.league_id} has no projected free agents")
     wide = augment(
-        sim, agents, screen_sims=screen_sims, replacement=replacement, wire_depth=wire_depth
+        sim,
+        agents,
+        screen_sims=screen_sims,
+        replacement=replacement,
+        wire_depth=wire_depth,
+        outlooks=outlooks,
     )
 
     screener = RosterSimulator.build(wide.state, wide.screen_draw, team_id, replacement=wide.floor)
@@ -2082,6 +2124,15 @@ def waiver_board(
 
     # -- confirm the survivors on the full draw ----------------------------------------
     names = {p: state.pool.name(p) for p in my_roster}
+    # The board's own verdict on each pairing, as a rank comparison and nothing more.
+    # It is computed from the board rather than read back out of the tilted numbers:
+    # `delta_title` already carries the tilt, and a tag that merely restated it would
+    # be a second view of one measurement dressed as corroboration.
+    endorsed: dict[tuple[int, int], Upgrade] = {}
+    if rankings is not None:
+        wire_ids = [a.player_id for a in shortlist]
+        for up in bench_upgrades(rankings, my_roster, wire_ids, names=names).upgrades:
+            endorsed.setdefault((up.add, up.drop), up)
     moves = [
         claim_move(state.league_id, team_id, agent.player_id, drop_id)
         for agent, drop_id, _ in screened
@@ -2104,6 +2155,7 @@ def waiver_board(
                     f"add:{agent.name}",
                     f"pos:{agent.position}",
                     f"drop:{names.get(drop_id, '-') if drop_id is not None else '-'}",
+                    *_board_tags(endorsed.get((agent.player_id, drop_id))),
                 ),
             )
         )
@@ -2297,3 +2349,32 @@ __all__ = [
     "waiver_board",
     "wire_floor",
 ]
+
+
+def _redealt(
+    outlooks: Sequence[PlayerOutlook], board: EtrRankings | None, weight: float
+) -> Sequence[PlayerOutlook]:
+    """The projection set this board runs on: ours, or ours re-dealt along a board.
+
+    Returns the input object itself when there is nothing to do, so the no-board path
+    is identical rather than merely equal.
+    """
+    if board is None or weight == 0.0:
+        return outlooks
+    return tilt_outlooks(outlooks, board, weight=weight)
+
+
+def _board_tags(upgrade: Upgrade | None) -> tuple[str, ...]:
+    """The board's own rank comparison for one claim, when it has an opinion.
+
+    Deliberately separate from the price. `delta_title` on a tilted board already
+    contains the board's view, so a tag derived from that number would be the same
+    measurement twice. This is the raw ordering the analyst published -- checkable
+    against his page, which is the whole use of it.
+    """
+    if upgrade is None:
+        return ()
+    return (
+        f"board:{upgrade.add_rank}-over-{upgrade.drop_rank}",
+        *((f"note:{upgrade.add_comment}",) if upgrade.add_comment else ()),
+    )

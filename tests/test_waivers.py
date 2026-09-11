@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -1864,3 +1865,153 @@ class TestAvailabilityAgainstTheRealLeagues:
         assert real.n_on_waivers is not None and real.n_free_agents_available is not None
         assert real.free_adds, f"{name}: nothing on the wire is free, which cannot be right"
         assert len(real.actions) >= len(blind.claims)
+
+
+# --------------------------------------------------------------------------------------
+# An outside ranking set on the wire
+# --------------------------------------------------------------------------------------
+
+
+def _rankings(rows, *, scoring="half_ppr"):
+    """rows: (espn_id, position_id, overall, pos_rank, name, comment)."""
+    import polars as pl
+
+    from fantasy_quant.data.etr import EtrRankings
+
+    return EtrRankings(
+        scoring=scoring,
+        kind="silva",
+        path=Path("board.csv"),
+        frame=pl.DataFrame(
+            {
+                "espn_id": [r[0] for r in rows],
+                "position_id": [r[1] for r in rows],
+                "etr_rank": [r[2] for r in rows],
+                "pos_rank": [r[3] for r in rows],
+                "player": [r[4] for r in rows],
+                "comment": [r[5] for r in rows],
+            }
+        ),
+    )
+
+
+#: The six fixture free agents are WRs at 21.0 down to 3.0 a week, ids 9000..9005, and
+#: the board disagrees: it likes the worst two best. That inversion is the whole test --
+#: agreement would move nothing and prove nothing.
+_INVERTED = _rankings(
+    [
+        (9005, WR, 1, 1, "FA5", "Sleeper."),
+        (9004, WR, 2, 2, "FA4", "Ascending."),
+        (9003, WR, 3, 3, "FA3", ""),
+        (9002, WR, 4, 4, "FA2", ""),
+        (9001, WR, 5, 5, "FA1", ""),
+        (9000, WR, 6, 6, "FA0", "Overrated."),
+    ]
+)
+
+
+#: The same board, extended over team 1's own receivers (ids 1003/1004/1006 at 13.0,
+#: 10.0 and 7.0 a week). `bench_upgrades` needs BOTH sides ranked to pair anything, and
+#: on the live leagues that is the binding constraint: two to three of my own players
+#: are unranked in every league.
+_INVERTED_WITH_ROSTER = _rankings(
+    [
+        (9005, WR, 1, 1, "FA5", "Sleeper."),
+        (9004, WR, 2, 2, "FA4", "Ascending."),
+        (9003, WR, 3, 3, "FA3", ""),
+        (9002, WR, 4, 4, "FA2", ""),
+        (9001, WR, 5, 5, "FA1", ""),
+        (9000, WR, 6, 6, "FA0", "Overrated."),
+        (1003, WR, 7, 7, "P1003", ""),
+        (1004, WR, 8, 8, "P1004", ""),
+        (1006, WR, 9, 9, "P1006", ""),
+    ]
+)
+
+
+def _digest(report):
+    """Everything a caller reads off a board, in one comparable value."""
+    return (
+        [(r.delta_title, r.delta_points, r.tags) for r in report.board],
+        [r.tags for r in report.claims],
+        [r.tags for r in report.free_adds],
+        report.threshold,
+        report.baseline_title,
+    )
+
+
+class TestAnOutsideRankingSetOnTheWire:
+    def test_no_board_and_a_zero_weight_are_the_same_board(self):
+        """The negative control every other assertion here rests on. `rankings_weight`
+        is the single constant that reverses this whole feature, so `0.0` has to be
+        exactly today's answer rather than nearly it."""
+        assert _digest(_board(priority=4)) == _digest(
+            _board(priority=4, rankings=_INVERTED, rankings_weight=0.0)
+        )
+
+    def test_a_board_that_ranks_nobody_on_this_wire_changes_nothing(self):
+        """Coverage is a real variable -- on the live leagues only 4 to 7 of the Top
+        150 are unrostered -- so a board with no opinion must be inert, not empty."""
+        elsewhere = _rankings([(4242, WR, 1, 1, "Nobody", "")])
+        assert _digest(_board(priority=4)) == _digest(
+            _board(priority=4, rankings=elsewhere, rankings_weight=1.0)
+        )
+
+    def test_the_board_reorders_the_wire_it_disagrees_with(self):
+        plain = _board(priority=4)
+        tilted = _board(priority=4, rankings=_INVERTED, rankings_weight=1.0)
+        assert _tag(plain.best, "add:") == "FA0", "the fixture's best free agent by points"
+        assert _tag(tilted.best, "add:") == "FA5", "the board's best, holding our values"
+
+    def test_the_claim_is_repriced_not_just_relabelled(self):
+        """The tilt lands on the outlooks, so everything `augment` rebuilds from them
+        moves together -- the price, the bid and the continuation table -- rather than
+        a tag being pinned on an unchanged number."""
+        plain = _board(priority=4)
+        tilted = _board(priority=4, rankings=_INVERTED, rankings_weight=1.0)
+        by_add_plain = {_tag(r, "add:"): r.delta_title for r in plain.board}
+        by_add_tilted = {_tag(r, "add:"): r.delta_title for r in tilted.board}
+        assert by_add_tilted["FA5"] > by_add_plain["FA5"]
+        assert by_add_tilted["FA0"] < by_add_plain["FA0"]
+
+    def test_an_endorsed_claim_carries_the_ranks_and_the_note(self):
+        """The tag is derived from the board, not read back out of `delta_title`.
+        `delta_title` already contains the tilt, so a tag computed from it would be one
+        measurement wearing a second hat."""
+        tilted = _board(priority=4, rankings=_INVERTED_WITH_ROSTER, rankings_weight=1.0)
+        endorsed = [r for r in tilted.board if any(t.startswith("board:") for t in r.tags)]
+        assert endorsed, "the board ranks the fixture's own roster WRs below its wire"
+        notes = [t for r in endorsed for t in r.tags if t.startswith("note:")]
+        assert any("Sleeper." in n or "Ascending." in n for n in notes)
+
+    def test_no_pair_is_tagged_when_the_board_has_not_ranked_the_drop(self):
+        """Coverage on both sides, not one. `_INVERTED` ranks the wire and says nothing
+        about the roster, so there is no comparison to publish and none is invented."""
+        wire_only = _board(priority=4, rankings=_INVERTED, rankings_weight=1.0)
+        assert not any(t.startswith("board:") for r in wire_only.board for t in r.tags)
+
+    def test_nothing_is_tagged_when_no_board_was_supplied(self):
+        plain = _board(priority=4)
+        assert not any(t.startswith("board:") for r in plain.board for t in r.tags)
+
+    def test_the_weight_slides_between_the_two_opinions_and_crosses(self):
+        """Half a board is half a board -- each player shrinks toward where we had him,
+        rather than the ordering jumping to some third one neither opinion holds.
+
+        The fixture's two extremes are 21.0 and 3.0 a week and the board has them
+        exactly reversed, so at `weight=0.5` both land on 12.0 and the board has nothing
+        to say: 12.0 does not beat the roster's own 13.0 receiver, so no claim gains
+        anything and every row is zero. That crossing is the interpolation being real
+        rather than a switch, and it is worth pinning because a board that flipped at
+        some threshold would pass a monotonicity test and fail this one."""
+        sweep = {}
+        for weight in (0.0, 0.25, 0.5, 0.75, 1.0):
+            report = _board(priority=4, rankings=_INVERTED, rankings_weight=weight)
+            sweep[weight] = {_tag(r, "add:"): r.delta_points for r in report.board}
+
+        # Ours wins outright, fades as the board is believed, and is gone by the middle.
+        assert sweep[0.0]["FA0"] > sweep[0.25]["FA0"] > 0.0
+        assert sweep[0.5]["FA0"] == 0.0
+        # The board's pick is worth nothing until the board is believed, then arrives.
+        assert sweep[0.5]["FA5"] == 0.0
+        assert 0.0 < sweep[0.75]["FA5"] < sweep[1.0]["FA5"]
