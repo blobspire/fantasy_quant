@@ -1,8 +1,9 @@
 # The first-principles audit: findings, fixes, and what is left
 
 Status as of 2026-09-10. **Every finding in this audit is fixed and pushed** -- all nine
-verified findings, plus three the audit did not have. What is left is one constant that is
-the user's decision rather than a defect; see **Remaining work**.
+verified findings, plus three the audit did not have -- and the one constant that was left
+as the user's decision has been measured and answered: `PLAYOFF_WEIGHT` stays at 1.2. See
+**Remaining work** for why, including a recommendation I got wrong first.
 
 ## Why this file exists
 
@@ -639,60 +640,92 @@ Carlo universes, so their levels will never match to the decimal. Compare deltas
 
 ## Remaining work
 
-### Raised by this work, needs a decision rather than a patch
+### Raised by this work, and now answered: `PLAYOFF_WEIGHT`
 
-**`decide/trades.PLAYOFF_WEIGHT = 1.2`** is hand-set for a quantity `SurrogateFit
-.playoff_premium` now measures. **Measured, not changed** — this is the user's call.
+**Recommendation: leave it at 1.2.** An earlier revision of this section recommended 1.29 on
+the strength of `SurrogateFit.playoff_premium`. That was wrong twice over, and both errors are
+worth writing down because they are the audit's own recurring shape — *a component computing
+something defensible-looking that is not the right quantity*.
 
-**The measurement.** Across all 38 teams in the three live leagues at week 1 of 2026:
+#### What the constant is for
 
-| league | user's team | all teams (min / median / max) |
-|---|---|---|
-| Blacksburg | 1.364 | 1.363 / 1.395 / 1.416 |
-| Wine Wednesday | 1.363 | 1.323 / 1.350 / 1.420 |
-| Type shi | 1.402 | 1.322 / 1.399 / 1.443 |
+`self._w = self.weights.vector` is the week-weighting of the **trade screen's** objective,
+`value_of = weekly_points @ self._w`. It does three things: it gates `TradeEvaluation.pareto`
+(`all(i.delta_points > 0)`), which decides what is even proposed; it ranks candidates for the
+expensive paired-CRN confirmation; and it now breaks `settle`'s forced-cut ties. It does *not*
+touch `delta_title`, which is pure simulation.
 
-Tight: 1.32–1.44 over 38 teams, three league sizes and three very different standings.
+Note what that implies: a trade that changes a roster's points roughly uniformly scores the
+same under any weighting that conserves the total. **The weight only discriminates between
+trades whose gains arrive at different times** — a bye in the bracket, a playoff-schedule edge.
 
-**The constant is not the premium, and this is the part that matters.** `playoff_weights`
-*conserves the total*, so raising the bracket weight also lowers the regular-season weight.
-The ratio a trade actually sees is `w_p / w_n`, not `w_p`. All three leagues run 17 weeks with
-a 3-week bracket:
+#### Where 1.2 came from
 
-| `PLAYOFF_WEIGHT` | `w_n` | ratio `w_p / w_n` |
-|---|---|---|
-| 1.00 | 1.0000 | 1.0000 |
-| **1.20** (shipped) | 0.9571 | **1.2537** |
-| **1.29** | 0.9379 | **1.3755** |
-| 1.38 | 0.9186 | 1.5023 |
+`c10a319` (2026-09-07), the Wave 4 build, with no cited source. `docs/RESEARCH.md` says the
+objective is "playoff-weighted" and never gives a number. It is a hand-set constant, as the
+audit said.
 
-So the shipped constant under-weights the bracket by about **10%** (1.2537 against a measured
-~1.38), not the 15% the raw numbers suggest — and **setting it to the measured premium would
-overshoot by 9%**. To hit the measured ratio the constant wants to be **1.281–1.309**.
+#### Why 1.36 is not the right target
 
-**Recommendation: 1.29.** It lands the ratio at 1.3755 against a measured 1.363–1.402, it is
-inside the range for every one of the 38 teams, and it is a *calibration* of the existing
-mechanism rather than a new switch.
+`playoff_premium` is `1 + dP/dp ÷ dP/dx`, and those are derivatives **of the surrogate's own
+axes**: `x` is points a week across *all 17 weeks* and `p` is points a week added to the
+bracket *on top of x*. So `dP/dx` already contains the bracket's contribution, and dividing by
+it produces a heavily diluted ratio. Verified against the fit: `delta_title(0, 1, 1)` returns
+exactly `dP/dp`, so `p` really is the on-top axis.
 
-**What it would actually do** — measured, both weights, same seed and draw:
+Written out, with `B` and `R` the title value of one point in a bracket and a regular week:
 
-| | Blacksburg | Wine Wednesday | Type shi |
+```
+dP/dx = n_n*R + n_p*B
+dP/dp = n_p*B
+  =>  B/R = (dP/dp / n_p) / ((dP/dx - dP/dp) / n_n)
+```
+
+Three independent routes then agree, and none of them is 1.36:
+
+| league | `playoff_premium` | B/R from the same fit | B/R by direct simulation |
 |---|---|---|---|
-| candidates swapped in/out of the screened 40 | 2 | 1 | 7 |
-| shared candidates changing rank | 11 / 38 | 20 / 39 | 24 / 33 |
-| top-3 trades | **same deals** | **same deals** | **same deals** |
-| top-3 `delta_title` | **unchanged** | **unchanged** | **unchanged** |
-| `title-pareto` count | 3 → 3 | 10 → 10 | 15 → 15 |
+| Blacksburg | 1.364 | 2.667 | 3.07 |
+| Wine Wednesday | 1.363 | 2.664 | 2.59 |
+| Type shi | 1.402 | 3.131 | 4.22 |
 
-**Honestly: this moves the tail of the board, not the top.** The best trade in each league is
-the same deal at the same price either way, and the Pareto gate admits the same number of
-candidates. The case for changing it is that the constant should be the measured quantity, not
-that the current advice is wrong.
+The direct measurement adds the same total points to a team's bracket weeks and then to its
+regular weeks at 20,000 paired simulations — no surrogate involved. So the true bracket
+premium is **~2.6–4.2**, and both 1.2537 (what `w_p = 1.2` actually delivers, since
+`playoff_weights` conserves the total and scales the regular weeks down) and 1.3755 (the
+earlier recommendation) are well under it.
 
-One caveat worth attaching to any decision: `playoff_premium` is measured on the *surrogate*,
-whose own scope note in this file says `TitleEngine.screen`/`evaluate` have no caller in `src/`
-today. The fit is exercised and tested, but it has never driven a shipped recommendation, so
-this is a well-measured number from a component with no production track record.
+#### Why it should still not be raised
+
+Because "what is a bracket point worth" is not the question the screen answers.
+`find_trades`'s own docstring settles it: **"the screen is a recall filter, not a ranker."**
+The confirm does the ranking. What the screen must do is keep the best trade alive long
+enough to be simulated.
+
+Both metrics, measured across seeds and leagues:
+
+| `w_p` | rank correlation with the confirm (9 runs) | **best trade surviving the screen** (6 runs) |
+|---|---|---|
+| 1.0 | 0.502 | **1.346pp** |
+| **1.2** (shipped) | 0.507 | **1.325pp** |
+| 1.29 | 0.519 | — |
+| 1.6 | 0.555 | 1.104pp |
+| 2.0 | 0.573 | 1.179pp |
+| 2.5 | 0.573 | 0.829pp |
+
+**They point opposite ways, and the second one is the one that matters.** Raising the weight
+does improve rank correlation — consistently, in 8 of 9 runs, not a seed artifact — but it
+*costs recall of the best trade*: 1.0 and 1.2 are tied at the top and every higher value is
+worse, with 2.5 losing 38% of the best available trade. On Wine Wednesday at `w_p = 2.0` the
++0.47pp trade stops surviving the screen at all and the board's best becomes +0.38pp.
+
+The mechanism is plain once stated: weighting weeks 15–17 at two to three times pushes the
+screen to chase players projected well *fifteen weeks out*, which is the least reliable part
+of the forecast. It buys a better ordering of a field it has already mis-selected.
+
+1.0 and 1.2 are not distinguishable from each other here (1.346 against 1.325, well inside the
+spread). There is no evidence for raising the constant and no case for lowering it, so the
+honest action is to leave it alone and record why.
 
 ---
 
