@@ -21,8 +21,15 @@ import math
 import numpy as np
 import pytest
 
-from fantasy_quant.core import Move, MoveKind, PlayerMove, PlayerOutlook, Recommendation
-from fantasy_quant.decide.title import streaming_replacement
+from fantasy_quant.core import (
+    Move,
+    MoveKind,
+    PlayerMove,
+    PlayerOutlook,
+    Recommendation,
+    WireLevel,
+)
+from fantasy_quant.decide.title import streaming_levels, streaming_replacement
 from fantasy_quant.edges import portfolio as PF
 from fantasy_quant.pipeline import LeagueSim
 from fantasy_quant.projections.calibration import load as load_calibration
@@ -189,11 +196,17 @@ def build_sim(
 
 
 def make_portfolio(sims, *, stream_replacement: bool = True) -> PF.Portfolio:
-    """A `Portfolio` from pre-built sims, bypassing the ESPN client."""
+    """A `Portfolio` from pre-built sims, bypassing the ESPN client.
+
+    Mirrors `build_portfolio` exactly, including `streaming_LEVELS` rather than
+    `streaming_replacement`. When it mirrored production imperfectly last time -- passing
+    no `outlooks` -- a whole class of bug became invisible to every test in this file, so
+    the mirroring is the point and not a convenience.
+    """
     stakes = []
     for sim in sims:
         floors = (
-            streaming_replacement(sim.state, sim.draw, outlooks=sim.outlooks)
+            streaming_levels(sim.state, sim.draw, outlooks=sim.outlooks)
             if stream_replacement
             else None
         )
@@ -692,10 +705,16 @@ class TestTheFloorIsFittedOffTheWireAndNotThePanel:
         # A non-None client keeps `build_portfolio` from reaching for real credentials,
         # and `_submitted_lineup` swallows the AttributeError off `league=None`.
         got = PF.build_portfolio([(701, 1)], 2026, client=object(), n_sims=wired.n_sims)
-        assert got.stakes[0].replacement == streaming_replacement(
+        # Levels, not bare means: an empty seat is paid a draw. The MEAN is what this
+        # test is about, and it must be the wire's rather than the panel's.
+        means = {slot: lv.mean for slot, lv in got.stakes[0].replacement.items()}
+        assert means == streaming_replacement(
             wired.state, wired.draw, outlooks=wired.outlooks
         )
-        assert got.stakes[0].replacement != streaming_replacement(wired.state, wired.draw)
+        assert means != streaming_replacement(wired.state, wired.draw)
+        # And the spread came with it, which is the thing a mean-only mapping threw away.
+        assert any(lv.sd > 0.0 for lv in got.stakes[0].replacement.values())
+        assert got.stakes[0].noise is not None
 
     def test_turning_the_floor_off_still_means_off(self, wired, monkeypatch):
         """The negative control: `stream_replacement=False` is untouched by any of this."""
@@ -704,6 +723,74 @@ class TestTheFloorIsFittedOffTheWireAndNotThePanel:
             [(701, 1)], 2026, client=object(), n_sims=wired.n_sims, stream_replacement=False
         )
         assert got.stakes[0].replacement is None
+
+
+@pytest.fixture(scope="module")
+def with_a_wire():
+    """A portfolio whose leagues have real free agents, so the floor carries a spread.
+
+    `overlapping` cannot serve: every one of its players is on a roster, so the wire is
+    empty, `streaming_levels` falls through to the deterministic VOLS rank, and every
+    slot comes back `sd = 0.0`. A test for the spread run on that fixture would pass
+    while measuring nothing -- the same degeneracy that made `_sim_league` unable to see
+    the streaming floor.
+    """
+    return make_portfolio(
+        [
+            build_sim(201, seed=11, id_offset=0, my_id_offset=0, wire_strength=0.6),
+            build_sim(202, seed=11, id_offset=200_000, my_id_offset=0, wire_strength=0.6),
+        ]
+    )
+
+
+class TestTheEmptySeatIsPaidADrawHereToo:
+    """The portfolio credited an empty seat a CONSTANT while `decide/title` drew one.
+
+    Same shape as finding #1: the canonical machinery was right and this caller did not
+    reach for it. `sim/season.FloorNoise` has existed since the stochastic floor landed.
+
+    Measured on the user's three rosters, 15.7-19.6% of slot-weeks sit empty -- one slot
+    is empty 71-88% of the time -- so the deterministic floor understated the team's
+    weekly SD by 5.9-6.8% and its season SD by 5.6-6.0%. A bracket is decided by the
+    spread, so this lands on exactly the question the module exists to answer.
+    """
+
+    def test_the_stake_carries_levels_and_its_own_uniforms(self, with_a_wire):
+        stake = with_a_wire.stakes[0]
+        assert stake.noise is not None
+        assert all(isinstance(v, WireLevel) for v in stake.replacement.values())
+        assert any(v.sd > 0.0 for v in stake.replacement.values())
+
+    def test_the_spread_arrives_and_the_level_does_not_move(self, with_a_wire):
+        stake = with_a_wire.stakes[0]
+        means = {slot: lv.mean for slot, lv in stake.replacement.items()}
+        flat = PF._stake(stake.sim, stake.team_id, means, None)
+        # The credit is solved so its expectation is exactly the floor the solver
+        # committed to, so only the spread may move.
+        assert stake.weekly.mean() == pytest.approx(flat.weekly.mean(), rel=0.02)
+        assert stake.weekly.std() > flat.weekly.std()
+        assert flat.noise is None, "means assert a number; they must not allocate uniforms"
+
+    def test_a_mean_only_stake_is_byte_identical_to_the_old_behaviour(self, with_a_wire):
+        """The negative control: the new input absent is the old path, exactly."""
+        stake = with_a_wire.stakes[0]
+        means = {slot: lv.mean for slot, lv in stake.replacement.items()}
+        a = PF._stake(stake.sim, stake.team_id, means, None)
+        b = PF._stake(stake.sim, stake.team_id, means, None)
+        assert np.array_equal(a.weekly, b.weekly)
+        assert np.array_equal(a.scores, b.scores)
+        assert np.array_equal(a.champions, b.champions)
+
+    def test_the_counterfactual_still_pairs_exactly(self, with_a_wire):
+        """CRN has to survive a drawn wire: same seat, same uniforms, both arms."""
+        stake = with_a_wire.stakes[0]
+        assert np.array_equal(
+            stake.champions_without([-999]), stake.champions
+        ), "a player nobody rosters re-rolled the wire"
+        qb = next(p for p in stake.roster if stake.state.pool.positions_of([p])[0] == 1)
+        assert np.array_equal(
+            stake.champions_without([qb]), stake.champions_without([qb])
+        ), "two identical counterfactuals drew different wires"
 
 
 class TestEmptyPositionFloorTrap:

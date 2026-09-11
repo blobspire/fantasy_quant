@@ -48,7 +48,6 @@ from fantasy_quant.decide.waivers import (
     _hold_rationale,
     _promotion_matrix,
     _rival_gain_after_drop,
-    _roster_floor,
     _tag,
     arrival_rate_from_log,
     blocking_value,
@@ -63,7 +62,9 @@ from fantasy_quant.decide.waivers import (
     waiver_board,
     wire_floor,
 )
+from fantasy_quant.sim import season as S
 from fantasy_quant.sim.distributions import Draw, InjuryModel, WeeklySampler
+from fantasy_quant.sim.lineup import plan_from_slots
 from fantasy_quant.sim.season import (
     Franchise,
     LeagueState,
@@ -474,25 +475,146 @@ class TestEmptySlotFloor:
         assert gap == pytest.approx(len(state.weeks) * (100.0 - 12.0), abs=1e-3)
 
     def test_a_roster_that_can_fill_every_slot_is_left_alone(self):
+        """The guard moved to `sim/season._floors`; these test it there.
+
+        `waivers._roster_floor` was the THIRD copy of one guard, after
+        `title._floors_for` and `portfolio._floors_for`. It phrased the test over
+        `state.slot_eligibility` while the surviving copy phrases it over the compiled
+        plan's own eligibility matrix; the two were verified to agree on all 190 roster
+        shapes across the three live leagues before this one was deleted.
+        """
         state, _ = _league()
         positions = state.pool.positions_of(state.franchise(1).player_ids)
-        floor, bonus = _roster_floor(state, FLOOR, positions)
-        assert floor is FLOOR
-        assert bonus == 0.0
+        plan = plan_from_slots(state.lineup_slot_counts, state.slot_eligibility, positions)
+        _groups, _per_slot, _credit, omitted = S._floors(plan, FLOOR)
+        assert omitted == 0.0
 
     def test_an_unfillable_slot_is_zeroed_and_its_value_handed_back_separately(self):
         state, _ = _league()
         roster = [p for p in state.franchise(1).player_ids if state.pool.positions_of([p])[0] != QB]
-        floor, bonus = _roster_floor(state, FLOOR, state.pool.positions_of(roster))
-        assert floor[0] == 0.0
-        assert bonus == pytest.approx(12.0)
-        assert all(floor[s] == FLOOR[s] for s in FLOOR if s != 0)
+        plan = plan_from_slots(
+            state.lineup_slot_counts, state.slot_eligibility, state.pool.positions_of(roster)
+        )
+        groups, per_slot, _credit, omitted = S._floors(plan, FLOOR)
+        assert omitted == pytest.approx(12.0)
+        qb_group = plan.floor_slot_ids.index(0)
+        assert groups[qb_group] == 0.0
+        assert per_slot[[i for i, s in enumerate(plan.slot_ids) if s == 0]].tolist() == [0.0]
 
     def test_a_scalar_or_absent_floor_needs_no_correction(self):
         state, _ = _league()
         positions = state.pool.positions_of(state.franchise(1).player_ids[:1])
-        assert _roster_floor(state, None, positions) == (None, 0.0)
-        assert _roster_floor(state, 3.0, positions) == (3.0, 0.0)
+        plan = plan_from_slots(state.lineup_slot_counts, state.slot_eligibility, positions)
+        assert S._floors(plan, None)[3] == 0.0
+        assert S._floors(plan, 3.0)[3] == 0.0
+
+
+class TestTheEmptySeatIsPaidADrawHereToo:
+    """`waivers` credited an empty seat a CONSTANT while `decide/title` drew one.
+
+    Same shape as finding #1: the canonical machinery was right and this caller did not
+    use it. `sim/season.FloorNoise` has existed since the stochastic floor landed, and
+    `decide/title.py` has paid its seats a draw ever since; `decide/waivers` and
+    `edges/portfolio` never picked it up.
+
+    Measured on the user's three rosters, 15.7-19.6% of slot-weeks sit empty -- one slot
+    is empty 71-88% of the time -- so the deterministic floor understated the team's
+    weekly SD by 5.9-6.8% and its season SD by 5.6-6.0%. The level was right; the spread
+    was missing, and a bracket is decided by the spread.
+    """
+
+    def _both(self, cv: float = 0.8):
+        from fantasy_quant.core import WireLevel
+
+        state, outlooks = _league()
+        draw = _draw(state, outlooks, 400)
+        means = dict(FLOOR)
+        levels = {s: WireLevel(m, cv * m, 0.1) for s, m in means.items()}
+        det = RosterSimulator.build(state, draw, 1, replacement=means)
+        drawn = RosterSimulator.build(state, draw, 1, replacement=levels)
+        return state, draw, det, drawn
+
+    def test_a_mean_only_mapping_is_byte_identical_to_before(self):
+        """The negative control, and the reason it is a control.
+
+        `season._as_levels` promotes a bare float to `WireLevel(mean, 0.0, 0.0)` and
+        `_floors` returns no credit when nothing carries a spread, so a caller passing
+        means gets the deterministic path exactly. That proves the new INPUT moved the
+        numbers rather than the new code path. Verified across commits on the three live
+        leagues too: means-only reproduces the parent commit's `_base_scores`,
+        `_base_champ`, `week_scores` and exchange rate to one digest.
+        """
+        state, draw, det, _drawn = self._both()
+        assert det._noise is None
+        roster = list(det.roster)
+        again = RosterSimulator.build(state, draw, 1, replacement=dict(FLOOR))
+        assert np.array_equal(det.week_scores(roster), again.week_scores(roster))
+        assert np.array_equal(det._base_scores, again._base_scores)
+
+    def test_the_level_is_unchanged_and_the_spread_arrives(self):
+        _state, _draw, det, drawn = self._both()
+        roster = list(det.roster)
+        a, b = det.week_scores(roster), drawn.week_scores(roster)
+        # The credit is solved so its expectation is EXACTLY the floor the solver
+        # committed to, so the mean must not move; only the spread.
+        assert b.mean() == pytest.approx(a.mean(), rel=0.01)
+        assert b.std() > a.std()
+
+    def test_a_null_claim_is_still_exactly_zero(self):
+        """CRN has to survive: the wire is drawn, but it is the SAME wire both times."""
+        _state, _draw, _det, drawn = self._both()
+        roster = list(drawn.roster)
+        assert float(np.abs(drawn.week_scores(roster) - drawn.week_scores(roster)).max()) == 0.0
+        d1 = drawn.season_points(roster[:-1]) - drawn.season_points(roster)
+        d2 = drawn.season_points(roster[:-1]) - drawn.season_points(roster)
+        assert np.array_equal(d1, d2), "the wire was re-rolled between two paired calls"
+
+    def test_every_team_gets_its_own_wire_not_a_shared_body(self):
+        """Byes are league-wide, so one shared body cancels in Var(A)+Var(B)-2Cov(A,B).
+
+        `FloorNoise` keeps the seats independent per team for exactly this reason, and
+        `week_scores` now passes the team through so that independence is real rather
+        than declared.
+        """
+        state, _draw, _det, drawn = self._both()
+        assert drawn._noise is not None
+        a = drawn.week_scores(state.franchise(1).player_ids, 1)
+        b = drawn.week_scores(state.franchise(1).player_ids, 2)
+        # Same players, same draw, different franchise: only the wire uniforms differ.
+        assert not np.array_equal(a, b)
+
+    def test_augment_hands_the_board_levels_rather_than_means(self):
+        """`augment` fitted `wire_floor`, whose means are right and whose spread is gone.
+
+        The board is built on `wide.floor`, so the draw could never reach it however well
+        `RosterSimulator` threaded the uniforms.
+        """
+        from fantasy_quant.core import WireLevel
+
+        # `_league(extra=...)` puts these in the pool and on nobody's roster, which is
+        # what makes them free agents.
+        state, outlooks = _league(
+            extra=(
+                _outlook(9101, WR, 91, dict.fromkeys((1, 2, 3, 4), 9.0)),
+                _outlook(9102, RB, 92, dict.fromkeys((1, 2, 3, 4), 8.0)),
+            )
+        )
+        sim = _fake_sim(state, outlooks)
+        agents = W.free_agent_pool(
+            outlooks, {p for f in state.franchises for p in f.player_ids}, state.weeks, limit=8
+        )
+        assert agents, "the fixture was supposed to carry free agents"
+        wide = W.augment(sim, agents)
+        assert wide.floor
+        assert all(isinstance(v, WireLevel) for v in wide.floor.values())
+        # Same level, exactly: `wire_floor` is documented as the mean of `wire_levels`.
+        means = W.wire_floor(
+            outlooks,
+            {p for f in state.franchises for p in f.player_ids},
+            state.weeks,
+            state.slot_eligibility,
+        )
+        assert {s: lv.mean for s, lv in wide.floor.items()} == means
 
 
 class TestExchangeRate:

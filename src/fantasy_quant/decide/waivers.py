@@ -107,6 +107,7 @@ from ..core import (
     PlayerOutlook,
     Recommendation,
     WeeklyOutlook,
+    WireLevel,
 )
 from ..core import leverage as _leverage
 from ..sim import season as S
@@ -116,6 +117,7 @@ from .valuation import POSITION_ABBREV
 from .wire import DEFAULT_WIRE_DEPTH as _DEFAULT_WIRE_DEPTH
 from .wire import all_rostered as _wire_all_rostered
 from .wire import wire_floor as _wire_floor
+from .wire import wire_levels
 
 if TYPE_CHECKING:  # pragma: no cover - only the type checker needs these
     from ..espn.league import Availability, TransactionLog
@@ -420,51 +422,15 @@ def _move_players(move: Move, team_id: int) -> tuple[tuple[int, ...], tuple[int,
     return adds, drops
 
 
-def _roster_floor(
-    state: S.LeagueState,
-    replacement: Mapping[int, float] | float | None,
-    positions: np.ndarray,
-) -> tuple[Mapping[int, float] | float | None, float]:
-    """`(floor to solve with, points a week the unfillable slots stream on their own)`.
-
-    **An empty slot poisons the whole floor vector, and the failure is silent.** A slot
-    no player on the roster is eligible for has an empty *player* set, the empty set is a
-    subset of every other set, so `lineup.monotone_floor` treats it as nested inside
-    every slot and lifts them all to its floor. Drop your only quarterback and every one
-    of the nine slots suddenly floors at the quarterback wire's 12.7 points a week; the
-    team scores nine streamers, and the board reports dropping a starting quarterback as
-    **+337 points and +50pp of title probability**. That is not a hypothetical -- it is
-    what the live Blacksburg board printed before this function existed, and it was the
-    top recommendation in two of the three leagues.
-
-    The fix is exact rather than approximate. An unfillable slot is *always* left empty,
-    so it contributes exactly `count * floor` in every simulation and every week,
-    independently of the rest of the lineup. Zeroing it inside the solve removes the
-    spurious lift (zero is below every other floor, so nothing is raised), and adding
-    `count * floor` back afterwards restores the streamer it really would have played.
-    The slots that can be filled keep their own floors and their own legitimate lifts.
-    """
-    if not isinstance(replacement, Mapping):
-        return replacement, 0.0
-    have = {int(p) for p in positions}
-    adjusted: dict[int, float] | None = None
-    bonus = 0.0
-    for slot, eligible in state.slot_eligibility.items():
-        if eligible & have:
-            continue
-        if adjusted is None:
-            adjusted = dict(replacement)
-        adjusted[slot] = 0.0
-        bonus += float(replacement.get(slot, 0.0)) * float(state.lineup_slot_counts.get(slot, 0))
-    return (replacement if adjusted is None else adjusted), bonus
-
-
 def _lineup_scores(
     state: S.LeagueState,
     points: np.ndarray,
     rank: np.ndarray,
-    replacement: Mapping[int, float] | float | None,
+    replacement: Mapping[int, WireLevel] | Mapping[int, float] | float | None,
     player_ids: Sequence[int],
+    *,
+    noise: S.FloorNoise | None = None,
+    team_index: int = 0,
 ) -> np.ndarray:
     """`(sims, weeks)` optimal-lineup totals for an arbitrary set of players.
 
@@ -472,14 +438,32 @@ def _lineup_scores(
     copy of it: the floor-permutation trap `season._floors` documents is subtle enough
     that one implementation is the only safe number of implementations. The franchise
     handed in is a carrier for the player ids -- that kernel reads nothing else off it.
+
+    `noise` is what an empty seat is actually PAID. Without it the seat gets its mean and
+    carries no variance, and on the user's real rosters 15.7-19.6% of slot-weeks are
+    empty -- one slot is empty 71-88% of the time -- so the team's weekly SD came out
+    5.9-6.8% low and its season SD 5.6-6.0% low. The level was right; the spread was
+    missing, and a bracket is decided by the spread. `decide/title.py` has drawn the seat
+    since the stochastic floor landed; this surface and `edges/portfolio` did not.
+
+    This used to hold a third copy of the empty-slot-group guard, as `_roster_floor`. It
+    now lives in `sim/season._floors`, where every floor in the system is built, and the
+    two tests were verified to agree on all 190 roster shapes across the three live
+    leagues before the copy was deleted.
     """
     ids = tuple(int(p) for p in player_ids)
     positions = state.pool.positions_of(ids)
     plan = plan_from_slots(state.lineup_slot_counts, state.slot_eligibility, positions)
-    floor, bonus = _roster_floor(state, replacement, positions)
     carrier = S.Franchise(team_id=0, name="", player_ids=ids)
-    scores = S._franchise_scores(state.pool, carrier, plan, points, rank, floor)
-    return scores + bonus if bonus else scores
+    return S._franchise_scores(
+        state.pool,
+        carrier,
+        plan,
+        points,
+        rank,
+        replacement,
+        floor_noise=None if noise is None else noise.for_plan(plan, team_index),
+    )
 
 
 def claim_move(
@@ -513,7 +497,7 @@ class RosterSimulator:
     state: S.LeagueState
     draw: Draw
     team_id: int
-    replacement: Mapping[int, float] | float | None
+    replacement: Mapping[int, WireLevel] | Mapping[int, float] | float | None
     #: Points a week the exchange-rate probe shifts a franchise by, each way.
     probe: float
     #: dP(title)/d(one point of rest-of-season starting-lineup score) for THIS
@@ -530,6 +514,12 @@ class RosterSimulator:
     _base_scores: np.ndarray
     _base_champ: np.ndarray
     _base_own: np.ndarray
+    #: Uniforms for what each empty seat streams, fixed per `(seed, n_sims)`. This is
+    #: common random numbers FOR THE WIRE: every candidate roster meets not only the same
+    #: football but the same replacement bodies, so a paired difference still isolates
+    #: the claim. Without it an empty seat is paid its mean with no variance at all, and
+    #: 15.7-19.6% of slot-weeks on these rosters are empty.
+    _noise: S.FloorNoise | None = None
 
     # -- construction ------------------------------------------------------------------
 
@@ -540,7 +530,7 @@ class RosterSimulator:
         draw: Draw,
         team_id: int,
         *,
-        replacement: Mapping[int, float] | float | None = None,
+        replacement: Mapping[int, WireLevel] | Mapping[int, float] | float | None = None,
         efficiency: S.LineupEfficiency | None = None,
         probe: float = DEFAULT_PROBE,
     ) -> RosterSimulator:
@@ -553,14 +543,26 @@ class RosterSimulator:
         points = draw.points
         rank = S.ex_ante_rank(draw)
         factors = efficiency.draw(state, points.shape[0])
+        # Drawn once and held, never per candidate: it is common random numbers for the
+        # wire, and a fresh draw per candidate would put that noise back into every
+        # paired difference this class exists to keep clean.
+        noise = S.FloorNoise(state, draw) if S.has_spread(replacement) else None
         # Not `team_week_scores`: every franchise has to be scored through the same
         # empty-slot correction as the candidates, or a team that happens to carry no
-        # kicker today gets the inflated baseline described in `_roster_floor` and every
-        # delta measured against it is wrong.
+        # kicker today gets the inflated baseline described in `sim/season._floors` and
+        # every delta measured against it is wrong.
         base = (
             np.stack(
                 [
-                    _lineup_scores(state, points, rank, replacement, f.player_ids)
+                    _lineup_scores(
+                        state,
+                        points,
+                        rank,
+                        replacement,
+                        f.player_ids,
+                        noise=noise,
+                        team_index=state.team_index[f.team_id],
+                    )
                     for f in state.franchises
                 ],
                 axis=-1,
@@ -586,6 +588,7 @@ class RosterSimulator:
             _base_scores=base,
             _base_champ=champ.astype(np.float64),
             _base_own=np.zeros(1),
+            _noise=noise,
         )
         rate, rate_se = self.exchange_rate(team_id)
         object.__setattr__(self, "title_per_point", rate)
@@ -663,13 +666,26 @@ class RosterSimulator:
         every unfilled slot falls back to the wire floor -- so a roster with no kicker
         loses the gap between its kicker and the wire's, not eight points a week.
 
-        `team_id` is ignored here and accepted only so a caller can read at the call site
-        whose roster a set of ids is: the lineup solve depends on the players, the slots
-        and the floor, and on nothing about the franchise. It does matter in `champions`,
-        which needs the column to write the scores into.
+        `team_id` used to be ignored here, and is not any more: the lineup SOLVE still
+        depends only on the players, the slots and the floor, but the empty seats are now
+        paid a draw and those uniforms are per team. That is deliberate rather than
+        incidental -- `S.FloorNoise` keeps each franchise's wire independent because byes
+        are league-wide, so sharing one body across teams cancels in
+        `Var(A) + Var(B) - 2Cov(A,B)` and throws away 40% of the spread it exists to
+        restore. Defaulting to this simulator's own franchise keeps every candidate
+        roster on the same uniforms, which is what makes the paired difference clean.
         """
+        # The candidate's seats are drawn against the SAME uniforms as the baseline's,
+        # keyed on the canonical seat rather than on a positional index, so a roster that
+        # changes shape still meets the same wire. See `S.FloorNoise`.
         return _lineup_scores(
-            self.state, self._points, self._rank, self.replacement, tuple(player_ids)
+            self.state,
+            self._points,
+            self._rank,
+            self.replacement,
+            tuple(player_ids),
+            noise=self._noise,
+            team_index=self._index if team_id is None else self.state.team_index[team_id],
         )
 
     def season_points(self, player_ids: Sequence[int], team_id: int | None = None) -> np.ndarray:
@@ -1283,7 +1299,9 @@ class AugmentedSim:
     draw: Draw
     screen_draw: Draw
     agents: tuple[FreeAgent, ...]
-    floor: Mapping[int, float]
+    #: `WireLevel`s: an empty seat is paid a draw, not its mean. `wire_floor` is the
+    #: mean of exactly this mapping, so nothing about the level changed.
+    floor: Mapping[int, WireLevel]
 
 
 def _availability(sim: LeagueSim) -> Availability | None:
@@ -1394,7 +1412,10 @@ def augment(
     outlooks = _complete(sim.outlooks, {a.player_id for a in agents}, state.weeks, state.season)
     panel = S.panel_for(wide, outlooks)
     sampler = WeeklySampler(panel, seed=sim.seed if seed is None else seed)
-    floor = replacement or wire_floor(
+    # `wire_levels`, not `wire_floor`: the mean is what the lineup solver compares a
+    # roster player against, but the seat is PAID a draw and the spread is what a bracket
+    # is decided by. `wire_floor` is the mean of exactly this, so the level is unchanged.
+    floor = replacement or wire_levels(
         sim.outlooks, _all_rostered(state), state.weeks, state.slot_eligibility, depth=wire_depth
     )
     return AugmentedSim(

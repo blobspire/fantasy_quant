@@ -794,6 +794,24 @@ class _CreditParams:
         )
 
 
+def has_spread(replacement: object) -> bool:
+    """Whether any slot's floor is a distribution rather than a number.
+
+    Callers gate the `FloorNoise` allocation on this. It is `(sims, weeks, teams, seats)`
+    float64 -- about 68MB on a 14-team league at 4,000 simulations -- and a mean-only
+    mapping takes the deterministic path in `_floors` regardless, since `_as_levels`
+    promotes it to `WireLevel(mean, 0.0, 0.0)` and a zero spread yields no credit params.
+    Building the uniforms for one would be memory spent on an array nothing reads.
+
+    Tolerant of both spellings on purpose: a caller holding bare means is not making a
+    mistake, it is asserting a number rather than a distribution, and `_floors` honours
+    that. See `_as_levels`.
+    """
+    return isinstance(replacement, Mapping) and any(
+        float(getattr(v, "sd", 0.0)) > 0.0 for v in replacement.values()
+    )
+
+
 def _as_levels(replacement: Mapping[int, Any]) -> dict[int, WireLevel]:
     """Normalise a mean-only mapping or a full `WireLevel` mapping to WireLevels.
 

@@ -1,7 +1,8 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Ten findings are fixed and pushed -- eight from the original nine,
-plus two the audit did not have. One remains, located. Read the **Remaining work**
+Status as of 2026-09-10. Eleven findings are fixed and pushed -- eight from the original
+nine, plus three the audit did not have. One leftover remains, plus one decision for the
+user. Read the **Remaining work**
 section to continue.
 
 ## Why this file exists
@@ -523,6 +524,72 @@ whatever is behind them.
 `waivers._all_rostered` was the second copy of the same one-liner and is now an alias for
 `wire.all_rostered`. The third spelling was the one that mattered.
 
+### Leftover — two surfaces paid an empty seat a constant while `title` paid it a draw
+
+`sim/season.FloorNoise` has existed since the stochastic floor landed and `decide/title.py`
+has drawn its empty seats ever since. `decide/waivers` and `edges/portfolio` never picked it
+up: `_lineup_scores` and `_column` both called `_franchise_scores` with no `floor_noise`, so
+every empty seat was paid its mean with **zero variance**. Same shape as #1 — the canonical
+machinery was right and the callers did not reach for it.
+
+Not a rare path. Measured on the user's three rosters:
+
+| | Blacksburg | Wine Wednesday | Type shi |
+|---|---|---|---|
+| empty slot-weeks | 15.7% | 19.6% | 18.5% |
+| emptiest single slot | 71% | 88% | 71% |
+| weekly SD understated by | 5.9% | 6.8% | 5.9% |
+| season SD understated by | 6.0% | 6.0% | 5.6% |
+
+The level was right and the **spread** was missing, and a bracket is decided by the spread —
+so the bias landed on exactly the question both surfaces exist to answer. Live effect:
+
+| | before | after |
+|---|---|---|
+| Blacksburg P(title) | 6.75% | 6.50% |
+| Wine Wednesday | 4.20% | 4.35% |
+| Type shi | 9.20% | 8.60% |
+| P(≥1 title) | 18.60% | 17.95% |
+
+The waiver board reorders (Wine Wednesday's Vikings D/ST rises past two rows, and several
+rows change which player they drop), Type shi goes from 1 claim to 2, and **every standard
+error rises** — correctly, because the wire is now a random variable and the paired
+difference has genuine extra variance it was previously pretending away.
+
+**Three things this dragged out:**
+
+- **`augment` fitted `wire_floor`, not `wire_levels`.** The board is built on `wide.floor`, so
+  the draw could never have reached it however well `RosterSimulator` threaded the uniforms.
+  `wire_floor` is documented as the mean of `wire_levels`, so the level is unchanged.
+- **`week_scores`'s `team_id` was documented as ignored, and now is not.** The solve still
+  depends only on the players, slots and floor, but the seats are drawn per team on purpose:
+  `FloorNoise` keeps franchises independent because byes are league-wide, and one shared body
+  cancels in `Var(A) + Var(B) − 2Cov(A,B)`, throwing away 40% of the spread.
+- **`waivers._roster_floor` was the third copy of the empty-slot-group guard**, after
+  `title._floors_for` and `portfolio._floors_for`. It phrased the test over
+  `state.slot_eligibility` where the surviving copy phrases it over the compiled plan's
+  eligibility matrix; the two were verified to agree on **all 190 roster shapes** across the
+  three live leagues before it was deleted. It would also have crashed on a `WireLevel`.
+
+`season.has_spread` gates the `FloorNoise` allocation — `(sims, weeks, teams, seats)` float64,
+about **68MB** on a 14-team league at 4,000 simulations — so a mean-only caller does not pay
+for an array nothing reads.
+
+**Negative control:** a mean-only mapping reproduces the parent commit's `_base_scores`,
+`_base_champ`, `week_scores`, exchange rate and the QB-less empty-group path to a
+**byte-identical digest** on all three live leagues. And CRN survives the drawn wire: a null
+claim is exactly `0.0`, and two identical paired drops return bit-identical arrays. Seven of
+the nine new tests fail on the parent commit.
+
+**A fixture had to change again, for the same reason as `_sim_league`.** `test_portfolio`'s
+`overlapping` has every player on a roster, so its wire is empty, `streaming_levels` falls
+through to the deterministic VOLS rank and every slot comes back `sd = 0.0`. A spread test run
+on it would have passed while measuring nothing. The spread tests use a `wire_strength=` build.
+
+This also closes the **`omitted` → `(weeks,)`** leftover: with the guard living in `_floors`
+and the seat drawn rather than credited a constant, there is one scalar in one place and
+nothing left to promote.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -539,15 +606,10 @@ Ranked. Everything below is located and measured; none is started.
 
 ### Leftovers
 
-- **`floor_noise` is not threaded into `waivers._lineup_scores` (`:388`) or
-  `portfolio._column` (`:367`)**, so those two surfaces still credit an empty seat a constant
-  where `title` credits a draw. Same shape as #1.
 - **Unify the `championship_table` baseline** (user already approved). `fq odds` scores an
   empty slot at zero while every recommendation surface floors it at the wire — two baselines
   for one league, disclosed today in a CLI footer ("baseline: championship_table (unfilled slot
   scores zero)"). Expect the headline odds to move slightly down.
-- **`omitted` → `(weeks,)`** — step 7 of the stochastic-floor plan, never done. Promote the
-  scalar in all three copies so an always-streamed slot carries a streamer's variance.
 
 ### Raised by this work, needs a decision rather than a patch
 
@@ -559,7 +621,7 @@ It moves the Pareto gate, so it is the user's call, not a silent change.
 
 ## How to work on this
 
-- `uv run pytest -q -m "not network"` — 1,883 offline tests, ~70s.
+- `uv run pytest -q -m "not network"` — 1,926 offline tests, ~70s.
 - `uv run pytest -q -m network` — hits ESPN and FanDuel with the real credentials, ~4.5 min.
   Live-market tests are inherently a little flaky; judge on distributions, not single items.
 - `uv run ruff check src tests` before every commit.

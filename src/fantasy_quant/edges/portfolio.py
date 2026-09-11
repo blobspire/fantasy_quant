@@ -147,7 +147,7 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from ..core import MoveKind, Recommendation
+from ..core import MoveKind, Recommendation, WireLevel
 from ..espn.client import EspnClient
 from ..pipeline import LeagueSim, build, client_from_env
 from ..sim import season as S
@@ -247,7 +247,9 @@ class LeagueStake:
     team_id: int
     team_name: str
     #: The fitted streaming level per lineup slot, or None for the empty-seat baseline.
-    replacement: Mapping[int, float] | None
+    #: `WireLevel`s rather than bare means, because an empty seat is PAID a draw and not
+    #: a constant -- see `noise`.
+    replacement: Mapping[int, WireLevel] | None
     #: `(sims,)` 1.0 where the user's franchise won this league.
     champions: np.ndarray
     #: `(sims, weeks)` the user's franchise's starting-lineup total.
@@ -260,6 +262,15 @@ class LeagueStake:
     factors: np.ndarray = field(repr=False)
     #: player_id -> (modal starting slot id, share of remaining weeks he starts).
     starting: Mapping[int, tuple[int, float]] = field(repr=False)
+    #: Uniforms for what each empty seat streams, fixed per `(seed, n_sims)` so two
+    #: candidate rosters meet the same football AND the same wire. Without it an empty
+    #: seat is paid its mean and carries no variance at all, and on these rosters
+    #: 15.7-19.6% of slot-weeks are empty -- one slot is empty 71-88% of the time. The
+    #: level was right and the SPREAD was missing: threading this raises the team's
+    #: weekly SD by 5.9-6.8% and its season SD by 5.6-6.0%, which is most of what decides
+    #: a bracket. `decide/title.py` has done this since the stochastic floor landed;
+    #: this module and `decide/waivers` were the two that never picked it up.
+    noise: S.FloorNoise | None = field(default=None, repr=False)
     #: The lineup the manager has actually submitted this week, captured at build time
     #: while the ESPN client is still open. Empty when it could not be read, in which
     #: case the start/sit surface is measured against a hypothetical optimum and its
@@ -359,7 +370,15 @@ class LeagueStake:
         # The empty-group guard lives in `sim/season._floors`, and `_franchise_scores`
         # adds back what it holds out. This module used to carry its own copy of both.
         return S._franchise_scores(
-            self.state.pool, franchise, plan, points, rank_source, self.replacement
+            self.state.pool,
+            franchise,
+            plan,
+            points,
+            rank_source,
+            self.replacement,
+            floor_noise=None
+            if self.noise is None
+            else self.noise.for_plan(plan, self.state.team_index[franchise.team_id]),
         )
 
 
@@ -367,7 +386,7 @@ def _starting_shares(
     state: S.LeagueState,
     draw: Draw,
     franchise: S.Franchise,
-    replacement: Mapping[int, float] | None,
+    replacement: Mapping[int, WireLevel] | None,
 ) -> dict[int, tuple[int, float]]:
     """Which slot each rostered player starts in, and in what share of remaining weeks.
 
@@ -523,7 +542,7 @@ def build_portfolio(
     """
     if not leagues:
         raise PortfolioError("no leagues given")
-    from ..decide.title import streaming_replacement
+    from ..decide.title import streaming_levels
 
     own_client = client is None
     client = client or client_from_env()
@@ -544,7 +563,7 @@ def build_portfolio(
             # pool comes from the panel, `pipeline.build` pools only ROSTERED players,
             # and every slot falls through to the VOLS roster-bottom rank.
             floors = (
-                streaming_replacement(sim.state, sim.draw, outlooks=sim.outlooks)
+                streaming_levels(sim.state, sim.draw, outlooks=sim.outlooks)
                 if stream_replacement
                 else None
             )
@@ -588,7 +607,7 @@ def _submitted_lineup(sim: LeagueSim, team_id: int) -> tuple[int, ...]:
 def _stake(
     sim: LeagueSim,
     team_id: int,
-    replacement: Mapping[int, float] | None,
+    replacement: Mapping[int, WireLevel] | None,
     efficiency: S.LineupEfficiency | None,
     *,
     current_starters: Sequence[int] = (),
@@ -599,6 +618,9 @@ def _stake(
         raise PortfolioError(f"team {team_id} is not in league {state.league_id}")
     eff = efficiency if efficiency is not None else S.LineupEfficiency()
     factors = eff.draw(state, sim.draw.n_sims)
+    # Built once per stake, never per call: it is common random numbers for the wire, and
+    # a fresh draw per counterfactual would put the noise back into every difference.
+    noise = S.FloorNoise(state, sim.draw) if S.has_spread(replacement) else None
     points, rank = S._as_points_and_rank(state, sim.draw, None)
     rank_source = S._rank_tensor(points, rank, points.shape[1], points.shape[2])
 
@@ -608,6 +630,7 @@ def _stake(
         team_id=team_id,
         team_name=state.franchise(team_id).name,
         replacement=replacement,
+        noise=noise,
         champions=np.zeros(sim.draw.n_sims),
         weekly=np.zeros((sim.draw.n_sims, len(state.weeks))),
         scores=scores,
@@ -623,6 +646,7 @@ def _stake(
         team_id=team_id,
         team_name=state.franchise(team_id).name,
         replacement=replacement,
+        noise=noise,
         champions=result.champions[:, t].astype(np.float64),
         weekly=scores[:, :, t].astype(np.float64),
         scores=scores,
