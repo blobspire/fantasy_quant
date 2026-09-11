@@ -136,9 +136,11 @@ from ..core import (
     Recommendation,
     leverage,
 )
+from ..data.etr import EtrRankings
 from ..sim import season as S
-from ..sim.distributions import Draw
+from ..sim.distributions import Draw, WeeklySampler
 from ..sim.lineup import LineupPlan, monotone_floor, plan_from_slots
+from .opinion import tilt_outlooks
 from .wire import all_rostered
 
 if TYPE_CHECKING:  # pragma: no cover - only for the convenience constructor's type
@@ -190,6 +192,13 @@ DEFAULT_PER_LEG = 6
 #: `best_free_agents`: this is a model of rolling waiver priority (one claim per run),
 #: not a smoothing parameter, and the user's three leagues all run priority.
 DEFAULT_WIRE_DEPTH = 3
+
+#: How far an outside ranking set moves the trade board when one is supplied.
+#: Mirrors `decide/waivers.DEFAULT_BOARD_WEIGHT`, and carries the same warning: this is
+#: the one input in the repo shipping without a measured verdict, because Establish The
+#: Run overwrites each chart in place and publishes no history to back-test against.
+#: `0.0` is byte-identical to not having the board.
+DEFAULT_RANKINGS_WEIGHT = 1.0
 
 POSITION_ABBREV: Mapping[int, str] = {1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DST"}
 
@@ -480,10 +489,32 @@ class TeamImpact:
     #: screen objective. Surfaced rather than hidden, since "cut this one" and "cut any
     #: of these five" are different pieces of advice.
     cut_alternatives: tuple[tuple[int, ...], ...] = ()
+    #: The same two numbers under the counterparty's own valuation -- the projections
+    #: they are actually looking at -- when a second opinion was supplied. Zero when
+    #: there is no second opinion, which is also when `market_delta_points` is zero and
+    #: means nothing; read `has_market` first.
+    market_before_points: float = 0.0
+    market_after_points: float = 0.0
 
     @property
     def delta_points(self) -> float:
         return self.after_points - self.before_points
+
+    @property
+    def has_market(self) -> bool:
+        """Whether a second valuation priced this side at all."""
+        return self.market_before_points != 0.0 or self.market_after_points != 0.0
+
+    @property
+    def market_delta_points(self) -> float:
+        """What this trade looks like to the team being asked to accept it.
+
+        Not a prediction that they will. It is the same objective on the same settled
+        roster, priced through the projections they can see -- which, in this repo,
+        happens to be exactly what every surface computed before a second opinion
+        existed, because `pipeline.league_projections` reads ESPN's own numbers.
+        """
+        return self.market_after_points - self.market_before_points
 
     @property
     def significant(self) -> bool:
@@ -544,12 +575,46 @@ class TradeEvaluation:
                 return i
         raise TradeError(f"team {team_id} is not in this trade")
 
+    @property
+    def has_market(self) -> bool:
+        """Whether a second valuation priced any side of this trade."""
+        return any(i.has_market for i in self.impacts)
+
+    def spread(self, team_id: int) -> float:
+        """How much more the other side thinks it is gaining than it is, in points.
+
+        The arbitrage, stated as the thing it actually is. For every counterparty, the
+        gap between what their own projections say the trade does for them and what
+        ours say it does -- summed, because a three-team cycle has two of them.
+
+        Positive is the case worth having: they read the deal as better for them than
+        it is, so the trade is cheap to get signed. Negative means we are the ones
+        paying up, which is worth seeing rather than hiding.
+
+        Our own side is deliberately absent. The spread is a statement about the
+        disagreement, and our side has nothing to disagree with -- `delta_points`
+        already carries what we believe, and `Recommendation.delta_title` carries what
+        it is worth. Zero when there is only one opinion in the room, which is also
+        when it means nothing: check `has_market` first.
+        """
+        return sum(
+            i.market_delta_points - i.delta_points
+            for i in self.impacts
+            if i.team_id != team_id and i.has_market
+        )
+
     def pitch(self, team_id: int) -> str:
         """The offer written from the counterparties' side of the table.
 
         Sellers fixate on the good and buyers on the price, so an offer that opens with
         what you want reads as a demand. Every other team's haul is named first, and
         only then what it costs them.
+
+        **Their gain is quoted in their own numbers when we have them.** It used to be
+        quoted in ours, which is a number the person reading the offer cannot reproduce
+        from anything on their screen -- and the one figure in the message they are most
+        likely to go and check. Ours is the right number for deciding whether to send
+        the offer; theirs is the right number for writing it.
         """
         me = self.impact_for(team_id)
         parts = []
@@ -558,7 +623,8 @@ class TradeEvaluation:
                 continue
             gets = ", ".join(self._label(p) for p in impact.received)
             gives = ", ".join(self._label(p) for p in impact.given)
-            parts.append(f"{impact.name} gets {gets} (+{impact.delta_points:.1f} pts) for {gives}")
+            theirs = impact.market_delta_points if impact.has_market else impact.delta_points
+            parts.append(f"{impact.name} gets {gets} (+{theirs:.1f} pts) for {gives}")
         mine = ", ".join(self._label(p) for p in me.received) or "nothing"
         return "; ".join(parts) + f". You get {mine} (+{me.delta_points:.1f} pts)."
 
@@ -859,10 +925,19 @@ class TradeFinder:
         floor_rank: int = 1,
         wire_depth: int = DEFAULT_WIRE_DEPTH,
         efficiency: S.LineupEfficiency | None = None,
+        market: TradeFinder | None = None,
     ) -> None:
         self.state = state
         self.draw = draw
         self.outlooks = tuple(outlooks)
+        #: A sibling finder built on the projections the LEAGUE can see, when this one
+        #: is built on something else. Everything about it is identical except `_mu`, so
+        #: "what does this look like to them" is the same objective on the same settled
+        #: roster rather than a second model of anything.
+        self.market = market
+        #: Whose side of the table this search is being run from. Set by `search`;
+        #: `_side` reads it. With no `market` it is irrelevant.
+        self._subject: int | None = None
         self.my_team_id = my_team_id if my_team_id is not None else state.my_team_id
         # Symmetric by default, deliberately. The asymmetric haircut turns every one of
         # the user's below-average teams into a title favourite (see sim/season.py), and
@@ -920,9 +995,71 @@ class TradeFinder:
     # -- construction ------------------------------------------------------------------
 
     @classmethod
-    def from_sim(cls, sim: LeagueSim, **kwargs) -> TradeFinder:
-        """Build from `pipeline.build`'s output. This is how you get a live league."""
-        return cls(sim.state, sim.draw, sim.outlooks, **kwargs)
+    def from_sim(
+        cls,
+        sim: LeagueSim,
+        *,
+        rankings: EtrRankings | None = None,
+        rankings_weight: float = DEFAULT_RANKINGS_WEIGHT,
+        **kwargs,
+    ) -> TradeFinder:
+        """Build from `pipeline.build`'s output. This is how you get a live league.
+
+        With `rankings`, TWO finders are built and the pair is the arbitrage: this one
+        on the re-dealt projections, which is what we believe, and `self.market` on the
+        league's own, which is what the counterparty sees. Without them, one finder and
+        `market is None`, which is exactly today.
+
+        Applied here rather than in `pipeline.build` on purpose. Every surface reads
+        `sim.outlooks`, so re-dealing them upstream would move the odds table and the
+        streaming plan too; this board's remit is trades.
+        """
+        if rankings is None or rankings_weight == 0.0:
+            return cls(sim.state, sim.draw, sim.outlooks, **kwargs)
+        outlooks = tilt_outlooks(sim.outlooks, rankings, weight=rankings_weight)
+        # The confirm scores on the DRAW, not on `_mu`, so the draw has to come from the
+        # same projections the screen reads or the two halves are in different
+        # currencies. Measured on the live Blacksburg board with `sim.draw` reused: the
+        # screen's top row was +17.8 playoff-weighted points and the simulation priced
+        # it at +0.10pp +/- 0.36 -- roughly a tenth of what a point buys there --
+        # because the tensor still carried ESPN's means. Same seed, same size; it is
+        # a different universe from `fq odds` either way and is labelled as such.
+        panel = S.panel_for(sim.state, outlooks)
+        # `pipeline.build` panels with ESPN's bye table and this call has no access to
+        # it; a defence's bye-week outlook still says `playing=True`, so re-panelling
+        # from the outlooks alone would put every D/ST back on the field in week 8.
+        # The original draw's panel has the right `has_game` on identical axes.
+        base = sim.draw.panel
+        if (
+            np.array_equal(base.player_ids, panel.player_ids)
+            and np.array_equal(base.weeks, panel.weeks)
+        ):
+            panel = replace(panel, has_game=base.has_game)
+        else:  # pragma: no cover - the axes are fixed by `state.pool` and `state.weeks`
+            log.warning("re-panelled tensor axes differ from the built draw; byes may be lost")
+        draw = WeeklySampler(panel, seed=sim.seed).draw(sim.n_sims)
+        # The market sibling never simulates -- only `value_of` is ever read off it --
+        # so it can carry the original draw without that draw ever being scored.
+        market = cls(sim.state, sim.draw, sim.outlooks, **kwargs)
+        return cls(sim.state, draw, outlooks, market=market, **kwargs)
+
+    def _side(self, team_id: int) -> TradeFinder:
+        """The finder whose numbers `team_id` is reading.
+
+        Ours for the subject, the league's own for everyone else -- and ours for
+        everyone when there is only one opinion, which makes every path through here
+        identical to the single-finder code it replaced.
+
+        This has to reach every place the search prices a COUNTERPARTY, not just the
+        gate. Measured on the live Blacksburg board with the gate alone: the two-opinion
+        screen returned 38 trades against 40 and admitted **zero** arbitrage rows,
+        because `_paper_gain` and `asset_ranking` were still pruning the other side on
+        our numbers and a package that only clears because they overrate their own
+        player was thrown away before `evaluate` ever saw it.
+        """
+        if self.market is None or self._subject is None or team_id == self._subject:
+            return self
+        return self.market
 
     def _wire_candidates(self) -> tuple[int, ...]:
         """Exactly the bodies the floor is built from -- see `wire_pool` for why.
@@ -1175,12 +1312,17 @@ class TradeFinder:
         hit = self._rankings.get(team_id)
         if hit is not None:
             return hit
+        # What this team wants is priced by the numbers THIS team reads, and what it
+        # costs the owner by the numbers the OWNER reads. With one opinion both are
+        # `self` and this is the original loop.
+        wanting = self._side(team_id)
         edges: list[PreferenceEdge] = []
         for owner, roster in self.rosters.items():
             if owner == team_id:
                 continue
+            owning = self._side(owner)
             for pid in roster:
-                value = self.asset_value(team_id, pid, incoming=True)
+                value = wanting.asset_value(team_id, pid, incoming=True)
                 if value <= 0:
                     continue
                 edges.append(
@@ -1189,7 +1331,7 @@ class TradeFinder:
                         owner_id=owner,
                         player_id=pid,
                         value=value,
-                        cost=self.asset_value(owner, pid, incoming=False),
+                        cost=owning.asset_value(owner, pid, incoming=False),
                     )
                 )
         edges.sort(key=lambda e: (-e.value, e.player_id))
@@ -1232,8 +1374,12 @@ class TradeFinder:
             if missing:
                 raise TradeError(f"team {team} does not have {sorted(missing)}")
             after = [p for p in current if p not in out] + list(proposal.received_by(team))
-            settled, cut, added, tied = self.settle(team, after)
+            # Who a team cuts is that team's call, made on the numbers that team reads.
+            # Settling a counterparty on ours would price a roster they would not hold.
+            settled, cut, added, tied = self._side(team).settle(team, after)
             rosters[team] = settled
+            # Then the SAME settled roster is priced twice, so the two numbers differ
+            # only in the projections behind them -- which is the whole claim.
             impacts.append(
                 TeamImpact(
                     team_id=team,
@@ -1245,6 +1391,12 @@ class TradeFinder:
                     cut_alternatives=tied,
                     before_points=self.value_of(current),
                     after_points=self.value_of(settled),
+                    market_before_points=(
+                        0.0 if self.market is None else self.market.value_of(current)
+                    ),
+                    market_after_points=(
+                        0.0 if self.market is None else self.market.value_of(settled)
+                    ),
                 )
             )
         return TradeEvaluation(
@@ -1287,6 +1439,11 @@ class TradeFinder:
         gain so the caller can apply their own.
         """
         target = for_team if for_team is not None else self.my_team_id
+        if self.market is not None and target != self._subject:
+            # The preference graph is priced from the subject's side of the table, so a
+            # different subject is a different graph.
+            self._subject = target
+            self._rankings.clear()
         edges = self.preference_edges(top_k=top_k)
         adjacency = {team: {e.owner_id for e in team_edges} for team, team_edges in edges.items()}
         cycles = simple_cycles(adjacency, max_teams)
@@ -1301,7 +1458,7 @@ class TradeFinder:
         for cycle in cycles:
             for proposal in self._cycle_proposals(cycle, per_leg, max_package, per_cycle):
                 ev = self.evaluate(proposal)
-                if ev.pareto and ev.min_gain > min_gain:
+                if self._passes(ev, target, min_gain):
                     out.append(ev)
         key = (
             (lambda e: -e.impact_for(target).delta_points)
@@ -1310,6 +1467,31 @@ class TradeFinder:
         )
         out.sort(key=key)
         return _dedupe(out)[:limit]
+
+    def _passes(self, ev: TradeEvaluation, target: int | None, min_gain: float) -> bool:
+        """The gate. Pareto by default; the arbitrage when a second opinion exists.
+
+        With one valuation there is one question -- does this help everybody -- and
+        `TradeEvaluation.pareto` is it. With two there are two, and they are asked of
+        different people: does it help ME under what I believe, and does it help THEM
+        under what they can see. A trade that fails the second is not a trade, however
+        good it looks from here, because nobody accepts it.
+
+        `pareto` itself is left alone. It is a property of the evaluation and has no
+        notion of whose board this is; the subject-aware gate belongs here, where
+        `target` already exists. `market is None` collapses this to `pareto` exactly.
+        """
+        if self.market is None or target is None:
+            return ev.pareto and ev.min_gain > min_gain
+        # `pareto` is `> 0` and `min_gain` is a floor on the same quantity, so the
+        # original gate is `> max(0, min_gain)` -- kept exactly, and applied to each
+        # side through the valuation that side is reading.
+        floor = max(min_gain, 0.0)
+        for impact in ev.impacts:
+            side = impact.delta_points if impact.team_id == target else impact.market_delta_points
+            if not side > floor:
+                return False
+        return True
 
     def _cycle_gain(
         self, cycle: Sequence[int], edges: Mapping[int, Sequence[PreferenceEdge]]
@@ -1418,11 +1600,12 @@ class TradeFinder:
         through a candidate that `evaluate` then rejects, and cannot discard one that
         would have worked. A one-for-one comes out exactly equal to the re-solved gain.
         """
+        side = self._side(team)
         gone = set(outgoing)
         kept = [p for p in self.rosters.get(team, ()) if p not in gone]
-        base = self.value_of(self.rosters.get(team, ()))
-        after_out = self.value_of(kept)
-        gets = sum(self.value_of([*kept, p]) - after_out for p in incoming)
+        base = side.value_of(self.rosters.get(team, ()))
+        after_out = side.value_of(kept)
+        gets = sum(side.value_of([*kept, p]) - after_out for p in incoming)
         return after_out + gets - base
 
     # -- the simulation half -----------------------------------------------------------
@@ -1598,6 +1781,14 @@ class TradeFinder:
                 tags.append("consolidating")
             elif len(mine.received) > len(mine.given):
                 tags.append("expanding")
+            # The arbitrage, tagged only when there are genuinely two opinions to
+            # disagree. A sign test on a deterministic difference, not on a noisy
+            # paired estimate -- both valuations price the same settled roster with no
+            # simulation anywhere, so there is nothing here for a z to guard against.
+            if ev.has_market:
+                spread = ev.spread(team)
+                tags.append("mispriced" if spread > 0.0 else "fairly-priced")
+                tags.append(f"spread:{spread:+.2f}")
             if ev.confirmed:
                 # The screen said Pareto and the simulation disagreed. Both of these
                 # used to be BARE SIGN TESTS on a paired estimate the module's own
@@ -1674,11 +1865,36 @@ class TradeFinder:
     ) -> str:
         mine = ev.impact_for(team)
         head = ev.pitch(team)
-        weakest = ev.min_gain
-        body = (
-            f" Every side gains on its own starting lineup (weakest +{weakest:.1f} "
-            f"playoff-weighted pts)."
-        )
+        if ev.has_market:
+            # Two questions were asked, so two answers are given. `ev.min_gain` is the
+            # weakest side under OUR numbers, and on an arbitrage row that is negative
+            # by construction -- printing it as "every side gains" would be false.
+            theirs = min(
+                (i.market_delta_points for i in ev.impacts if i.team_id != team), default=0.0
+            )
+            ours_on_them = min(
+                (i.delta_points for i in ev.impacts if i.team_id != team), default=0.0
+            )
+            spread = ev.spread(team)
+            body = (
+                f" You gain +{mine.delta_points:.1f} playoff-weighted pts by the analyst "
+                f"board; the other side gains +{theirs:.1f} by the projections on their "
+                f"screen (weakest side)."
+            )
+            if ours_on_them <= 0.0:
+                body += (
+                    f" By the analyst board that side is {ours_on_them:+.1f}, so this is "
+                    f"the disagreement being traded on, not a deal that helps both by one "
+                    f"account -- spread {spread:+.1f} pts."
+                )
+            else:
+                body += f" Both boards call it a gain for them; spread {spread:+.1f} pts."
+        else:
+            weakest = ev.min_gain
+            body = (
+                f" Every side gains on its own starting lineup (weakest +{weakest:.1f} "
+                f"playoff-weighted pts)."
+            )
         if ev.confirmed:
             base = self.baseline_title(team)
             body += (
@@ -1820,6 +2036,8 @@ def find_trades(
     n_confirm: int | None = None,
     include_harmful: bool = False,
     finder: TradeFinder | None = None,
+    rankings: EtrRankings | None = None,
+    rankings_weight: float = DEFAULT_RANKINGS_WEIGHT,
 ) -> list[Recommendation]:
     """Search one live league and return confirmed trades, best first.
 
@@ -1852,8 +2070,18 @@ def find_trades(
     counterparty gains half a playoff-weighted point from, and the difference between
     "improves their lineup" and "they would sign it" is the whole distance between this
     module's output and a trade that happens.
+
+    `rankings` closes some of that distance, and is the only thing here that does. With
+    a second opinion the gate stops asking one question of everybody and asks two: does
+    this help ME under what I believe, and does it help THEM under what they can see. A
+    trade that fails the second does not happen no matter how good it looks from here,
+    and a trade that passes both is one the numbers on their screen argue for. That is
+    as far as this goes -- there is no model of whether they will actually accept, and
+    there cannot be, because no accepted-or-rejected trade has ever been recorded here.
     """
-    engine = finder or TradeFinder.from_sim(sim)
+    engine = finder or TradeFinder.from_sim(
+        sim, rankings=rankings, rankings_weight=rankings_weight
+    )
     team = for_team if for_team is not None else engine.my_team_id
     screened = engine.search(
         for_team=team,

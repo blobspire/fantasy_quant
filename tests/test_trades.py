@@ -1334,3 +1334,293 @@ def test_sd_diff_falls_back_to_the_corpus_constant_on_a_degenerate_tensor():
     finder._base_scores = np.zeros_like(scores)
     finder._sd_diff = None
     assert finder.sd_diff == MEASURED_SD_DIFF
+
+
+# --------------------------------------------------------------------------------------
+# Two opinions: mine, and the one the counterparty is reading
+# --------------------------------------------------------------------------------------
+
+
+def _dual(rosters, wire=None, *, tilt: dict[int, float] | None = None, **kwargs):
+    """A finder on re-dealt numbers, with a sibling on the league's own.
+
+    The tilt is supplied directly as `{player_id: factor}` rather than through a board,
+    because what is under test here is what a *second valuation* does to the trade
+    board -- not how the second valuation was arrived at. `test_opinion.py` owns that.
+    """
+    state, outlooks = _market(rosters, wire)
+    draw = _dummy_draw(state, outlooks)
+    market = TradeFinder(state, draw, outlooks, **kwargs)
+    mine = list(outlooks)
+    if tilt:
+        by_name = {o.name: o for o in outlooks}
+        mine = [
+            (
+                dataclasses.replace(
+                    o,
+                    weeks={
+                        w: dataclasses.replace(wo, mean=wo.mean * tilt[o.player_id])
+                        for w, wo in o.weeks.items()
+                    },
+                )
+                if o.player_id in tilt
+                else o
+            )
+            for o in outlooks
+        ]
+        assert by_name  # keeps the helper honest if the fixture shape changes
+    # The confirm scores on the draw, so ours is drawn from OUR numbers -- the same
+    # thing `from_sim` does, and the thing it got wrong first.
+    return TradeFinder(state, _dummy_draw(state, mine), mine, market=market, **kwargs)
+
+
+class TestTheCounterpartyIsPricedInTheirOwnNumbers:
+    """`CONSOLIDATION` and `WIRE`, the fixture the rest of this file's gate tests use.
+
+    Reused deliberately: the point under test is what a second valuation does to a
+    board, and reusing the board every other assertion is made against is what makes
+    "nothing else moved" checkable.
+    """
+
+    def _swap(self, finder):
+        return TradeProposal(
+            league_id=42,
+            legs=(
+                TradeLeg(from_team=1, to_team=2, player_ids=(_by_name(finder, "RB traded"),)),
+                TradeLeg(from_team=2, to_team=1, player_ids=(_by_name(finder, "WR elite"),)),
+            ),
+        )
+
+    def test_with_one_opinion_nothing_changes_at_all(self):
+        """The negative control. `market=None` is today, to the field."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        assert finder.market is None
+        ev = finder.evaluate(self._swap(finder))
+        assert not ev.has_market
+        assert all(i.market_delta_points == 0.0 for i in ev.impacts)
+        assert ev.spread(1) == 0.0
+
+    def test_the_same_settled_roster_is_priced_twice(self):
+        """One cut, one wire re-fill, decided once -- by us. The two numbers differ
+        only in the projections behind them, which is the entire claim."""
+        finder = _dual(CONSOLIDATION, WIRE, tilt={})
+        ev = finder.evaluate(self._swap(finder))
+        # No disagreement supplied, so the two valuations must agree exactly.
+        for impact in ev.impacts:
+            assert impact.market_delta_points == pytest.approx(impact.delta_points)
+        assert ev.spread(1) == pytest.approx(0.0)
+
+    def test_a_disagreement_shows_up_as_a_spread_on_their_side_only(self):
+        probe = _finder(CONSOLIDATION, WIRE)
+        # We rate the receiver they are giving up far below their own numbers.
+        finder = _dual(CONSOLIDATION, WIRE, tilt={_by_name(probe, "WR elite"): 0.4})
+        ev = finder.evaluate(self._swap(finder))
+        theirs = ev.impact_for(2)
+        assert theirs.has_market
+        assert theirs.market_delta_points != pytest.approx(theirs.delta_points)
+        # Our own side never enters the spread: it has nothing to disagree with.
+        assert ev.spread(1) == pytest.approx(
+            theirs.market_delta_points - theirs.delta_points
+        )
+
+    def test_the_pitch_quotes_their_number_not_ours(self):
+        """The one figure in the offer the reader is most likely to go and check. Ours
+        is the right number for deciding whether to send it; theirs is the right number
+        for writing it."""
+        probe = _finder(CONSOLIDATION, WIRE)
+        finder = _dual(CONSOLIDATION, WIRE, tilt={_by_name(probe, "WR elite"): 0.4})
+        ev = finder.evaluate(self._swap(finder))
+        theirs = ev.impact_for(2)
+        assert f"+{theirs.market_delta_points:.1f} pts" in ev.pitch(1)
+
+    def test_with_one_opinion_the_pitch_is_unchanged(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        ev = finder.evaluate(self._swap(finder))
+        theirs = ev.impact_for(2)
+        assert f"+{theirs.delta_points:.1f} pts" in ev.pitch(1)
+
+
+class TestTheGateAsksTwoQuestionsWhenThereAreTwoOpinions:
+    def test_with_no_second_opinion_the_gate_is_exactly_pareto(self):
+        """Two valuations that agree must select exactly what one valuation selects."""
+        plain = _finder(CONSOLIDATION, WIRE).search(for_team=1)
+        paired = _dual(CONSOLIDATION, WIRE, tilt={}).search(for_team=1)
+        assert plain, "the fixture is constructed to contain real trades"
+        assert [e.proposal for e in plain] == [e.proposal for e in paired]
+
+    def test_every_counterparty_gains_under_the_numbers_they_can_see(self):
+        """The acceptance condition, and the only one this module is entitled to state.
+        Not "they will say yes" -- nothing here predicts that, and nothing could, since
+        no accepted-or-rejected trade has ever been recorded in this repo."""
+        probe = _finder(CONSOLIDATION, WIRE)
+        finder = _dual(CONSOLIDATION, WIRE, tilt={_by_name(probe, "WR elite"): 0.4})
+        found = finder.search(for_team=1)
+        assert found
+        for ev in found:
+            assert ev.impact_for(1).delta_points > 0.0
+            for impact in ev.impacts:
+                if impact.team_id != 1:
+                    assert impact.market_delta_points > 0.0
+
+    def test_the_gate_admits_trades_that_are_not_pareto_under_our_own_numbers(self):
+        """This is the arbitrage, and it is worth being explicit that the gate got
+        LOOSER rather than tighter.
+
+        With one opinion a trade has to help everybody, because there is only one
+        account of what helping means. With two, the counterparty's side is judged by
+        their projections, not ours -- so a deal we think is bad for them still stands,
+        provided their own numbers say otherwise. That is not a loophole; it is the
+        whole object. A trade that is good for me and good for them by my reckoning is
+        just a good trade, and I did not need a second opinion to find it.
+
+        Measured on this fixture: 12 of the 26 survivors are not Pareto under our
+        valuation, and every one of them clears the counterparty's own."""
+        probe = _finder(CONSOLIDATION, WIRE)
+        finder = _dual(CONSOLIDATION, WIRE, tilt={_by_name(probe, "WR elite"): 0.4})
+        found = finder.search(for_team=1)
+        arbitrage = [ev for ev in found if not ev.pareto]
+        assert arbitrage, "a second opinion that admits nothing new is not a second opinion"
+        for ev in arbitrage:
+            assert all(
+                i.market_delta_points > 0.0 for i in ev.impacts if i.team_id != 1
+            )
+
+    def test_our_own_side_is_still_judged_by_our_own_numbers(self):
+        """The half of the gate that must NOT loosen. Their opinion decides whether
+        they would sign it; it has no standing on whether we want it."""
+        probe = _finder(CONSOLIDATION, WIRE)
+        finder = _dual(CONSOLIDATION, WIRE, tilt={_by_name(probe, "WR elite"): 0.4})
+        for ev in finder.search(for_team=1):
+            mine = ev.impact_for(1)
+            assert mine.delta_points > 0.0
+
+    def test_the_rationale_does_not_claim_every_side_gains_on_an_arbitrage_row(self):
+        """`ev.min_gain` is the weakest side under OUR numbers and is negative on every
+        arbitrage row by construction. The one-opinion sentence printed it as a gain."""
+        probe = _finder(CONSOLIDATION, WIRE)
+        finder = _dual(CONSOLIDATION, WIRE, tilt={_by_name(probe, "WR elite"): 0.4})
+        arbitrage = [ev for ev in finder.search(for_team=1) if not ev.pareto]
+        assert arbitrage
+        text = finder._rationale(arbitrage[0], 1)
+        assert "Every side gains" not in text
+        assert "disagreement being traded on" in text
+        assert "spread" in text
+
+    def test_a_player_they_underrate_can_actually_be_acquired(self):
+        """The bug the gate alone did not catch, and the fixture did not either until it
+        was asked the right way.
+
+        The search prunes packages on `_paper_gain` and builds its preference graph on
+        `asset_ranking`, both BEFORE `evaluate` runs. When those priced every team on
+        our numbers, a deal that only clears because the other side underrates their
+        own player was thrown away before the market gate ever saw it. Measured here
+        with the counterparty's elite receiver tilted to 2.5x our side: the pre-fix
+        search returned 40 survivors and **zero** of them brought him over; the
+        subject-aware search returns 21 and five of them do. On the live Blacksburg
+        board the same defect returned 38 trades with zero arbitrage rows and every
+        spread negative, and on Wine Wednesday it returned nothing at all."""
+        probe = _finder(CONSOLIDATION, WIRE)
+        elite = _by_name(probe, "WR elite")
+        finder = _dual(CONSOLIDATION, WIRE, tilt={elite: 2.5})
+        found = finder.search(for_team=1)
+        assert found
+        landing = [ev for ev in found if elite in ev.impact_for(1).received]
+        assert landing, "the one player we rate far above their own numbers never arrived"
+        for ev in landing:
+            theirs = [i for i in ev.impacts if i.team_id != 1]
+            assert all(i.market_delta_points > 0.0 for i in theirs)
+
+    def test_each_side_settles_its_own_roster_on_its_own_numbers(self):
+        """Who a team cuts is that team's call. A counterparty settled on our numbers
+        is priced on a roster they would not hold."""
+        probe = _finder(CONSOLIDATION, WIRE)
+        elite = _by_name(probe, "WR elite")
+        finder = _dual(CONSOLIDATION, WIRE, tilt={elite: 2.5})
+        finder._subject = 1
+        for ev in finder.search(for_team=1):
+            for team in ev.proposal.teams:
+                if team == 1:
+                    continue
+                current = finder.rosters[team]
+                out = set(ev.proposal.given_by(team))
+                after = [p for p in current if p not in out] + list(ev.proposal.received_by(team))
+                theirs, *_ = finder.market.settle(team, after)
+                assert ev.rosters[team] == theirs
+
+
+class TestFromSimWithABoard:
+    """`from_sim` is the only production path, so its two-finder construction is
+    tested as a whole rather than through the constructor seam the other tests use."""
+
+    def _sim(self):
+        from types import SimpleNamespace
+
+        state, outlooks = _market(CONSOLIDATION, WIRE)
+        draw = _dummy_draw(state, outlooks)
+        return SimpleNamespace(
+            state=state, draw=draw, outlooks=outlooks, n_sims=64, seed=7, league=None
+        )
+
+    def _board(self, sim, *, pos_ranks):
+        from pathlib import Path
+
+        import polars as pl
+
+        from fantasy_quant.data.etr import EtrRankings
+
+        by_name = {o.name: o for o in sim.outlooks}
+        rows = [
+            (by_name[n].player_id, by_name[n].position_id, i + 1, r, n)
+            for i, (n, r) in enumerate(pos_ranks)
+        ]
+        return EtrRankings(
+            scoring="half_ppr",
+            kind="silva",
+            path=Path("b.csv"),
+            frame=pl.DataFrame(
+                {
+                    "espn_id": [r[0] for r in rows],
+                    "position_id": [r[1] for r in rows],
+                    "etr_rank": [r[2] for r in rows],
+                    "pos_rank": [r[3] for r in rows],
+                    "player": [r[4] for r in rows],
+                }
+            ),
+        )
+
+    def test_no_board_is_one_finder_on_the_original_draw(self):
+        sim = self._sim()
+        finder = TradeFinder.from_sim(sim)
+        assert finder.market is None
+        assert finder.draw is sim.draw
+        assert finder.outlooks == tuple(sim.outlooks)
+
+    def test_weight_zero_is_the_same_as_no_board(self):
+        sim = self._sim()
+        board = self._board(sim, pos_ranks=[("WR elite", 1), ("WR1", 2)])
+        finder = TradeFinder.from_sim(sim, rankings=board, rankings_weight=0.0)
+        assert finder.market is None and finder.draw is sim.draw
+
+    def test_the_confirm_draw_is_drawn_from_the_tilted_numbers(self):
+        """Screen and simulation in one currency. With the original draw reused, the
+        live Blacksburg screen said +17.8 points and the simulation said +0.10pp."""
+        sim = self._sim()
+        # Board says WR1 (13.0/wk) is the best receiver and WR elite is second, so the
+        # tilt hands WR1 the elite value and vice versa.
+        board = self._board(sim, pos_ranks=[("WR1", 1), ("WR elite", 2)])
+        finder = TradeFinder.from_sim(sim, rankings=board, rankings_weight=1.0)
+        assert finder.market is not None
+        assert finder.draw is not sim.draw
+        wr1 = _by_name(finder, "WR1")
+        col = int(np.where(finder.draw.panel.player_ids == wr1)[0][0])
+        col0 = int(np.where(sim.draw.panel.player_ids == wr1)[0][0])
+        assert finder.draw.points[:, :, col].mean() > sim.draw.points[:, :, col0].mean() * 1.2
+        # The market sibling is on the league's own numbers and its own draw.
+        assert finder.market.draw is sim.draw
+        assert finder.market.outlooks == tuple(sim.outlooks)
+
+    def test_byes_survive_the_re_panel(self):
+        sim = self._sim()
+        board = self._board(sim, pos_ranks=[("WR1", 1), ("WR elite", 2)])
+        finder = TradeFinder.from_sim(sim, rankings=board, rankings_weight=1.0)
+        assert np.array_equal(finder.draw.panel.has_game, sim.draw.panel.has_game)
