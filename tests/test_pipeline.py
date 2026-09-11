@@ -142,6 +142,86 @@ class TestByes:
 
 
 @pytest.mark.network
+class TestOneLeagueHasOneBaseline:
+    """`championship_table` scored an unfilled slot at ZERO. Everything else floored it.
+
+    One league, two published baselines, disclosed only as a footer string on `fq odds`
+    and impossible to reconcile from the output. An empty seat does not score nothing --
+    the wire always has a defence -- and every recommendation surface already knew that.
+
+    It is not a level shift that cancels. Championship probabilities sum to one, so this
+    is a RELATIVE game and the teams it helps are the ones carrying the most empty seats.
+    Measured on the user's three leagues at week 1 of 2026, 7 to 11 of the 12-14 teams
+    change rank, the biggest single move is -3.53pp and the biggest rise +3.25pp.
+    """
+
+    def _sim(self, n_sims: int = 200):
+        # `test_waivers._league` already builds a league whose `extra=` players sit in
+        # the pool and on nobody's roster -- which is what a wire IS. Reused rather than
+        # rebuilt, the way `test_season` reuses `test_title.build_league`: a second
+        # synthetic league that has to stay in step with this one is a liability.
+        import sys
+
+        sys.path.insert(0, "tests")
+        from test_waivers import _league, _outlook
+
+        from fantasy_quant.sim import season as S
+        from fantasy_quant.sim.distributions import WeeklySampler
+
+        state, outlooks = _league(
+            extra=(
+                _outlook(9201, 3, 91, dict.fromkeys((1, 2, 3, 4), 9.0)),
+                _outlook(9202, 2, 92, dict.fromkeys((1, 2, 3, 4), 8.0)),
+                _outlook(9203, 16, 93, dict.fromkeys((1, 2, 3, 4), 7.0)),
+                _outlook(9204, 5, 94, dict.fromkeys((1, 2, 3, 4), 7.5)),
+            )
+        )
+        panel = S.panel_for(state, outlooks)
+        draw = WeeklySampler(panel, seed=3).draw(n_sims)
+        return P.LeagueSim(
+            league=None,  # type: ignore[arg-type]
+            state=state,
+            draw=draw,
+            outlooks=outlooks,
+            n_sims=n_sims,
+            seed=3,
+        )
+
+    def test_the_floor_is_the_default_and_it_is_the_wire(self):
+        sim = self._sim()
+        floors = sim.floors()
+        assert floors
+        assert any(lv.mean > 0.0 for lv in floors.values())
+
+    def test_the_floors_are_cached_rather_than_re_sorted(self):
+        sim = self._sim()
+        assert sim.floors() is sim.floors()
+
+    def test_flooring_moves_the_table_and_it_still_sums_to_one(self):
+        sim = self._sim(400)
+        wired = P.championship_table(sim)
+        assert sum(r["championship"] for r in wired) == pytest.approx(1.0, abs=1e-6)
+
+        from fantasy_quant.sim import season as S
+
+        empty = S.simulate(sim.state, sim.draw, all_play=False, replacement=0.0)
+        by_team = {f.team_id: empty.by_team(f.team_id).championship for f in sim.state.franchises}
+        assert sum(by_team.values()) == pytest.approx(1.0, abs=1e-6)
+        # The point of the fix: these are different tables, not the same one rescaled.
+        assert any(
+            abs(r["championship"] - by_team[int(r["team_id"])]) > 1e-9 for r in wired
+        ), "flooring the empty seat changed nothing; the fixture has no empty seats"
+
+    def test_an_explicit_zero_restores_the_old_convention(self):
+        """The negative control: the old baseline is still reachable, and exactly."""
+        sim = self._sim()
+        from fantasy_quant.sim import season as S
+
+        a = sim.simulate(replacement=0.0)
+        b = S.simulate(sim.state, sim.draw, all_play=False, replacement=0.0)
+        assert np.array_equal(a.champions, b.champions)
+
+
 class TestAgainstTheRealLeagues:
     """The end-to-end acceptance test. These are the user's actual leagues."""
 

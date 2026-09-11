@@ -33,12 +33,18 @@ your worst starter and this week is a coin flip, so a marginal upgrade is worth 
 threshold, the measured leverage and the measured points-to-title rate rather than from a
 template, so it cannot claim a hold the numbers do not support.
 
-**Levels across surfaces are not comparable; deltas are.** `pipeline.championship_table`
-scores an unfilled starting slot at zero and `decide/waivers.py` streams a replacement
-into it, which is worth ~1.4pp of title probability on a thin roster -- 2.6% against 4.0%
-on Wine Wednesday. Both baselines appear in the weekly report, labelled, rather than one
-being quietly preferred. Only `delta_title` travels between leagues, which is the entire
-reason the queue can exist.
+**Levels across surfaces are still not comparable; deltas are.** They used to disagree
+about the FLOOR as well: `pipeline.championship_table` scored an unfilled starting slot at
+zero while `decide/waivers.py` streamed a replacement into it, so one league carried two
+published baselines, disclosed only as a footer string. Every surface now floors an empty
+seat at the wire and they agree about the convention.
+
+What is left is not a bug and will not be fixed: each surface draws its own season.
+`championship_table` runs on `pipeline.build`'s draw, `decide/waivers` on a widened panel
+that gives free agents columns, `edges/portfolio` on one seed shared across three leagues.
+Those are genuinely different Monte Carlo universes, so their LEVELS will never match to
+the decimal, and only `delta_title` travels between leagues -- which is the entire reason
+the queue can exist.
 
 The commands (`odds`, `weekly`, `waivers`, `trades`, `lineup`, `stream`, `queue`) all
 take `--league` by id or by registry name, repeatable, defaulting to every enabled league
@@ -668,10 +674,14 @@ def _rank_separated(p_hi: float, p_lo: float, n_sims: int) -> bool:
 def odds_payload(ws: Workspace, cfg: registry.LeagueConfig) -> dict[str, Any]:
     """Every team's championship odds, plus the facts ESPN already knows.
 
-    The probabilities come from `pipeline.championship_table`, which scores an unfilled
-    starting slot at zero. That is the right baseline for "how good is this roster" and
-    it is *not* the number `fq waivers` reports, which streams a replacement into the
-    empty seat. Both are labelled everywhere they appear.
+    The probabilities come from `pipeline.championship_table`, which **floors an unfilled
+    starting slot at the wire**, as every recommendation surface already did. It used to
+    score that slot at zero, which made this the one surface in the system answering a
+    different question from the rest -- a gap disclosed only as a footer string here and
+    impossible to reconcile from the output.
+
+    The remaining disagreement with `fq waivers` is the DRAW, not the floor: that board
+    runs on a widened panel so free agents have columns. Compare deltas, not levels.
 
     **The ranking is mostly Monte Carlo noise and the payload now says so.** This table
     is the first thing `fq weekly` prints and the only surface here that had no
@@ -724,7 +734,7 @@ def odds_payload(ws: Workspace, cfg: registry.LeagueConfig) -> dict[str, Any]:
         "n_sims": sim.n_sims,
         "corpus_variant": read,
         "corpus_variant_requested": wanted,
-        "baseline": "championship_table (unfilled slot scores zero)",
+        "baseline": "championship_table (unfilled slot floored at the wire)",
         "teams": teams,
         "my_rank": mine["rank"] if mine else None,
         "my_championship": mine["championship"] if mine else None,

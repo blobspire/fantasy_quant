@@ -29,14 +29,14 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 
 from . import corpus
-from .core import FITTED_POSITIONS, Objective, PlayerOutlook, WeeklyOutlook
+from .core import FITTED_POSITIONS, Objective, PlayerOutlook, WeeklyOutlook, WireLevel
 from .espn.client import EspnClient
 from .espn.endpoints import league_url
 from .espn.league import League
@@ -324,9 +324,54 @@ class LeagueSim:
     outlooks: Sequence[PlayerOutlook]
     n_sims: int
     seed: int
+    #: Cache for `floors()`. Not part of the value -- two sims with the same draw are the
+    #: same sim whether or not either has been asked for its floors yet.
+    _floors: Mapping[int, WireLevel] | None = field(
+        default=None, compare=False, repr=False
+    )
+
+    def floors(self) -> Mapping[int, WireLevel]:
+        """What an unfilled starting slot streams off this league's wire, per slot id.
+
+        `decide/title.streaming_levels` over `self.outlooks`, which is the same call
+        every recommendation surface in this codebase makes. Cached, because it is a
+        sort over the whole projection corpus and nothing about it changes between calls.
+        """
+        if self._floors is None:
+            from .decide.title import streaming_levels
+
+            object.__setattr__(
+                self,
+                "_floors",
+                streaming_levels(self.state, self.draw, outlooks=self.outlooks),
+            )
+        assert self._floors is not None
+        return self._floors
 
     def simulate(self, **kw) -> S.SeasonResult:
+        """This league's season, with an unfilled slot floored at the wire.
+
+        **The floor is the default now, and it did not used to be.** `championship_table`
+        scored an unfilled slot at ZERO while every recommendation surface floored it at
+        the wire, so one league had two published baselines -- a gap disclosed only as a
+        footer string on `fq odds` and impossible to reconcile from the output. An empty
+        seat does not score nothing; the wire always has a defence.
+
+        It is not a level shift that cancels. Championship probabilities sum to one, so
+        this is a relative game, and the teams it helps are the ones carrying the most
+        empty seats. Measured on the user's three leagues at week 1 of 2026, **7 to 11 of
+        the 12-14 teams change rank**, the biggest single move is -3.53pp and the biggest
+        rise +3.25pp, and the user's own odds go UP in all three (+1.57, +1.45, +0.77pp).
+
+        Pass `replacement=0.0` for the old empty-seat convention.
+        """
         kw.setdefault("all_play", False)
+        if "replacement" not in kw:
+            kw["replacement"] = self.floors()
+        kw.setdefault(
+            "noise",
+            S.FloorNoise(self.state, self.draw) if S.has_spread(kw["replacement"]) else None,
+        )
         return S.simulate(self.state, self.draw, **kw)
 
 

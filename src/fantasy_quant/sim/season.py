@@ -1291,6 +1291,7 @@ def simulate(
     all_play: bool = True,
     plans: Sequence[LineupPlan] | None = None,
     replacement: Mapping[int, float] | float | None = None,
+    noise: FloorNoise | None = None,
 ) -> SeasonResult:
     """Simulate the rest of the season and the bracket against a pre-drawn outcome.
 
@@ -1305,6 +1306,10 @@ def simulate(
     Pass `LineupEfficiency.symmetric()` to remove the asymmetry, or an explicit
     `(sims, teams)` array to hold the same managers fixed across a batch of scenarios.
 
+    `replacement` is what an unfilled slot scores and `noise` is what it is actually PAID
+    -- the mean with no variance otherwise, which is a different and worse statement. See
+    `_floors` and `FloorNoise`.
+
     `all_play=False` in an inner search loop. All-play is an O(teams^2) comparison per
     week and is the dominant cost of everything downstream of the scores: measured on a
     12-team league at 2,000 simulations, standings plus bracket take 16 ms with it and
@@ -1314,7 +1319,13 @@ def simulate(
         efficiency = LineupEfficiency()
     hindsight = not isinstance(outcome, Draw) and rank is None
     scores = team_week_scores(
-        state, outcome, rank=rank, efficiency=efficiency, plans=plans, replacement=replacement
+        state,
+        outcome,
+        rank=rank,
+        efficiency=efficiency,
+        plans=plans,
+        replacement=replacement,
+        noise=noise,
     )
     return simulate_from_scores(state, scores, all_play=all_play, hindsight_lineups=hindsight)
 

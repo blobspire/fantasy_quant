@@ -1,9 +1,8 @@
 # The first-principles audit: findings, fixes, and what is left
 
-Status as of 2026-09-10. Eleven findings are fixed and pushed -- eight from the original
-nine, plus three the audit did not have. One leftover remains, plus one decision for the
-user. Read the **Remaining work**
-section to continue.
+Status as of 2026-09-10. **Every finding in this audit is fixed and pushed** -- all nine
+verified findings, plus three the audit did not have. What is left is one constant that is
+the user's decision rather than a defect; see **Remaining work**.
 
 ## Why this file exists
 
@@ -590,6 +589,44 @@ This also closes the **`omitted` → `(weeks,)`** leftover: with the guard livin
 and the seat drawn rather than credited a constant, there is one scalar in one place and
 nothing left to promote.
 
+### Leftover — one league, two published baselines
+
+`pipeline.championship_table` scored an unfilled starting slot at **zero** while every
+recommendation surface floored it at the wire. That is one league answering two different
+questions, and the gap was disclosed only as a footer string on `fq odds` — impossible to
+reconcile from the output. An empty seat does not score nothing; the wire always has a defence.
+
+**The audit predicted the headline odds would move "slightly down". They move UP, and not
+slightly.** Championship probabilities sum to one, so this is a *relative* game: flooring an
+empty seat helps whoever has the most empty seats, and that is the thin rosters. The user sits
+mid-to-low in all three leagues, so the user is who it helps.
+
+| | before | after |
+|---|---|---|
+| Blacksburg (rank 9/12) | 5.03% | **6.60%** |
+| Wine Wednesday (rank 13/14) | 2.70% | **4.15%** |
+| Type shi (rank 7/12) | 7.83% | **8.60%** |
+
+And it is a re-ranking, not a rescale: **7 to 11 of the 12–14 teams change rank** in each
+league. The largest single move is −3.53pp (Pukachu) and the largest rise +3.25pp (Rice
+Farmers). Every table still sums to 1.00000000, which `championship_table` enforces anyway.
+
+`LeagueSim.floors()` caches `title.streaming_levels` over `self.outlooks` — the same call every
+other surface makes — and `simulate()` defaults to it, passing the `FloorNoise` with it so
+`fq odds` draws its empty seats like everything else. `S.simulate` gained the `noise` pass-through
+it was missing; `team_week_scores` already took one.
+
+**Negative control:** `sim.simulate(replacement=0.0)` reproduces `S.simulate(..., replacement=0.0)`
+byte for byte on all three live leagues. The old convention is still reachable, exactly. Three
+of the four new tests fail on the parent commit.
+
+**The disclosure strings were updated rather than deleted**, because the surfaces still do not
+match and it is worth being precise about why. The floor is no longer the reason — that is
+closed. What remains is that each surface draws its own season: `championship_table` on
+`pipeline.build`'s draw, `decide/waivers` on a widened panel that gives free agents columns,
+`edges/portfolio` on one seed shared across three leagues. Those are genuinely different Monte
+Carlo universes, so their levels will never match to the decimal. Compare deltas, not levels.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -602,15 +639,6 @@ nothing left to promote.
 
 ## Remaining work
 
-Ranked. Everything below is located and measured; none is started.
-
-### Leftovers
-
-- **Unify the `championship_table` baseline** (user already approved). `fq odds` scores an
-  empty slot at zero while every recommendation surface floors it at the wire — two baselines
-  for one league, disclosed today in a CLI footer ("baseline: championship_table (unfilled slot
-  scores zero)"). Expect the headline odds to move slightly down.
-
 ### Raised by this work, needs a decision rather than a patch
 
 **`decide/trades.PLAYOFF_WEIGHT = 1.2`** is a hand-set constant for a quantity the surrogate
@@ -621,7 +649,7 @@ It moves the Pareto gate, so it is the user's call, not a silent change.
 
 ## How to work on this
 
-- `uv run pytest -q -m "not network"` — 1,926 offline tests, ~70s.
+- `uv run pytest -q -m "not network"` — 1,935 offline tests, ~90s.
 - `uv run pytest -q -m network` — hits ESPN and FanDuel with the real credentials, ~4.5 min.
   Live-market tests are inherently a little flaky; judge on distributions, not single items.
 - `uv run ruff check src tests` before every commit.

@@ -99,11 +99,12 @@ report itself forever.
 
 **Two floors, and picking the wrong one makes a kicker the most valuable asset the user
 owns.** An unfilled starting slot streams a replacement; it does not score zero. This
-module therefore fits `decide/title.streaming_replacement` by default, which means its
-`P(title)` levels are **not** `pipeline.championship_table`'s and will not match them --
-same disagreement, same reason, as `decide/waivers.WaiverReport.baseline_title`. Compare
-deltas across surfaces, never levels. `build_portfolio(stream_replacement=False)` returns
-to the empty-seat convention if a caller wants to reconcile.
+module therefore fits `decide/title.streaming_levels` by default. `championship_table`
+now floors the same way, so the two no longer disagree about the CONVENTION; the levels
+still will not match, because this module couples three leagues onto one shared seed and
+that is a different drawn season. Compare deltas across surfaces, never levels.
+`build_portfolio(stream_replacement=False)` returns to the empty-seat convention if a
+caller wants to reconcile.
 
 It fits that floor **off `sim.outlooks`**, and the argument is load-bearing rather than
 tidy. Omitting it hands `streaming_replacement` the panel instead, `pipeline.build` pools

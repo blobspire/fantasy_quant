@@ -1447,11 +1447,12 @@ class WaiverReport:
     budget: int
     threshold: float
     #: P(championship) under no move, measured on THIS board's draw and with the wire
-    #: floor applied to every team. It is deliberately not `pipeline.championship_table`'s
-    #: number and will not match it: an empty starting slot scores zero there and streams
-    #: a replacement here, which is worth ~1.4pp of title probability to a thin roster on
-    #: the live leagues (2.6% -> 4.0% on Wine Wednesday). Compare deltas across surfaces,
-    #: not levels.
+    #: floor applied to every team. It will still not match `pipeline.championship_table`
+    #: exactly, but no longer because the two disagree about the floor -- that gap is
+    #: closed and both now stream a replacement into an empty seat. What remains is that
+    #: this board runs on a WIDENED panel, one that gives the candidate free agents
+    #: columns to be simulated in, so it is a different Monte Carlo universe. Compare
+    #: deltas across surfaces, not levels.
     baseline_title: float
     title_per_point: float
     title_per_point_stderr: float
