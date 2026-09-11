@@ -641,9 +641,58 @@ Carlo universes, so their levels will never match to the decimal. Compare deltas
 
 ### Raised by this work, needs a decision rather than a patch
 
-**`decide/trades.PLAYOFF_WEIGHT = 1.2`** is a hand-set constant for a quantity the surrogate
-now measures: `SurrogateFit.playoff_premium` reads **1.34–1.44×** on the three live leagues.
-It moves the Pareto gate, so it is the user's call, not a silent change.
+**`decide/trades.PLAYOFF_WEIGHT = 1.2`** is hand-set for a quantity `SurrogateFit
+.playoff_premium` now measures. **Measured, not changed** — this is the user's call.
+
+**The measurement.** Across all 38 teams in the three live leagues at week 1 of 2026:
+
+| league | user's team | all teams (min / median / max) |
+|---|---|---|
+| Blacksburg | 1.364 | 1.363 / 1.395 / 1.416 |
+| Wine Wednesday | 1.363 | 1.323 / 1.350 / 1.420 |
+| Type shi | 1.402 | 1.322 / 1.399 / 1.443 |
+
+Tight: 1.32–1.44 over 38 teams, three league sizes and three very different standings.
+
+**The constant is not the premium, and this is the part that matters.** `playoff_weights`
+*conserves the total*, so raising the bracket weight also lowers the regular-season weight.
+The ratio a trade actually sees is `w_p / w_n`, not `w_p`. All three leagues run 17 weeks with
+a 3-week bracket:
+
+| `PLAYOFF_WEIGHT` | `w_n` | ratio `w_p / w_n` |
+|---|---|---|
+| 1.00 | 1.0000 | 1.0000 |
+| **1.20** (shipped) | 0.9571 | **1.2537** |
+| **1.29** | 0.9379 | **1.3755** |
+| 1.38 | 0.9186 | 1.5023 |
+
+So the shipped constant under-weights the bracket by about **10%** (1.2537 against a measured
+~1.38), not the 15% the raw numbers suggest — and **setting it to the measured premium would
+overshoot by 9%**. To hit the measured ratio the constant wants to be **1.281–1.309**.
+
+**Recommendation: 1.29.** It lands the ratio at 1.3755 against a measured 1.363–1.402, it is
+inside the range for every one of the 38 teams, and it is a *calibration* of the existing
+mechanism rather than a new switch.
+
+**What it would actually do** — measured, both weights, same seed and draw:
+
+| | Blacksburg | Wine Wednesday | Type shi |
+|---|---|---|---|
+| candidates swapped in/out of the screened 40 | 2 | 1 | 7 |
+| shared candidates changing rank | 11 / 38 | 20 / 39 | 24 / 33 |
+| top-3 trades | **same deals** | **same deals** | **same deals** |
+| top-3 `delta_title` | **unchanged** | **unchanged** | **unchanged** |
+| `title-pareto` count | 3 → 3 | 10 → 10 | 15 → 15 |
+
+**Honestly: this moves the tail of the board, not the top.** The best trade in each league is
+the same deal at the same price either way, and the Pareto gate admits the same number of
+candidates. The case for changing it is that the constant should be the measured quantity, not
+that the current advice is wrong.
+
+One caveat worth attaching to any decision: `playoff_premium` is measured on the *surrogate*,
+whose own scope note in this file says `TitleEngine.screen`/`evaluate` have no caller in `src/`
+today. The fit is exercised and tested, but it has never driven a shipped recommendation, so
+this is a well-measured number from a component with no production track record.
 
 ---
 
