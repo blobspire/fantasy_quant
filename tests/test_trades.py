@@ -44,6 +44,7 @@ from fantasy_quant.decide.trades import (
     simple_cycles,
     single_edge_targets,
     surplus_multiplier,
+    wire_pool,
 )
 from fantasy_quant.sim import season as S
 from fantasy_quant.sim.distributions import WeeklySampler
@@ -992,6 +993,64 @@ def test_a_precise_win_is_still_only_confident_after_the_selection_correction():
     assert ranked[0].delta_title == pytest.approx(0.01)
     assert ranked[0].confidence == "low"
     assert "out of 40 candidates" in ranked[0].rationale
+
+
+class TestTheWireIsWhatNobodyRosters:
+    """`wire_pool` read `set(state.pool.player_ids)` and called it "rostered".
+
+    Accidentally right under `pipeline.build`, which pools only rostered players, so the
+    two sets are identical on all three live leagues and no test could tell them apart.
+    Wrong the moment anything widens the pool -- and `waivers.augment` does exactly that,
+    adding the sixty best free agents so they have columns to be simulated in. Every one
+    of those sixty then counted as rostered and the floor was read off the dregs behind
+    them: measured on the live leagues, 0.74 to 8.58 points a week too low at every
+    position, and at kicker 0.289 against a true 8.868, because all thirty plausible
+    free-agent kickers had been pulled into the pool.
+
+    No production path hands `wire_pool` a widened state today, so the fix is latent.
+    This is what keeps it that way.
+    """
+
+    def test_a_widened_pool_does_not_turn_free_agents_into_rostered_ones(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        state = finder.state
+        narrow = wire_pool(state, finder.outlooks)
+        assert narrow, "the fixture has no wire at all; nothing below can fail"
+
+        # Widen the pool the way `waivers.augment` does: give the best free agents
+        # columns, without putting them on anybody's roster.
+        on_a_roster = {p for f in state.franchises for p in f.player_ids}
+        extra = [o for o in finder.outlooks if o.player_id not in on_a_roster]
+        assert extra, "the fixture has no free agents to widen with"
+        rows = [
+            (pid, pos, team, state.pool.name(pid))
+            for pid, pos, team in zip(
+                state.pool.player_ids,
+                state.pool.position_ids,
+                state.pool.pro_team_ids,
+                strict=True,
+            )
+        ]
+        rows += [(o.player_id, o.position_id, o.pro_team_id, o.name) for o in extra]
+        wide = dataclasses.replace(state, pool=S.PlayerPool.of(rows))
+        assert wide.pool.size > state.pool.size
+
+        widened = wire_pool(wide, finder.outlooks)
+        # The wire is a property of who is ROSTERED, and widening the pool rosters
+        # nobody. Same bodies, same order, whatever the pool holds.
+        assert {pos: [pid for pid, _ in bodies] for pos, bodies in widened.items()} == {
+            pos: [pid for pid, _ in bodies] for pos, bodies in narrow.items()
+        }
+
+    def test_it_reads_franchises_and_not_the_pool(self):
+        """The invariant, stated directly: a player on no roster is on the wire."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        state = finder.state
+        on_a_roster = {p for f in state.franchises for p in f.player_ids}
+        found = {pid for bodies in wire_pool(state, finder.outlooks).values()
+                 for pid, _ in bodies}
+        assert found
+        assert not (found & on_a_roster)
 
 
 class TestTheForcedCutIsNotDecidedByEspnsOrdering:

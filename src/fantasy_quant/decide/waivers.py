@@ -114,6 +114,7 @@ from ..sim.distributions import Draw, WeeklySampler
 from ..sim.lineup import plan_from_slots
 from .valuation import POSITION_ABBREV
 from .wire import DEFAULT_WIRE_DEPTH as _DEFAULT_WIRE_DEPTH
+from .wire import all_rostered as _wire_all_rostered
 from .wire import wire_floor as _wire_floor
 
 if TYPE_CHECKING:  # pragma: no cover - only the type checker needs these
@@ -1308,8 +1309,10 @@ def _availability(sim: LeagueSim) -> Availability | None:
         return None
 
 
-def _all_rostered(state: S.LeagueState) -> set[int]:
-    return {p for f in state.franchises for p in f.player_ids}
+#: The third copy of this was the one that mattered: `decide/trades.wire_pool` spelled it
+#: `set(state.pool.player_ids)`, which is a different set as soon as anything widens the
+#: pool -- which is exactly what `augment` below does.
+_all_rostered = _wire_all_rostered
 
 
 def _complete(

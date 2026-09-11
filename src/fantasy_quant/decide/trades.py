@@ -139,6 +139,7 @@ from ..core import (
 from ..sim import season as S
 from ..sim.distributions import Draw
 from ..sim.lineup import LineupPlan, monotone_floor, plan_from_slots
+from .wire import all_rostered
 
 if TYPE_CHECKING:  # pragma: no cover - only for the convenience constructor's type
     from ..pipeline import LeagueSim
@@ -757,8 +758,22 @@ def wire_pool(
     one -- a body outside the floor pool could beat the floor in a single week, so a
     2-for-1 quietly signed a defense that is not in `state.pool` and the confirmation
     simulation died on it. Same pool, and that is impossible by construction.
+
+    **Rostered means on a franchise, not in the pool.** This read
+    `set(state.pool.player_ids)`, which is accidentally right under `pipeline.build` --
+    that pools only rostered players, so the two sets are identical on all three live
+    leagues -- and wrong the moment anything widens the pool. Under `waivers.augment`,
+    which adds the sixty best free agents so they have columns to be simulated in, every
+    one of those sixty was then counted as ROSTERED and the floor was read off the dregs
+    behind them: measured on the live leagues it came back 0.74 to 8.58 points a week too
+    low at every position, and at kicker **0.289 against a true 8.868**, because all
+    thirty plausible free-agent kickers had been pulled into the pool.
+
+    Scope: no production path hands this an augmented state today -- `find_trades` is
+    only ever called with a `pipeline.build` sim -- so the fix is latent and the test
+    below is what keeps it that way.
     """
-    rostered = set(state.pool.player_ids)
+    rostered = all_rostered(state)
     weeks = state.weeks
     rows: dict[int, list[tuple[float, int, np.ndarray]]] = {}
     for o in outlooks:

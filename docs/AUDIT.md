@@ -493,6 +493,36 @@ three. It now asserts what the correction is *for* — rows a naive two-sigma te
 significant must stop being significant once the threshold accounts for the field they won,
 and anything that survives must be a hair over the bar rather than comfortably clear of it.
 
+### Leftover — `trades.wire_pool` called the whole pool "rostered"
+
+`rostered = set(state.pool.player_ids)`. Accidentally right under `pipeline.build`, which pools
+only rostered players: on all three live leagues the pool and the rostered set are the *same
+195 / 225 / 194 ids*, so no test could tell them apart. Wrong the moment anything widens the
+pool — and `waivers.augment` does exactly that, adding the sixty best free agents so they have
+columns to be simulated in.
+
+The audit predicted "the wire goes empty". It does not; it reads the **dregs behind the
+augmented sixty**, which is worse because it looks plausible. Measured on the live leagues with
+`augment`'s own candidate set, floor points a week:
+
+| pos | read as | truth | | pos | read as | truth |
+|---|---|---|---|---|---|---|
+| QB | 10.97 | 14.07 | | TE | 4.75 | 6.94 |
+| RB | 4.62 | 5.72 | | **K** | **0.29** | **8.87** |
+| WR | 4.84 | 6.54 | | D/ST | 4.96 | 6.99 |
+
+0.74 to 8.58 points a week too low at every position. The kicker is catastrophic because all
+thirty plausible free-agent kickers get pulled into the pool, leaving the floor to read
+whatever is behind them.
+
+> **Scope, honestly: latent.** No production path hands `wire_pool` a widened state —
+> `find_trades` is only ever called with a `pipeline.build` sim. **The negative control is the
+> fix being a provable no-op today:** pool and rostered are identical sets on all three live
+> leagues, so not a number moves. The two new tests are what keep it that way.
+
+`waivers._all_rostered` was the second copy of the same one-liner and is now an alias for
+`wire.all_rostered`. The third spelling was the one that mattered.
+
 ### Also fixed along the way
 
 - Three live-market tests asserting more than the market promises (`7ea0553`). Pre-existing
@@ -509,11 +539,6 @@ Ranked. Everything below is located and measured; none is started.
 
 ### Leftovers
 
-- **`trades.wire_pool:718`** — `rostered = set(state.pool.player_ids)` treats the whole pool as
-  rostered. Accidentally right under `pipeline.build` (which pools only rostered players) and
-  wrong the moment `waivers.augment` or `sim_with_free_agents` widens it: every free agent then
-  counts as rostered and the wire goes empty. Union over `state.franchises` instead, which is
-  what `waivers._all_rostered` already does.
 - **`floor_noise` is not threaded into `waivers._lineup_scores` (`:388`) or
   `portfolio._column` (`:367`)**, so those two surfaces still credit an empty seat a constant
   where `title` credits a draw. Same shape as #1.
