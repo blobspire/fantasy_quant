@@ -935,10 +935,13 @@ class TradeFinder:
         #: "what does this look like to them" is the same objective on the same settled
         #: roster rather than a second model of anything.
         self.market = market
-        #: Whose side of the table this search is being run from. Set by `search`;
-        #: `_side` reads it. With no `market` it is irrelevant.
-        self._subject: int | None = None
         self.my_team_id = my_team_id if my_team_id is not None else state.my_team_id
+        #: Whose side of the table this search is being run from. `search` sets it;
+        #: it defaults to this finder's own team so that `evaluate` and `settle` are
+        #: consistent when called directly -- through the `core.MoveEvaluator` pair, say
+        #: -- rather than settling a counterparty on our numbers and then pricing him on
+        #: his. With no `market` it is irrelevant.
+        self._subject: int | None = self.my_team_id
         # Symmetric by default, deliberately. The asymmetric haircut turns every one of
         # the user's below-average teams into a title favourite (see sim/season.py), and
         # a trade surface built on that would recommend standing pat.
@@ -1016,7 +1019,9 @@ class TradeFinder:
         """
         if rankings is None or rankings_weight == 0.0:
             return cls(sim.state, sim.draw, sim.outlooks, **kwargs)
-        outlooks = tilt_outlooks(sim.outlooks, rankings, weight=rankings_weight)
+        outlooks = tilt_outlooks(
+            sim.outlooks, rankings, weight=rankings_weight, weeks=sim.state.weeks
+        )
         # The confirm scores on the DRAW, not on `_mu`, so the draw has to come from the
         # same projections the screen reads or the two halves are in different
         # currencies. Measured on the live Blacksburg board with `sim.draw` reused: the

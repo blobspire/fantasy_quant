@@ -1624,3 +1624,32 @@ class TestFromSimWithABoard:
         board = self._board(sim, pos_ranks=[("WR1", 1), ("WR elite", 2)])
         finder = TradeFinder.from_sim(sim, rankings=board, rankings_weight=1.0)
         assert np.array_equal(finder.draw.panel.has_game, sim.draw.panel.has_game)
+
+
+class TestTheSubjectDefaultsToOurOwnTeam:
+    """`_subject` was None until `search` set it, so `evaluate` called directly settled
+    a counterparty on OUR numbers and then priced him on his. No production caller does
+    that -- `find_trades` always goes through `search` -- but `TradeFinder.screen` and
+    `.confirm` are a published `core.MoveEvaluator` pair, and the guard is free."""
+
+    def test_a_finder_knows_whose_side_it_is_on_before_search_runs(self):
+        finder = _dual(CONSOLIDATION, WIRE, tilt={})
+        assert finder._subject == finder.my_team_id == 1
+
+    def test_evaluate_settles_and_prices_each_side_consistently_without_search(self):
+        probe = _finder(CONSOLIDATION, WIRE)
+        elite = _by_name(probe, "WR elite")
+        finder = _dual(CONSOLIDATION, WIRE, tilt={elite: 2.5})
+        proposal = TradeProposal(
+            league_id=42,
+            legs=(
+                TradeLeg(from_team=1, to_team=2, player_ids=(_by_name(finder, "RB traded"),)),
+                TradeLeg(from_team=2, to_team=1, player_ids=(elite,)),
+            ),
+        )
+        ev = finder.evaluate(proposal)
+        theirs, *_ = finder.market.settle(2, [
+            *(p for p in finder.rosters[2] if p != elite),
+            _by_name(finder, "RB traded"),
+        ])
+        assert ev.rosters[2] == theirs

@@ -1107,8 +1107,12 @@ def trades_payload(
         # is worth to me by the analyst board, and how much better the other side thinks
         # it is doing by the projections on their own screen. `spread` is the second
         # minus the first on their side only; see `TradeEvaluation.spread`.
-        spread = tag_value(rec, "spread:")
-        body["spread"] = float(spread) if spread else None
+        # `tag_value` returns "-" for a missing tag, and "-" is truthy: reading it
+        # through `float()` raised `ValueError` on every board-less run, which is every
+        # fresh checkout, every `--no-rankings`, and the dashboard's own trades route.
+        # Gate on the board rather than on the sentinel.
+        spread = tag_value(rec, "spread:") if rankings is not None else "-"
+        body["spread"] = float(spread) if spread and spread != "-" else None
         body["mispriced"] = "mispriced" in rec.tags
         body["notes"] = {
             names.get(p.player_id, str(p.player_id)): notes[p.player_id]

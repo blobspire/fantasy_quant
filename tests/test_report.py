@@ -1726,3 +1726,47 @@ class TestRenderingAgainstAnAnalystBoard:
         assert "silva board" in out and "unverified" in out
         # A board with no opinion about a row prints nothing for it, not a dash-as-fact.
         assert "-over-" in out and out.count("-over-") == 1
+
+
+class TestTheBoardlessPathStillWorks:
+    """`trades_payload` raised `ValueError` with no board on disk.
+
+    `tag_value` returns "-" for a missing tag and "-" is truthy, so `float(spread)`
+    blew up on every fresh checkout, every `--no-rankings`, and the dashboard's own
+    `/leagues/{id}/trades` route. Nothing caught it because the CLI fixture replaces
+    `trades_payload` wholesale -- a stub standing in for the code under test hides
+    exactly what it stands in for.
+    """
+
+    def test_trades_payload_runs_without_a_board(self, workspace, cfg, tmp_path):
+        workspace.rankings_dir = tmp_path  # no CSVs here
+        payload = report.trades_payload(workspace, cfg, limit=3)
+        assert payload["rankings"] is None
+        assert payload["priced_on"] == "espn projections"
+        assert all(row["spread"] is None for row in payload["trades"])
+        assert all(row["mispriced"] is False for row in payload["trades"])
+
+    def test_the_payload_is_json_serialisable_without_a_board(self, workspace, cfg, tmp_path):
+        """The API hands this straight out of `/leagues/{id}/trades`."""
+        workspace.rankings_dir = tmp_path
+        json.dumps(report.trades_payload(workspace, cfg, limit=2))
+
+    def test_a_board_on_disk_fills_the_same_fields(self, workspace, cfg, tmp_path):
+        """The other branch, so "no board" is a measured absence and not a dead path."""
+        (tmp_path / "silva_top150_half_ppr.csv").write_text(
+            "\ufeff" + '"Player","Position","Team","Silva Rank","Silva Pos Rank"\n'
+            + '"Alpha","RB","DET","1","RB01"\n',
+            encoding="utf-8",
+        )
+        workspace.rankings_dir = tmp_path
+        workspace.rankings_kind = "silva"
+
+        class _Index:
+            def from_name(self, name, team=None, position=None):
+                return 1 if name == "Alpha" else None
+
+        board, matched = report.etr.best_available(
+            cfg.scoring_variant, tmp_path, kind="silva", id_index=_Index()
+        )
+        assert board is not None and board.n == 1
+        assert matched is (cfg.scoring_variant == "half_ppr")

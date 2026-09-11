@@ -359,3 +359,76 @@ class TestPartialSeasonsAreNotTransported:
         hot = board([(12, RB, 1, 1, "C", ""), (10, RB, 2, 2, "A", "")])
         names = [o.player_id for o in opinion.partial_season(self._out(), hot)]
         assert names == [12]
+
+
+class TestTheHorizonIsTheRemainingWeeks:
+    """`pipeline._fill_weeks` only ADDS weeks, so `sim.outlooks` keeps every week ESPN
+    projected -- the played ones included, and a week 18 the league never scores.
+
+    Ranking over "every week present" is right in week 1 and wrong from week 2, which
+    is the worst way for it to be wrong: nothing shows in the measurements you take on
+    the day you build it.
+    """
+
+    #: Week 10 of an 18-week projection set. One player was excellent through
+    #: September and is finished; the other is about to carry you. Over the full
+    #: season they are identical, which is exactly the confusion being tested.
+    EARLY = outlook(10, RB, {**{w: 20.0 for w in range(1, 10)}, **{w: 2.0 for w in range(10, 19)}})
+    LATE = outlook(11, RB, {**{w: 2.0 for w in range(1, 10)}, **{w: 20.0 for w in range(10, 19)}})
+    REMAINING = tuple(range(10, 18))  # the league's last scored week is 17
+
+    def _board(self):
+        # A rest-of-season board, which correctly has the finishing player first.
+        return board([(11, RB, 1, 1, "Late", ""), (10, RB, 2, 2, "Early", "")])
+
+    def test_the_ladder_is_built_over_the_remaining_weeks(self):
+        out = [self.EARLY, self.LATE]
+        tilted = {
+            o.player_id: o
+            for o in opinion.tilt_outlooks(out, self._board(), weight=1.0, weeks=self.REMAINING)
+        }
+        ours = sorted(opinion._value(o, frozenset(self.REMAINING)) for o in out)
+        after = sorted(opinion._value(o, frozenset(self.REMAINING)) for o in tilted.values())
+        assert after == pytest.approx(ours)
+        # The board's pick takes the better of the two remaining-week values.
+        assert opinion._value(tilted[11], frozenset(self.REMAINING)) == pytest.approx(max(ours))
+
+    def test_over_the_whole_season_the_two_are_indistinguishable(self):
+        """Why the wrong horizon is silent rather than loud: it does not crash, it
+        ranks two very different players as equals."""
+        whole = frozenset(range(1, 19))
+        assert opinion._value(self.EARLY, whole) == pytest.approx(
+            opinion._value(self.LATE, whole)
+        )
+
+    def test_weeks_outside_the_horizon_are_not_scaled(self):
+        """A week that was not in the ladder has no business being moved by it --
+        including week 18, which `state.weeks` stops short of."""
+        out = [self.EARLY, self.LATE]
+        tilted = {
+            o.player_id: o
+            for o in opinion.tilt_outlooks(out, self._board(), weight=1.0, weeks=self.REMAINING)
+        }
+        for pid, before in ((10, self.EARLY), (11, self.LATE)):
+            for week in (1, 5, 9, 18):
+                assert tilted[pid].weeks[week].mean == pytest.approx(before.weeks[week].mean)
+
+    def test_an_absence_already_played_is_not_a_reason_to_skip_him(self):
+        """The permanent-exclusion half. Tyson's weeks 1-8 stay in the outlooks after
+        he returns; counting them would bench the board's opinion of him for the rest
+        of the season, which is the opposite of what a rest-of-season rank means."""
+        returning = outlook(
+            12, RB, {**{w: 0.064 for w in range(1, 9)}, **{w: 8.0 for w in range(9, 19)}}
+        )
+        healthy = outlook(13, RB, {w: 9.0 for w in range(1, 19)})
+        pair = board([(12, RB, 1, 1, "Back", ""), (13, RB, 2, 2, "Fine", "")])
+        assert opinion.partial_season([returning, healthy], pair) == (returning,)
+        assert opinion.partial_season([returning, healthy], pair, weeks=self.REMAINING) == ()
+
+    def test_he_is_still_skipped_while_the_absence_is_ahead_of_him(self):
+        out_now = outlook(
+            12, RB, {**{w: 0.064 for w in range(1, 9)}, **{w: 8.0 for w in range(9, 19)}}
+        )
+        healthy = outlook(13, RB, {w: 9.0 for w in range(1, 19)})
+        pair = board([(12, RB, 1, 1, "Out", ""), (13, RB, 2, 2, "Fine", "")])
+        assert opinion.partial_season([out_now, healthy], pair, weeks=range(1, 18)) == (out_now,)

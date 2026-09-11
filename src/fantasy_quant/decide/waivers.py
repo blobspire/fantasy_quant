@@ -2002,8 +2002,8 @@ def waiver_board(
     so the claim price, the FAAB bid and the continuation table all reprice off one
     change rather than several.
     """
-    outlooks = _redealt(sim.outlooks, rankings, rankings_weight)
     state = sim.state
+    outlooks = _redealt(sim.outlooks, rankings, rankings_weight, state.weeks)
     team_id = team_id if team_id is not None else state.my_team_id
     if team_id is None:
         raise WaiverError("no team to advise: pass team_id or build the sim with my_team_id")
@@ -2352,7 +2352,10 @@ __all__ = [
 
 
 def _redealt(
-    outlooks: Sequence[PlayerOutlook], board: EtrRankings | None, weight: float
+    outlooks: Sequence[PlayerOutlook],
+    board: EtrRankings | None,
+    weight: float,
+    weeks: Sequence[int],
 ) -> Sequence[PlayerOutlook]:
     """The projection set this board runs on: ours, or ours re-dealt along a board.
 
@@ -2361,7 +2364,7 @@ def _redealt(
     """
     if board is None or weight == 0.0:
         return outlooks
-    return tilt_outlooks(outlooks, board, weight=weight)
+    return tilt_outlooks(outlooks, board, weight=weight, weeks=weeks)
 
 
 def _board_tags(upgrade: Upgrade | None) -> tuple[str, ...]:

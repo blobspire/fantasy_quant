@@ -285,7 +285,7 @@ def tilt_outlooks(
     board: EtrRankings,
     *,
     weight: float = 1.0,
-    from_week: int | None = None,
+    weeks: Sequence[int] | None = None,
     min_points: float = MIN_TRANSPORT_POINTS,
     max_absent_weeks: int = MAX_ABSENT_WEEKS,
 ) -> list[PlayerOutlook]:
@@ -318,6 +318,17 @@ def tilt_outlooks(
     **Players ESPN projects as absent for more than a bye are not transported** --
     see `MAX_ABSENT_WEEKS` for the measurement that made this rule. Their own numbers
     stand, and `partial_season` names them so a caller can say so.
+
+    **Pass `weeks`.** It is the horizon the ladder is built over, and it has to be the
+    weeks still to be played -- `state.weeks` -- because the board's rank is a
+    rest-of-season opinion. `pipeline._fill_weeks` only ever ADDS weeks to an outlook,
+    so `sim.outlooks` keeps every week ESPN projected including the ones already in the
+    books; defaulting to "every week present" ranks players by a full-season total.
+    At week 1 the two are the same and nothing shows. From week 2 they are not: a
+    player who was excellent through September and is finished outranks one who is
+    about to carry you, and the ratio handed to the transport is computed on the wrong
+    total. It also makes `partial_season` permanent -- Tyson's weeks 1-8 stay in the
+    outlooks after he returns, so he would be excluded for the rest of the season.
     """
     if not 0.0 <= weight <= 1.0:
         raise ValueError(f"weight must be in [0, 1], got {weight}")
@@ -325,9 +336,11 @@ def tilt_outlooks(
         return list(outlooks)
 
     ladder = board.positional()
-    start = from_week if from_week is not None else _first_week(outlooks)
+    horizon = _horizon(outlooks, weeks)
 
-    skipped = partial_season(outlooks, board, from_week=start, max_absent_weeks=max_absent_weeks)
+    skipped = partial_season(
+        outlooks, board, weeks=horizon, min_points=min_points, max_absent_weeks=max_absent_weeks
+    )
     if skipped:
         log.info(
             "tilt: %d board player(s) kept their own numbers, absent beyond a bye: %s",
@@ -342,7 +355,7 @@ def tilt_outlooks(
         if entry is None or int(o.player_id) in skip_ids:
             continue
         pos, rank = entry
-        value = o.mean_from(start)
+        value = _value(o, horizon)
         if value < min_points:
             continue
         by_position.setdefault(pos, []).append((int(o.player_id), value, rank))
@@ -366,22 +379,45 @@ def tilt_outlooks(
             out.append(o)
             continue
         out.append(
-            replace(o, weeks={w: _scaled_week(wo, factor) for w, wo in o.weeks.items()})
+            replace(
+                o,
+                weeks={
+                    w: (_scaled_week(wo, factor) if w in horizon else wo)
+                    for w, wo in o.weeks.items()
+                },
+            )
         )
     return out
 
 
-def _first_week(outlooks: Sequence[PlayerOutlook]) -> int:
-    """The earliest week anything is projected for -- the horizon the ladder spans."""
-    weeks = [w for o in outlooks for w in o.weeks]
-    return min(weeks) if weeks else 1
+def _horizon(
+    outlooks: Sequence[PlayerOutlook], weeks: Sequence[int] | None
+) -> frozenset[int]:
+    """The weeks the ladder is built over, and the only ones the transport touches.
+
+    `weeks` is `state.weeks` -- what is still to be played. Falling back to every week
+    present in the outlooks is correct only in week 1; see `tilt_outlooks`.
+    """
+    if weeks is not None:
+        return frozenset(int(w) for w in weeks)
+    return frozenset(w for o in outlooks for w in o.weeks)
+
+
+def _value(outlook: PlayerOutlook, horizon: frozenset[int]) -> float:
+    """This player's expected points over the horizon.
+
+    `PlayerOutlook.mean_from` is the wrong tool: it sums every week at or after one
+    index, which past the start of the season means summing games already played, and
+    which here would also pull in week 18 when the league's last scored week is 17.
+    """
+    return sum(wo.mean for w, wo in outlook.weeks.items() if w in horizon)
 
 
 def partial_season(
     outlooks: Sequence[PlayerOutlook],
     board: EtrRankings,
     *,
-    from_week: int | None = None,
+    weeks: Sequence[int] | None = None,
     min_points: float = MIN_TRANSPORT_POINTS,
     max_absent_weeks: int = MAX_ABSENT_WEEKS,
 ) -> tuple[PlayerOutlook, ...]:
@@ -390,14 +426,18 @@ def partial_season(
     "Absent" is a week under `min_points`: the calibration puts an injured player at
     about 0.06 with `p_zero` near 0.84 rather than at an exact zero, so an equality
     test finds nobody. A bye is one such week and is not an absence.
+
+    Counted over the REMAINING weeks. An absence already played is not a reason to
+    distrust a rest-of-season rank -- it is the thing the rank has already priced in --
+    and counting it would exclude a returning player for the rest of the season.
     """
     ladder = board.positional()
-    start = from_week if from_week is not None else _first_week(outlooks)
+    horizon = _horizon(outlooks, weeks)
     out: list[PlayerOutlook] = []
     for o in outlooks:
         if int(o.player_id) not in ladder:
             continue
-        absent = sum(1 for w, wo in o.weeks.items() if w >= start and wo.mean < min_points)
+        absent = sum(1 for w, wo in o.weeks.items() if w in horizon and wo.mean < min_points)
         if absent > max_absent_weeks:
             out.append(o)
     return tuple(out)

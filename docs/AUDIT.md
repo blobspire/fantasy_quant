@@ -691,6 +691,26 @@ A fourth, found the same way: `confirm_titles` scores on the **draw**, not on `_
 reusing `sim.draw` left screen and simulation in different currencies -- +17.8 points
 screened, +0.10pp +/- 0.36 confirmed.
 
+A fifth and sixth, found by a fresh-eyes review after the feature shipped, and a crash.
+**The value ladder was built over the wrong horizon.** `pipeline._fill_weeks` only ever
+ADDS weeks to an outlook, so `sim.outlooks` carries every week ESPN projected -- measured
+on the live leagues, **weeks 1 to 22** against a `state.weeks` of 1 to 17. The ladder
+summed all of them. Five weeks the league never scores were being ranked on day one (98
+players' rest-of-season value moved by more than half a point when it was fixed, up to
+4.59), and from week 2 the already-played weeks would have joined them, ranking a player
+who was excellent through September level with one about to carry you. Its sibling:
+`partial_season` counted absences over the same span, so a returning player stayed
+excluded for the rest of the season -- Tyson would never have come back. Both now take
+`weeks=state.weeks`. **And `trades_payload` crashed with no board on disk**: `tag_value`
+returns `"-"` for a missing tag, `"-"` is truthy, and `float("-")` raises -- so every
+fresh checkout, every `--no-rankings`, and the dashboard's own trades route was broken.
+Nothing caught it because `test_report.py`'s CLI fixture stubs `trades_payload` wholesale.
+
+That last one is the lesson worth carrying: **a stub standing in for the code under test
+hides exactly what it stands in for.** It is the same shape as the `make_portfolio` helper
+that mirrored the bug it was supposed to catch (`#1 again, in the portfolio`), one level
+up.
+
 ### What it is worth, measured (week 1 of 2026, all three leagues)
 
 **On the wire, very little.** The top claim is the same player at every weight in all three
@@ -822,7 +842,7 @@ honest action is to leave it alone and record why.
 
 ## How to work on this
 
-- `uv run pytest -q -m "not network"` — 2,001 offline tests, ~95s.
+- `uv run pytest -q -m "not network"` — 2,011 offline tests, ~95s.
 - `uv run pytest -q -m network` — hits ESPN and FanDuel with the real credentials, ~4.5 min.
   Live-market tests are inherently a little flaky; judge on distributions, not single items.
 - `uv run ruff check src tests` before every commit.
