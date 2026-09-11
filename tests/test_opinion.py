@@ -178,3 +178,135 @@ class TestAgainstTheLiveBoard:
             pytest.skip("no Silva board in data/manual/etr")
         assert b.n == 150
         assert len(b.positional()) == 150
+
+
+def outlook(pid, pos, means, *, name="", sd=3.0, p_zero=0.1, shape=2.0, scale=4.0):
+    from fantasy_quant.core import PlayerOutlook, WeeklyOutlook
+
+    return PlayerOutlook(
+        player_id=pid,
+        name=name or f"P{pid}",
+        position_id=pos,
+        pro_team_id=7,
+        weeks={
+            w: WeeklyOutlook(
+                player_id=pid, season=2026, week=w, position_id=pos, mean=m, sd=sd,
+                p_zero=p_zero, shape=shape, scale=scale, pro_team_id=7, playing=m > 0,
+            )
+            for w, m in means.items()
+        },
+    )
+
+
+class TestTiltIsAPermutation:
+    """The property that keeps replacement level, the wire and the scarcity curves
+    exactly where they were: the multiset of values at each position never changes."""
+
+    OUT = [
+        outlook(10, RB, {1: 10.0, 2: 10.0}),   # our RB1, board has him RB1
+        outlook(11, RB, {1: 8.0, 2: 8.0}),     # our RB2, board has him RB3
+        outlook(12, RB, {1: 2.0, 2: 2.0}),     # our RB3, board has him RB2
+        outlook(20, WR, {1: 9.0, 2: 9.0}),
+        outlook(99, TE, {1: 5.0, 2: 5.0}),     # not on the board at all
+    ]
+
+    def test_weight_zero_is_the_identity(self):
+        """Every consumer's negative control is this call, so it has to be exact."""
+        same = opinion.tilt_outlooks(self.OUT, BOARD, weight=0.0)
+        assert same == list(self.OUT)
+
+    def test_the_values_are_re_dealt_not_recomputed(self):
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(self.OUT, BOARD, weight=1.0)}
+        # Board order at RB is 10, 11, 12 by pos_rank (1, 2, 3); ours by value is
+        # 10 (20.0), 11 (16.0), 12 (4.0). Board has 11 at RB2 and 12 at RB3.
+        assert tilted[10].mean_from(1) == pytest.approx(20.0)
+        assert tilted[11].mean_from(1) == pytest.approx(16.0)
+        assert tilted[12].mean_from(1) == pytest.approx(4.0)
+
+    def test_a_disagreement_swaps_two_players_values_exactly(self):
+        """Board ranks 12 above 11; ours has 11 worth 16.0 and 12 worth 4.0."""
+        swapped = board(
+            [(10, RB, 1, 1, "A", ""), (12, RB, 5, 2, "C", ""), (11, RB, 9, 3, "B", "")]
+        )
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(self.OUT, swapped, weight=1.0)}
+        assert tilted[12].mean_from(1) == pytest.approx(16.0)
+        assert tilted[11].mean_from(1) == pytest.approx(4.0)
+
+    def test_the_multiset_of_values_per_position_is_preserved(self):
+        swapped = board(
+            [(10, RB, 1, 1, "A", ""), (12, RB, 5, 2, "C", ""), (11, RB, 9, 3, "B", "")]
+        )
+        for weight in (0.25, 0.5, 1.0):
+            tilted = opinion.tilt_outlooks(self.OUT, swapped, weight=weight)
+            before = sorted(o.mean_from(1) for o in self.OUT if o.position_id == RB)
+            after = sorted(o.mean_from(1) for o in tilted if o.position_id == RB)
+            if weight == 1.0:
+                assert after == pytest.approx(before)
+            # At any weight the total is conserved, which is what replacement level
+            # and the scarcity fit actually read.
+            assert sum(after) == pytest.approx(sum(before))
+
+    def test_players_the_board_does_not_rank_are_untouched(self):
+        """The wire lives in the 448 of 598 projected players the board never sees."""
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(self.OUT, BOARD, weight=1.0)}
+        assert tilted[99] is self.OUT[4]
+
+    def test_weight_interpolates_toward_the_board_not_past_it(self):
+        swapped = board(
+            [(10, RB, 1, 1, "A", ""), (12, RB, 5, 2, "C", ""), (11, RB, 9, 3, "B", "")]
+        )
+        half = {o.player_id: o for o in opinion.tilt_outlooks(self.OUT, swapped, weight=0.5)}
+        assert half[12].mean_from(1) == pytest.approx(10.0)  # halfway from 4.0 to 16.0
+        assert half[11].mean_from(1) == pytest.approx(10.0)  # halfway from 16.0 to 4.0
+
+
+class TestTiltKeepsTheDistributionCoherent:
+    def test_byes_and_absences_survive(self):
+        """`playing` and `p_zero` are how this simulator models availability. The
+        board's ordering must not reach them -- scaling a bye by anything is still a
+        bye, and it has to stay one."""
+        out = [
+            outlook(10, RB, {1: 10.0, 2: 0.0}),
+            outlook(11, RB, {1: 8.0, 2: 8.0}),
+            outlook(12, RB, {1: 2.0, 2: 2.0}),
+        ]
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(out, BOARD, weight=1.0)}
+        bye = tilted[10].weeks[2]
+        assert bye.mean == 0.0 and bye.playing is False
+
+    def test_the_gamma_stays_consistent_with_its_own_moments(self):
+        """`core.WeeklyOutlook` is explicit that mean and sd are the moments of the
+        FULL distribution and must not be reconstructed from the gamma alone, so all
+        three have to move by the same factor or they stop describing one law."""
+        out = [
+            outlook(10, RB, {1: 10.0}),
+            outlook(11, RB, {1: 8.0}),
+            outlook(12, RB, {1: 2.0}),
+        ]
+        swapped = board(
+            [(10, RB, 1, 1, "A", ""), (12, RB, 5, 2, "C", ""), (11, RB, 9, 3, "B", "")]
+        )
+        before = {o.player_id: o.weeks[1] for o in out}
+        after = {o.player_id: o.weeks[1] for o in opinion.tilt_outlooks(out, swapped, weight=1.0)}
+        for pid in (11, 12):
+            f = after[pid].mean / before[pid].mean
+            assert after[pid].sd == pytest.approx(before[pid].sd * f)
+            assert after[pid].scale == pytest.approx(before[pid].scale * f)
+            assert after[pid].p_zero == before[pid].p_zero
+            assert after[pid].shape == before[pid].shape
+
+    def test_a_player_we_do_not_project_at_all_is_left_out(self):
+        """A ratio against a near-zero denominator manufactures points out of nothing:
+        the 300-row Draft Kit board ranks kickers ESPN projects at 0.00, and pairing
+        one of those against a real value hands him 121.5 season points."""
+        out = [
+            outlook(10, RB, {1: 10.0}),
+            outlook(11, RB, {1: 0.0}),
+            outlook(12, RB, {1: 2.0}),
+        ]
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(out, BOARD, weight=1.0)}
+        assert tilted[11].mean_from(1) == 0.0
+
+    def test_an_out_of_range_weight_is_refused(self):
+        with pytest.raises(ValueError, match=r"weight must be in \[0, 1\]"):
+            opinion.tilt_outlooks([], BOARD, weight=1.5)

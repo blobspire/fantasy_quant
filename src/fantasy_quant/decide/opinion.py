@@ -29,12 +29,22 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+from ..core import PlayerOutlook, WeeklyOutlook
 from ..data.etr import EtrRankings
 from .wire import all_rostered
 
 log = logging.getLogger(__name__)
+
+#: A player projected below this, per rest-of-season, carries no ordering information
+#: and is left out of the transport on both sides. It is a guard against a ratio with
+#: a near-zero denominator, and the 300-row Draft Kit board shows why it is needed: it
+#: ranks kickers ESPN projects at exactly 0.00, and pairing one of those against a real
+#: value hands him 121.5 season points out of nowhere. The Top 150 has no such row, so
+#: on the board this was built for the guard never fires -- which is the point of
+#: having it before the board that needs it arrives.
+MIN_TRANSPORT_POINTS = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,3 +240,114 @@ def upgrades_for(
     names = {int(o.player_id): o.name for o in sim.outlooks}
     wire = [int(o.player_id) for o in sim.outlooks if int(o.player_id) not in owned]
     return bench_upgrades(board, roster, wire, names=names, limit=limit)
+
+
+def _scaled_week(week: WeeklyOutlook, factor: float) -> WeeklyOutlook:
+    """Scale a hurdle gamma's location, leaving its shape and its zero mass alone.
+
+    The hurdle mean is `(1 - p_zero) * shape * scale` and its sd is linear in `scale`
+    too, so scaling `scale`, `mean` and `sd` by one factor keeps the three mutually
+    consistent -- which matters because `core.WeeklyOutlook` is explicit that `mean`
+    and `sd` are the moments of the FULL distribution and must not be reconstructed
+    from the gamma alone.
+
+    `p_zero`, `shape`, `playing`, `pro_team_id` and the week key are untouched, so
+    byes, the schedule, the correlation blocks and the hurdle mass all survive.
+    """
+    return replace(
+        week,
+        mean=week.mean * factor,
+        sd=week.sd * factor,
+        scale=week.scale * factor,
+    )
+
+
+def tilt_outlooks(
+    outlooks: Sequence[PlayerOutlook],
+    board: EtrRankings,
+    *,
+    weight: float = 1.0,
+    from_week: int | None = None,
+    min_points: float = MIN_TRANSPORT_POINTS,
+) -> list[PlayerOutlook]:
+    """Our own points, re-dealt along the board's ordering. Within a position.
+
+    The mechanism, which is a **permutation and not a model**: at each position, take
+    the players the board ranks and we project, sort them by our own rest-of-season
+    mean to get a ladder of values, sort them by the board's positional rank, and pair
+    the two up. The board's k-th player takes the ladder's k-th value.
+
+    Three properties fall out, and they are the whole reason for this shape rather
+    than a fitted `points(rank)` curve:
+
+    * **No rank is ever priced.** The values are ours throughout; the board supplies
+      only the order they are handed out in. `decide/valuation.py` records at length
+      why comparisons against an outside opinion stay in rank space, and a fitted
+      curve evaluated on someone else's board would break it.
+    * **Replacement level does not move.** The multiset of rest-of-season means at
+      each position is preserved exactly, so the scarcity curves, the VORP baseline
+      and the wire are all where they were. On the live leagues the board covers 150
+      of 598 projected players; the other 448 -- which is where the wire lives -- are
+      not touched at all.
+    * **`weight=0.0` is the identity**, byte for byte, which makes every consumer's
+      negative control a one-line call rather than a reconstruction.
+
+    `weight` interpolates the per-player factor rather than the ordering, so
+    intermediate values shrink each player toward where we had him rather than
+    producing some third ordering neither opinion holds.
+
+    **Known limitation, not fixed here.** The board's rank encodes availability as
+    well as per-game quality -- on the live Top 150, Jordyn Tyson is ranked up with
+    the note "recurring hamstring injuries will sideline Tyson" and Quinshon Judkins
+    down on a fractured fibula. This simulator already models availability separately,
+    through `playing` and `p_zero`, so transporting the rank onto the mean
+    double-counts injury in both directions. It is a real cost of using a human
+    ordering and it is not recoverable from an ordering alone.
+    """
+    if not 0.0 <= weight <= 1.0:
+        raise ValueError(f"weight must be in [0, 1], got {weight}")
+    if weight == 0.0 or not outlooks:
+        return list(outlooks)
+
+    ladder = board.positional()
+    start = from_week if from_week is not None else _first_week(outlooks)
+
+    by_position: dict[int, list[tuple[int, float, int]]] = {}
+    for o in outlooks:
+        entry = ladder.get(int(o.player_id))
+        if entry is None:
+            continue
+        pos, rank = entry
+        value = o.mean_from(start)
+        if value < min_points:
+            continue
+        by_position.setdefault(pos, []).append((int(o.player_id), value, rank))
+
+    factors: dict[int, float] = {}
+    for pos, rows in by_position.items():
+        # The ladder of values we hold at this position, best first. Ties break on the
+        # player id so the deal is determinate rather than dictionary order.
+        values = sorted((v for _, v, _ in rows), reverse=True)
+        # The order the board would hand them out in. Ties on the board's own rank
+        # break the same way, for the same reason.
+        order = sorted(rows, key=lambda r: (r[2], r[0]))
+        for (pid, ours, _), theirs in zip(order, values, strict=True):
+            factors[pid] = (1.0 - weight) + weight * (theirs / ours)
+        log.debug("tilt: position %d re-dealt %d values", pos, len(rows))
+
+    out: list[PlayerOutlook] = []
+    for o in outlooks:
+        factor = factors.get(int(o.player_id))
+        if factor is None or factor == 1.0:
+            out.append(o)
+            continue
+        out.append(
+            replace(o, weeks={w: _scaled_week(wo, factor) for w, wo in o.weeks.items()})
+        )
+    return out
+
+
+def _first_week(outlooks: Sequence[PlayerOutlook]) -> int:
+    """The earliest week anything is projected for -- the horizon the ladder spans."""
+    weeks = [w for o in outlooks for w in o.weeks]
+    return min(weeks) if weeks else 1
