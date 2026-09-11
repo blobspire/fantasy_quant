@@ -75,6 +75,8 @@ from typing import Any
 import httpx
 import polars as pl
 
+from ..paths import data_dir
+
 log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------
@@ -149,7 +151,7 @@ _DYNASTYPROCESS_ID_COLUMNS: dict[str, str] = {
 # Reference-file cache
 # --------------------------------------------------------------------------
 
-REFERENCE_DIR = Path("data/reference")
+REFERENCE_DIR = data_dir("data/reference")
 
 NFLVERSE_ROSTER_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/rosters/roster_{season}.parquet"

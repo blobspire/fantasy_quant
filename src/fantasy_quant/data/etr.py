@@ -48,10 +48,14 @@ from pathlib import Path
 import polars as pl
 
 from ..core import DST, QB, RB, TE, WR, K
+from ..paths import data_dir
 
 log = logging.getLogger(__name__)
 
-DEFAULT_DIR = Path("data/manual/etr")
+#: Where the exports live, relative to the repo root.
+DATA_SUBDIR = Path("data/manual/etr")
+
+DEFAULT_DIR = data_dir(DATA_SUBDIR)
 DEFAULT_ARCHIVE = DEFAULT_DIR / "archive"
 
 #: Rank columns by the analyst whose board it is. Two boards can share a scoring
@@ -359,6 +363,13 @@ def load_all(
     """
     directory = Path(directory)
     if not directory.exists():
+        # Loud, because every consumer degrades silently to "ESPN alone" and a surface
+        # that quietly prices on a different opinion than it claims cannot be checked.
+        log.warning(
+            "no ETR directory at %s (cwd is %s); every surface will price on ESPN alone",
+            directory,
+            Path.cwd(),
+        )
         return {}
     out: dict[tuple[str, str], EtrRankings] = {}
     shared = _IndexCache(id_index)
@@ -369,6 +380,8 @@ def load_all(
             log.warning("skipping %s: %s", path.name, exc)
             continue
         out[(board.kind, board.scoring)] = board
+    if not out:
+        log.warning("no usable ETR export in %s; pricing on ESPN alone", directory)
     return out
 
 

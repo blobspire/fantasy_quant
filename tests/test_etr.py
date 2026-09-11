@@ -283,3 +283,48 @@ class TestArchive:
         etr.archive(p, root=root, today=dt.date(2026, 9, 10))
         etr.archive(p, root=root, today=dt.date(2026, 9, 17))
         assert sorted(d.name for d in root.iterdir()) == ["2026-09-10", "2026-09-17"]
+
+
+class TestTheBoardIsFoundFromAnyWorkingDirectory:
+    """The dashboard rendered the board-less trade list while `fq trades` from the repo
+    root rendered the tilted one, and nothing on either said which.
+
+    `DEFAULT_DIR` was `Path("data/manual/etr")` and `data/reference` (the id crosswalk
+    the Top 150 needs, having no id column) was relative too. Both resolve silently to
+    nothing from another cwd -- `load_all` returns `{}` and `default_id_index` returns
+    an index that matches nobody -- so every surface priced on ESPN alone and said so
+    only in a log line.
+    """
+
+    def test_the_default_dir_resolves_to_a_real_directory(self):
+        from fantasy_quant.paths import data_dir
+
+        assert data_dir(etr.DATA_SUBDIR) == etr.DEFAULT_DIR
+
+    def test_a_missing_directory_says_where_it_looked(self, tmp_path, caplog):
+        """Silence is the failure mode being fixed; the warning IS the fix."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="fantasy_quant.data.etr"):
+            assert etr.load_all(tmp_path / "nope") == {}
+        assert any("no ETR directory" in r.message for r in caplog.records)
+
+    def test_a_directory_with_nothing_usable_also_says_so(self, tmp_path, caplog):
+        import logging
+
+        (tmp_path / "notes.txt").write_text("not a board", encoding="utf-8")
+        with caplog.at_level(logging.WARNING, logger="fantasy_quant.data.etr"):
+            assert etr.load_all(tmp_path) == {}
+        assert any("no usable ETR export" in r.message for r in caplog.records)
+
+
+@pytest.mark.network
+class TestTheRealBoardLoadsFromElsewhere:
+    def test_the_top_150_resolves_with_the_process_started_anywhere(self, tmp_path, monkeypatch):
+        """Both cwd-relative roots at once: the export folder and the id crosswalk."""
+        monkeypatch.chdir(tmp_path)
+        board, _ = etr.best_available("half_ppr", kind="silva")
+        if board is None:
+            pytest.skip("no Silva board in data/manual/etr")
+        assert board.n == 150
+        assert board.name_match == (150, 150)
