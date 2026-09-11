@@ -46,6 +46,24 @@ log = logging.getLogger(__name__)
 #: having it before the board that needs it arrives.
 MIN_TRANSPORT_POINTS = 1.0
 
+#: A player whose ESPN projection is near zero for more weeks than this is left out of
+#: the transport and keeps his own numbers. One is the bye.
+#:
+#: This is the mechanism's real limit, and it was found by its headline rather than by
+#: reasoning. The board's rank is a REST-OF-SEASON opinion and ESPN's projection is a
+#: per-week profile; the transport is multiplicative, so handing a rank-implied season
+#: total to a player ESPN has at 0.06 a week for eight weeks crams the whole total into
+#: the weeks he does play. Jordyn Tyson -- "recurring hamstring injuries will sideline
+#: Tyson through September", WR51 on the board, 0.06/wk for weeks 1-8 in the corpus --
+#: came out of the first version at a 60% higher per-game rate with every point landing
+#: in the back half of the season, where the bracket pays about three times. He was the
+#: top trade target in two of the user's three leagues. He was the only player on the
+#: board with more than a bye missing; TreVeyon Henderson (week 1) was the other.
+#: Where both sources agree on games played, a season total and a per-game rate are the
+#: same thing up to a constant and the transport is exact. Where they do not, there is
+#: no games count in a rank to recover, so the honest answer is not to guess one.
+MAX_ABSENT_WEEKS = 1
+
 
 @dataclass(frozen=True, slots=True)
 class Upgrade:
@@ -269,6 +287,7 @@ def tilt_outlooks(
     weight: float = 1.0,
     from_week: int | None = None,
     min_points: float = MIN_TRANSPORT_POINTS,
+    max_absent_weeks: int = MAX_ABSENT_WEEKS,
 ) -> list[PlayerOutlook]:
     """Our own points, re-dealt along the board's ordering. Within a position.
 
@@ -296,13 +315,9 @@ def tilt_outlooks(
     intermediate values shrink each player toward where we had him rather than
     producing some third ordering neither opinion holds.
 
-    **Known limitation, not fixed here.** The board's rank encodes availability as
-    well as per-game quality -- on the live Top 150, Jordyn Tyson is ranked up with
-    the note "recurring hamstring injuries will sideline Tyson" and Quinshon Judkins
-    down on a fractured fibula. This simulator already models availability separately,
-    through `playing` and `p_zero`, so transporting the rank onto the mean
-    double-counts injury in both directions. It is a real cost of using a human
-    ordering and it is not recoverable from an ordering alone.
+    **Players ESPN projects as absent for more than a bye are not transported** --
+    see `MAX_ABSENT_WEEKS` for the measurement that made this rule. Their own numbers
+    stand, and `partial_season` names them so a caller can say so.
     """
     if not 0.0 <= weight <= 1.0:
         raise ValueError(f"weight must be in [0, 1], got {weight}")
@@ -312,10 +327,19 @@ def tilt_outlooks(
     ladder = board.positional()
     start = from_week if from_week is not None else _first_week(outlooks)
 
+    skipped = partial_season(outlooks, board, from_week=start, max_absent_weeks=max_absent_weeks)
+    if skipped:
+        log.info(
+            "tilt: %d board player(s) kept their own numbers, absent beyond a bye: %s",
+            len(skipped),
+            ", ".join(o.name for o in skipped),
+        )
+    skip_ids = {int(o.player_id) for o in skipped}
+
     by_position: dict[int, list[tuple[int, float, int]]] = {}
     for o in outlooks:
         entry = ladder.get(int(o.player_id))
-        if entry is None:
+        if entry is None or int(o.player_id) in skip_ids:
             continue
         pos, rank = entry
         value = o.mean_from(start)
@@ -351,3 +375,29 @@ def _first_week(outlooks: Sequence[PlayerOutlook]) -> int:
     """The earliest week anything is projected for -- the horizon the ladder spans."""
     weeks = [w for o in outlooks for w in o.weeks]
     return min(weeks) if weeks else 1
+
+
+def partial_season(
+    outlooks: Sequence[PlayerOutlook],
+    board: EtrRankings,
+    *,
+    from_week: int | None = None,
+    min_points: float = MIN_TRANSPORT_POINTS,
+    max_absent_weeks: int = MAX_ABSENT_WEEKS,
+) -> tuple[PlayerOutlook, ...]:
+    """Board players ESPN projects as absent for more than `max_absent_weeks`.
+
+    "Absent" is a week under `min_points`: the calibration puts an injured player at
+    about 0.06 with `p_zero` near 0.84 rather than at an exact zero, so an equality
+    test finds nobody. A bye is one such week and is not an absence.
+    """
+    ladder = board.positional()
+    start = from_week if from_week is not None else _first_week(outlooks)
+    out: list[PlayerOutlook] = []
+    for o in outlooks:
+        if int(o.player_id) not in ladder:
+            continue
+        absent = sum(1 for w, wo in o.weeks.items() if w >= start and wo.mean < min_points)
+        if absent > max_absent_weeks:
+            out.append(o)
+    return tuple(out)

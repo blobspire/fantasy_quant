@@ -310,3 +310,52 @@ class TestTiltKeepsTheDistributionCoherent:
     def test_an_out_of_range_weight_is_refused(self):
         with pytest.raises(ValueError, match=r"weight must be in \[0, 1\]"):
             opinion.tilt_outlooks([], BOARD, weight=1.5)
+
+
+class TestPartialSeasonsAreNotTransported:
+    """The mechanism's real limit, found by its headline.
+
+    A rank is a rest-of-season opinion and the transport is multiplicative, so a player
+    ESPN has at ~0 for eight weeks gets the whole rank-implied total crammed into the
+    weeks he plays -- and those are the back half, where the bracket pays three times.
+    That player was the top trade target in two of three live leagues.
+    """
+
+    def _out(self):
+        return [
+            outlook(10, RB, {w: 10.0 for w in range(1, 11)}),
+            outlook(11, RB, {w: 8.0 for w in range(1, 11)}),
+            # Out through week 6, then a modest 6.0. The calibration's absence is 0.06
+            # with p_zero ~0.84, not an exact zero.
+            outlook(12, RB, {**{w: 0.064 for w in range(1, 7)}, **{w: 6.0 for w in range(7, 11)}}),
+        ]
+
+    def test_the_absent_player_keeps_his_own_numbers(self):
+        # Board has the injured player at RB1 -- an ROS opinion that has netted out the
+        # missed games -- which the transport would otherwise read as "RB1 every week".
+        hot = board([(12, RB, 1, 1, "C", ""), (10, RB, 2, 2, "A", ""), (11, RB, 3, 3, "B", "")])
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(self._out(), hot, weight=1.0)}
+        assert tilted[12] is self._out()[2] or tilted[12] == self._out()[2]
+        assert tilted[12].weeks[8].mean == pytest.approx(6.0)
+
+    def test_the_others_are_still_re_dealt_among_themselves(self):
+        hot = board([(12, RB, 1, 1, "C", ""), (11, RB, 2, 2, "B", ""), (10, RB, 3, 3, "A", "")])
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(self._out(), hot, weight=1.0)}
+        # 10 and 11 swap; the injured player is out of the ladder on both sides.
+        assert tilted[11].mean_from(1) == pytest.approx(100.0)
+        assert tilted[10].mean_from(1) == pytest.approx(80.0)
+
+    def test_a_bye_is_not_an_absence(self):
+        with_bye = [
+            outlook(10, RB, {**{w: 10.0 for w in range(1, 11)}, 5: 0.0}),
+            outlook(11, RB, {w: 8.0 for w in range(1, 11)}),
+        ]
+        swapped = board([(11, RB, 1, 1, "B", ""), (10, RB, 2, 2, "A", "")])
+        assert opinion.partial_season(with_bye, swapped) == ()
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(with_bye, swapped, weight=1.0)}
+        assert tilted[11].mean_from(1) == pytest.approx(90.0)
+
+    def test_partial_season_names_them(self):
+        hot = board([(12, RB, 1, 1, "C", ""), (10, RB, 2, 2, "A", "")])
+        names = [o.player_id for o in opinion.partial_season(self._out(), hot)]
+        assert names == [12]
