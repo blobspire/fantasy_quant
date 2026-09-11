@@ -7,7 +7,8 @@ Multi-league decision analytics for real-money ESPN fantasy football. Every surf
 another. Python 3.13 / uv / polars / numpy / scipy, FastAPI + Vite/React dashboard.
 
 Read `docs/AUDIT.md` first — it is the live status of the correctness work, with measurements
-and the ranked list of what is still open. `docs/PLAN.md` is the original design, `docs/RESEARCH.md`
+and the ranked list of what is still open, plus the one feature built since (a second
+opinion, `decide/opinion.py`). `docs/PLAN.md` is the original design, `docs/RESEARCH.md`
 the verified endpoints and measured constants.
 
 ## Hard constraints
@@ -22,6 +23,12 @@ the verified endpoints and measured constants.
 - **The API binds to 127.0.0.1** and must refuse non-loopback peers whatever the bind address;
   it holds session cookies.
 - Test fixtures anonymise leaguemates' team names before being committed.
+- **Two valuations now, and they must not be mixed.** `decide/opinion.py` re-deals the
+  projections along Establish The Run's ordering for the wire and the trade board only.
+  Everything else — the odds table, streaming, lineups, `edges/portfolio.py` — runs on
+  ESPN's. A surface that reads one and reports against the other is the mixed-currency bug
+  `e3e1365`, `411ed47` and `90dde59` each found once. `rankings_weight=0.0` is the off
+  switch and is byte-identical to no board.
 
 ## How to work here
 

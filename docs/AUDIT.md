@@ -5,6 +5,12 @@ verified findings, plus three the audit did not have -- and the one constant tha
 as the user's decision has been measured and answered: `PLAYOFF_WEIGHT` stays at 1.2. See
 **Remaining work** for why, including a recommendation I got wrong first.
 
+Since the audit closed, one feature has been built on top of it: **a second opinion**
+(`decide/opinion.py`), which prices the wire and the trade board against Establish The
+Run's rankings instead of ESPN's projections alone. It is recorded here rather than in a
+separate file because it found three defects of exactly the audit's shape, two of them in
+its own first draft. See **After the audit: the second opinion**.
+
 ## Why this file exists
 
 A seven-subsystem adversarial audit verified **nine findings** and correctly dropped a tenth
@@ -638,6 +644,91 @@ Carlo universes, so their levels will never match to the decimal. Compare deltas
 
 ---
 
+## After the audit: the second opinion
+
+`decide/opinion.py`, `data/etr.py`, and the two surfaces that consume them
+(`ee4e8d2`, `099cb12`, `7e80b0b`, `170c136`, `48481ee`, `90dde59`, `61c6589`).
+
+**What it is.** Every number in this repo runs on one valuation:
+`pipeline.league_projections` reads ESPN's own weekly projections out of the corpus and
+re-scores them per league. So "our number" and "the counterparty's number" have always
+been the same number seen from two sides, which can answer *is this trade good* and cannot
+answer *is it mispriced*. Matt Silva's Top 150 is the second opinion, and it enters in two
+shapes: `bench_upgrades` compares ranks to ranks and stops there, and `tilt_outlooks`
+carries the ordering into the numbers by **transporting our own points along it** -- within
+a position, our value ladder re-dealt in the board's order. A permutation, not a model, so
+replacement level, the scarcity curves and the wire do not move.
+
+It never prices a rank. `valuation.py:390` records why -- comparisons against an outside
+opinion stay in rank space -- and a fitted `points(rank)` would also overwrite this
+league's solved, per-league replacement model with a national one.
+
+### Three defects it found, all of them the audit's shape
+
+**1. The wire read off `state.pool`, which holds only rostered players.** The first
+`upgrades_for` reported `FREE=0` in all three leagues. `pipeline.build` pools the rostered
+194-225 and nothing else, so a free agent read off the pool is a free agent that does not
+exist -- and it returns a clean zero rather than raising, which is how `cc624f6` and
+`ef36808` each survived as long as they did. The wire is `sim.outlooks` (598 players).
+
+**2. A rest-of-season rank transported onto a player ESPN projects as absent.** The tilt is
+multiplicative, which is exact only when both sources agree on games played. Jordyn Tyson
+is WR51 on a board whose own note says "recurring hamstring injuries will sideline Tyson
+through September", against 0.064/wk with `p_zero` 0.84 for weeks 1-8 in the corpus. The
+transport handed the WR51 season total to a ten-week player: a 60% higher per-game rate,
+all of it in the back half where `PLAYOFF_WEIGHT` pays about three times. He became the top
+trade target in **two of three leagues**, once at +5.78pp with the counterparty 65
+playoff-weighted points out of pocket. `MAX_ABSENT_WEEKS = 1` keeps him out; exactly two of
+the 150 are affected.
+
+**3. The trade screen pruned counterparties on numbers they cannot see.** `_paper_gain` and
+`asset_ranking` run before `evaluate`, so the market gate alone changed nothing: Blacksburg
+returned 38 trades with zero arbitrage rows and Wine Wednesday returned none at all.
+`_side(team_id)` routes the preference graph, the pruning bound and `settle` through the
+finder whose numbers that team reads.
+
+A fourth, found the same way: `confirm_titles` scores on the **draw**, not on `_mu`, so
+reusing `sim.draw` left screen and simulation in different currencies -- +17.8 points
+screened, +0.10pp +/- 0.36 confirmed.
+
+### What it is worth, measured (week 1 of 2026, all three leagues)
+
+**On the wire, very little.** The top claim is the same player at every weight in all three
+leagues; only its price moves, by about 40% (Blacksburg +0.237 -> +0.343pp). One row in one
+league carried a board endorsement. That is structural: the Top 150 is 150 skill players, a
+league rosters 194-225 of them, and the top of a week-1 wire is defences and kickers, which
+the board does not rank. Only 4 to 7 of the 150 are unrostered.
+
+**On the trade board, substantially.** Top rows at weight 1.0:
+
+| league | ΔP(title) | trade | spread |
+|---|---|---|---|
+| Blacksburg | +1.70pp | Daniel Jones for Blake Corum | −7.9 |
+| Wine Wednesday | +2.30pp | Mike Evans for DK Metcalf | +14.2 |
+| Type shi | +3.10pp | Lawrence + Mahomes for Carnell Tate | +6.8 |
+
+`spread` is how much better the counterparty reads the deal by their own projections than
+by the board. The gate got **looser**, not tighter, and that is the object: a deal good for
+me and good for them *by my reckoning* needed no second opinion to find.
+
+### The one input here with no measured verdict
+
+Everything else in this repo ships with one -- calibration bias, the ensemble's twelve
+seasons of head-to-heads, analyst dispersion at +0.187 (p=0.004). This does not, because
+ETR overwrites each chart in place and publishes no history, so there is nothing to
+back-test against: the first board we hold is the one being used. The user chose to run it
+anyway and to measure later. Two things make that reversible:
+
+- `data.etr.archive` keeps a dated copy on every read, which is the only way the comparison
+  set ever exists. Score archived boards against realized weekly points once several weeks
+  of them exist -- roughly week 6-8.
+- `rankings_weight` is one constant, and `0.0` is byte-identical to not having the board.
+
+`edges/portfolio.py` deliberately takes no board: it ranks waiver, streaming and lineup
+rows in one currency and the latter two run on ESPN's numbers.
+
+---
+
 ## Remaining work
 
 ### Raised by this work, and now answered: `PLAYOFF_WEIGHT`
@@ -731,7 +822,7 @@ honest action is to leave it alone and record why.
 
 ## How to work on this
 
-- `uv run pytest -q -m "not network"` — 1,935 offline tests, ~90s.
+- `uv run pytest -q -m "not network"` — 2,001 offline tests, ~95s.
 - `uv run pytest -q -m network` — hits ESPN and FanDuel with the real credentials, ~4.5 min.
   Live-market tests are inherently a little flaky; judge on distributions, not single items.
 - `uv run ruff check src tests` before every commit.
