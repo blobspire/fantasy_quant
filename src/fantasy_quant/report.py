@@ -70,6 +70,7 @@ from rich.text import Text
 
 from . import corpus, pipeline, registry
 from .core import DST, Recommendation
+from .data import etr
 from .decide import lineups as lineups_mod
 from .decide import streaming as streaming_mod
 from .decide import title as title_mod
@@ -199,6 +200,11 @@ class Workspace:
     _engines: dict[tuple[int, int], Any] = field(default_factory=dict)
     _teams: dict[tuple[int, int], Any] = field(default_factory=dict)
     _variants: dict[tuple[int, int], tuple[str, str]] = field(default_factory=dict)
+    #: The analyst board this workspace prices the wire and the trade board against.
+    #: `None` disables it; the default reads `data/manual/etr/`. See `rankings`.
+    rankings_kind: str | None = "silva"
+    rankings_dir: Path | str = etr.DEFAULT_DIR
+    _rankings: dict[str, tuple[Any, bool]] = field(default_factory=dict)
 
     def __enter__(self) -> Workspace:
         return self
@@ -309,6 +315,45 @@ class Workspace:
                 cached = {}
             self._teams[cfg.key] = cached
         return cached
+
+    def rankings(self, cfg: registry.LeagueConfig) -> tuple[Any, bool]:
+        """`(analyst board, matches this league's scoring)`, or `(None, False)`.
+
+        Read once per scoring format and archived once per day on first use, because
+        Establish The Run overwrites each chart in place and there is no other record of
+        what the board said the week a decision was made against it.
+
+        The half-PPR board is handed to the full-PPR league deliberately, and the flag
+        says so. It is safe for these two consumers and would not be for a third: both
+        read only `positional()`, and within a position the two formats' orderings agree
+        to a Spearman of +0.9967 or better (measured on the two 300-row Draft Kit
+        boards, `data/etr.py`). A consumer of the OVERALL rank must not take the
+        fallback, because that is where half PPR and full PPR actually disagree.
+        """
+        if self.rankings_kind is None:
+            return None, False
+        cached = self._rankings.get(cfg.scoring_variant)
+        if cached is not None:
+            return cached
+        board, matched = etr.best_available(
+            cfg.scoring_variant, self.rankings_dir, kind=self.rankings_kind
+        )
+        if board is not None:
+            if not matched:
+                log.info(
+                    "no %s %s board; using the %s one for league %d (within-position "
+                    "orderings agree to rho >= 0.9967)",
+                    self.rankings_kind,
+                    cfg.scoring_variant,
+                    board.scoring,
+                    cfg.league_id,
+                )
+            try:
+                etr.archive(board.path, root=Path(self.rankings_dir) / "archive")
+            except OSError as err:  # pragma: no cover - disk-only path
+                log.warning("could not archive %s: %s", board.path.name, err)
+        self._rankings[cfg.scoring_variant] = (board, matched)
+        return board, matched
 
     def my_team_id(self, cfg: registry.LeagueConfig) -> int:
         team_id = cfg.team_id if cfg.team_id is not None else self.sim(cfg).state.my_team_id
@@ -891,6 +936,24 @@ def lineup_payload(
     }
 
 
+def _rankings_payload(board: Any, matched: bool, weight: float) -> dict[str, Any] | None:
+    """What board a surface was priced against, or None when it ran on ESPN alone."""
+    if board is None:
+        return None
+    return {
+        "kind": board.kind,
+        "scoring": board.scoring,
+        "matches_league_scoring": matched,
+        "n": board.n,
+        "weight": weight,
+        "file": board.path.name,
+        "unverified": (
+            "This board ships without a measured verdict: no historical boards exist to "
+            "score it against. `data.etr.archive` is accumulating them."
+        ),
+    }
+
+
 def waivers_payload(
     ws: Workspace, cfg: registry.LeagueConfig, *, limit: int = 10, week: int | None = None
 ) -> dict[str, Any]:
@@ -905,7 +968,8 @@ def waivers_payload(
     sim = ws.sim(cfg)
     team_id = ws.my_team_id(cfg)
     names = ws.names(cfg)
-    report = waivers_mod.waiver_board(sim, team_id=team_id, week=week)
+    rankings, rankings_match = ws.rankings(cfg)
+    report = waivers_mod.waiver_board(sim, team_id=team_id, week=week, rankings=rankings)
     on_waivers = {a.name: a.on_waivers for a in report.free_agents}
 
     def _row(rec: Recommendation) -> dict[str, Any]:
@@ -950,6 +1014,11 @@ def waivers_payload(
                 # backward induction and carries an error this cannot see.
                 "clears_margin": rec.delta_title - report.threshold,
                 "clears_certain": abs(rec.delta_title - report.threshold) > 2.0 * rec.stderr,
+                # The analyst's own rank comparison and note, when the board has one.
+                # Derived from the board, not from `delta_title`, which already carries
+                # the tilt -- see `waivers._board_tags`.
+                "board": tag_value(rec, "board:"),
+                "note": tag_value(rec, "note:"),
             }
         )
         return body
@@ -979,6 +1048,7 @@ def waivers_payload(
         # first thing a reader should see next to a threshold.
         "n_on_waivers": report.n_on_waivers,
         "n_free_agents_available": report.n_free_agents_available,
+        "rankings": _rankings_payload(rankings, rankings_match, waivers_mod.DEFAULT_BOARD_WEIGHT),
         "board": board,
         "claims": claims,
         "free_adds": [_row(r) for r in report.free_adds],
@@ -1024,13 +1094,27 @@ def trades_payload(
     team_id = ws.my_team_id(cfg)
     names = ws.names(cfg)
     franchises = {f.team_id: f.name for f in sim.state.franchises}
-    recs = trades_mod.find_trades(sim, for_team=team_id, min_gain=min_gain)
+    rankings, rankings_match = ws.rankings(cfg)
+    recs = trades_mod.find_trades(sim, for_team=team_id, min_gain=min_gain, rankings=rankings)
+    notes = rankings.comments() if rankings is not None else {}
     rows = []
     for rec in recs[:limit]:
         body = rec_payload(rec, names, team_id=team_id, surface="trade")
         partners = sorted({t for t in rec.move.teams if t != team_id})
         body["partners"] = [{"team_id": t, "name": franchises.get(t, str(t))} for t in partners]
         body["caveats"] = caveats_for(rec.tags)
+        # The arbitrage, as two numbers the reader can hold side by side: what the deal
+        # is worth to me by the analyst board, and how much better the other side thinks
+        # it is doing by the projections on their own screen. `spread` is the second
+        # minus the first on their side only; see `TradeEvaluation.spread`.
+        spread = tag_value(rec, "spread:")
+        body["spread"] = float(spread) if spread else None
+        body["mispriced"] = "mispriced" in rec.tags
+        body["notes"] = {
+            names.get(p.player_id, str(p.player_id)): notes[p.player_id]
+            for p in rec.move.players
+            if p.player_id in notes
+        }
         rows.append(body)
     n_found = len(recs)
     return {
@@ -1039,6 +1123,15 @@ def trades_payload(
         "team_id": team_id,
         "n_found": n_found,
         "min_gain": min_gain,
+        "rankings": _rankings_payload(
+            rankings, rankings_match, trades_mod.DEFAULT_RANKINGS_WEIGHT
+        ),
+        # `delta_title` on every row is priced on the re-dealt projections when a board
+        # is present, and the paired baseline inside `find_trades` is priced the same
+        # way -- so the deltas are internally consistent, but the ABSOLUTE title level
+        # behind them is not `fq odds`'s. That is the shape of the bug `411ed47` fixed,
+        # so it is stated here and no tilted level is printed beside the odds table.
+        "priced_on": "analyst board" if rankings is not None else "espn projections",
         "significance_test": "selection-adjusted (decide.trades.selection_threshold)",
         "selection_note": (
             f"dTitle on the top row is the MAXIMUM of {n_found} noisy paired estimates, so it "
@@ -2041,6 +2134,15 @@ def _availability_note(payload: Mapping[str, Any]) -> str:
     return f"{on_waivers} on waivers, {free} free"
 
 
+def _rankings_line(ranked: Mapping[str, Any]) -> str:
+    """One line naming the board a surface was priced against, and that it is unverified."""
+    fit = "" if ranked["matches_league_scoring"] else f" ({ranked['scoring']} board; ~1 rank drift)"
+    return (
+        f"priced against the {ranked['kind']} board, {ranked['n']} players, weight "
+        f"{ranked['weight']:.1f}{fit} -- unverified against results; boards are being archived."
+    )
+
+
 def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> None:
     out = out or console
     if payload["uses_faab"]:
@@ -2086,6 +2188,9 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
     table.add_column("+/-", justify="right")
     table.add_column("cost", justify="right")
     table.add_column("clears?", justify="right")
+    ranked = payload.get("rankings")
+    if ranked:
+        table.add_column("board", justify="right")
     if not payload["board"]:
         out.print(Text("  Nothing on the wire projects above replacement.", style="dim"))
         return
@@ -2102,8 +2207,12 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
             fence += 1
         if not on_waivers:
             clears = "n/a"
-        table.add_row(
-            _cell(str(row["add"]), verdict),
+        add = str(row["add"])
+        note = row.get("note")
+        if note and note != "-":
+            add += f"\n  {note}"
+        cells = [
+            _cell(add, verdict),
             _cell(str(row["position"]), verdict),
             _cell(str(row["drop"]), verdict),
             _cell(signed(row["delta_points"]), verdict),
@@ -2111,8 +2220,14 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
             _cell(f"{row['stderr'] * 100:.3f}pp", verdict),
             _cell("claim" if on_waivers else "free", verdict),
             _cell(clears, verdict),
-        )
+        ]
+        if ranked:
+            board = row.get("board")
+            cells.append(_cell("" if not board or board == "-" else board, verdict))
+        table.add_row(*cells)
     out.print(table)
+    if ranked:
+        out.print(Text("  " + _rankings_line(ranked), style="dim"))
     if fence:
         out.print(
             Text(
@@ -2191,11 +2306,17 @@ def render_trades(payload: Mapping[str, Any], out: Console | None = None) -> Non
             )
         )
         return
+    ranked = payload.get("rankings")
     table = Table(box=None, pad_edge=False)
     table.add_column("partner")
     table.add_column("you get")
     table.add_column("you give")
     table.add_column("dPts", justify="right")
+    if ranked:
+        # The arbitrage, side by side: `dPts` is mine by the analyst board, `spread` is
+        # how much better the other side reads the deal by the projections on THEIR
+        # screen than by ours. Positive is the case worth having.
+        table.add_column("spread", justify="right")
     table.add_column("dTitle", justify="right")
     table.add_column("+/-", justify="right")
     table.add_column("z", justify="right")
@@ -2204,16 +2325,36 @@ def render_trades(payload: Mapping[str, Any], out: Console | None = None) -> Non
         what = ", ".join(p["name"] for p in row["receive"])
         for note in row.get("caveats", []):
             what += f"\n  caveat: {note}"
-        table.add_row(
+        for who, note in (row.get("notes") or {}).items():
+            what += f"\n  {who}: {note}"
+        cells = [
             _cell(", ".join(p["name"] for p in row["partners"]), verdict),
             _cell(what, verdict),
             _cell(", ".join(p["name"] for p in row["send"]), verdict),
             _cell(signed(row["delta_points"]), verdict),
-            _cell(pp(row["delta_title"]) + _marker(verdict), verdict),
-            _cell(f"{row['stderr'] * 100:.2f}pp", verdict),
-            _cell("-" if row["z"] is None else f"{row['z']:.1f}", verdict),
+        ]
+        if ranked:
+            spread = row.get("spread")
+            cells.append(_cell("" if spread is None else signed(spread), verdict))
+        cells.extend(
+            [
+                _cell(pp(row["delta_title"]) + _marker(verdict), verdict),
+                _cell(f"{row['stderr'] * 100:.2f}pp", verdict),
+                _cell("-" if row["z"] is None else f"{row['z']:.1f}", verdict),
+            ]
         )
+        table.add_row(*cells)
     out.print(table)
+    if ranked:
+        out.print(Text("  " + _rankings_line(ranked), style="dim"))
+        out.print(
+            Text(
+                "  dPts is yours by the analyst board; spread is how much better the other "
+                "side reads it by the projections on their own screen. dTitle is priced on "
+                "the board too, so compare its deltas across rows, not its level to `fq odds`.",
+                style="dim",
+            )
+        )
     out.print(Text(f"  significance: {payload['significance_test']}", style="dim"))
     if payload.get("selection_note"):
         out.print(Text(f"  {payload['selection_note']}", style="yellow"))
@@ -2415,6 +2556,14 @@ LeagueOpt = Annotated[
 ]
 SeasonOpt = Annotated[int | None, typer.Option("--season", help="Override the registry season.")]
 ConfigOpt = Annotated[Path | None, typer.Option("--config", help="Path to leagues.toml.")]
+RankingsOpt = Annotated[
+    bool,
+    typer.Option(
+        "--no-rankings",
+        help="Price on ESPN's projections alone, ignoring any analyst board in "
+        "data/manual/etr/. The default reads the board when one is there.",
+    ),
+]
 JsonOpt = Annotated[bool, typer.Option("--json", help="Emit the payload as JSON and nothing else.")]
 SimsOpt = Annotated[int, typer.Option("--sims", help="Simulations per league.")]
 SeedOpt = Annotated[int, typer.Option("--seed", help="Common-random-numbers seed.")]
@@ -2454,6 +2603,8 @@ def _run(
     seed: int,
     as_json: bool,
     build: Callable[[Workspace, registry.LeagueConfig], dict[str, Any]],
+    *,
+    rankings: bool = True,
 ) -> dict[str, Any]:
     """Resolve the leagues, run `build` on each, and never let one failure kill the rest.
 
@@ -2468,7 +2619,9 @@ def _run(
         _fail(str(err))
         raise  # unreachable; `_fail` exits. Kept so the type checker sees no fall-through.
     rows: list[dict[str, Any]] = []
-    with Workspace(season=season, n_sims=sims, seed=seed) as ws:
+    with Workspace(
+        season=season, n_sims=sims, seed=seed, rankings_kind="silva" if rankings else None
+    ) as ws:
         for cfg in chosen:
             if not as_json:
                 console.print(Text(f"... {cfg.name or cfg.league_id}", style="dim"))
@@ -2573,6 +2726,7 @@ def waivers_command(
     sims: SimsOpt = 4000,
     seed: SeedOpt = 1,
     limit: LimitOpt = 10,
+    no_rankings: RankingsOpt = False,
     as_json: JsonOpt = False,
 ) -> None:
     """The waiver board and the priority threshold a claim has to clear."""
@@ -2585,6 +2739,7 @@ def waivers_command(
         seed,
         as_json,
         lambda ws, cfg: waivers_payload(ws, cfg, limit=limit),
+        rankings=not no_rankings,
     )
     _emit(payload, as_json, lambda: _render_each(payload, render_waivers))
 
@@ -2606,6 +2761,7 @@ def trades_command(
             "more negotiable list.",
         ),
     ] = 0.0,
+    no_rankings: RankingsOpt = False,
     as_json: JsonOpt = False,
 ) -> None:
     """Search for trades that improve every side, ranked by your title probability."""
@@ -2618,6 +2774,7 @@ def trades_command(
         seed,
         as_json,
         lambda ws, cfg: trades_payload(ws, cfg, limit=limit, min_gain=min_gain),
+        rankings=not no_rankings,
     )
     _emit(payload, as_json, lambda: _render_each(payload, render_trades))
 

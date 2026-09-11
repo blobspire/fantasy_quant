@@ -496,10 +496,37 @@ export interface LineupPayload {
    /api/leagues/:id/waivers
    ========================================================================== */
 
+/**
+ * The analyst board a surface was priced against, when one was. Null means ESPN alone.
+ *
+ * `unverified` is not boilerplate: every other input in this system carries a measured
+ * verdict and this one cannot yet, because no historical boards exist to score it
+ * against. `weight` is the single constant that turns it off -- `0.0` is byte-identical
+ * to no board at all -- so render it.
+ */
+export interface RankingsRef {
+  kind: string;
+  scoring: string;
+  /** False when the half-PPR board is standing in for a full-PPR league (~1 rank drift). */
+  matches_league_scoring: boolean;
+  n: number;
+  weight: number;
+  file: string;
+  unverified: string;
+}
+
 export interface WaiverRow extends Recommendation {
   add: string;
   position: string;
   drop: string;
+  /**
+   * "55-over-60": the analyst ranks the add 55th and the drop 60th at the position.
+   * A rank comparison read straight off the board, NOT derived from `delta_title`,
+   * which already carries the board's tilt. "-" when the board has no opinion.
+   */
+  board?: string;
+  /** The analyst's one-line note on the add. "-" when absent. */
+  note?: string;
   bracket_title: number;
   bracket_stderr: number;
   agrees: boolean;
@@ -542,6 +569,7 @@ export interface WaiversPayload {
   n_on_waivers: number | null;
   /** How many are simply free. Null when ESPN was not asked. */
   n_free_agents_available: number | null;
+  rankings: RankingsRef | null;
   board: WaiverRow[];
   /** Costs waiver priority, and clears the continuation value of holding it. */
   claims: WaiverRow[];
@@ -569,6 +597,16 @@ export interface WaiversPayload {
 export interface TradeRow extends Recommendation {
   partners: TeamRef[];
   caveats: string[];
+  /**
+   * The arbitrage in one number. For every counterparty, how much better the deal
+   * looks by the projections on THEIR screen than by the analyst board -- summed, and
+   * NOT including our side. Positive is the case worth having. Null with no board.
+   */
+  spread: number | null;
+  /** `spread > 0`: the other side reads it as better for them than we think it is. */
+  mispriced: boolean;
+  /** The analyst's note per player in the deal, keyed by name. Empty with no board. */
+  notes: Record<string, string>;
 }
 
 export interface TradesPayload {
@@ -577,6 +615,13 @@ export interface TradesPayload {
   team_id: number | null;
   n_found: number;
   min_gain: number;
+  rankings: RankingsRef | null;
+  /**
+   * "analyst board" or "espn projections". With a board, every `delta_title` on the
+   * page and the paired baseline behind it are priced on the re-dealt projections, so
+   * the deltas are consistent with each other and NOT with the odds page's level.
+   */
+  priced_on: string;
   significance_test: string;
   /**
    * The top row is the maximum of `n_found` noisy paired estimates and is biased

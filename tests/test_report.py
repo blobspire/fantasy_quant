@@ -1600,3 +1600,129 @@ def test_no_numpy_scalars_leak_into_json(workspace, cfg):
     text = json.dumps(payload)  # raises TypeError on a numpy scalar
     assert "championship" in text
     assert not any(isinstance(v, np.generic) for t in payload["teams"] for v in t.values())
+
+
+class TestRenderingAgainstAnAnalystBoard:
+    """Both surfaces name the board they were priced against, and say it is unverified."""
+
+    RANKINGS = {
+        "kind": "silva",
+        "scoring": "half_ppr",
+        "matches_league_scoring": False,
+        "n": 150,
+        "weight": 1.0,
+        "file": "silva_top150_half_ppr.csv",
+        "unverified": "This board ships without a measured verdict.",
+    }
+
+    def test_trades_show_the_spread_and_the_note_and_name_the_board(self, capsys):
+        report.render_trades(
+            {
+                "trades": [
+                    {
+                        "partners": [{"name": "Rob"}],
+                        "receive": [{"name": "Keaton Mitchell"}],
+                        "send": [{"name": "Aaron Jones"}],
+                        "delta_points": 10.3,
+                        "spread": 6.1,
+                        "mispriced": True,
+                        "notes": {"Keaton Mitchell": "Committee back ceiling."},
+                        "delta_title": 0.0175,
+                        "stderr": 0.0045,
+                        "z": 3.9,
+                        "significant": True,
+                        "verdict": "act",
+                    }
+                ],
+                "n_found": 1,
+                "rankings": self.RANKINGS,
+                "priced_on": "analyst board",
+                "significance_test": "selection-adjusted",
+            },
+            _wide(),
+        )
+        out = capsys.readouterr().out
+        assert "spread" in out and "+6.1" in out
+        assert "Committee back ceiling." in out
+        assert "silva board" in out and "unverified" in out
+        # The fallback across scoring formats is said out loud, never silent.
+        assert "half_ppr board" in out
+
+    def test_without_a_board_the_trade_table_is_exactly_as_before(self, capsys):
+        report.render_trades(
+            {
+                "trades": [
+                    {
+                        "partners": [{"name": "Rob"}],
+                        "receive": [{"name": "A"}],
+                        "send": [{"name": "B"}],
+                        "delta_points": 10.3,
+                        "delta_title": 0.0175,
+                        "stderr": 0.0045,
+                        "z": 3.9,
+                        "significant": True,
+                        "verdict": "act",
+                    }
+                ],
+                "n_found": 1,
+                "significance_test": "selection-adjusted",
+            },
+            _wide(),
+        )
+        out = capsys.readouterr().out
+        assert "spread" not in out and "unverified" not in out
+
+    def test_waivers_show_the_rank_pair_and_the_note(self, capsys):
+        report.render_waivers(
+            {
+                "uses_faab": False,
+                "priority": 3,
+                "priority_known": True,
+                "budget": 0,
+                "threshold": 0.00087,
+                "baseline_title": 0.0415,
+                "title_per_point": 0.00079,
+                "title_per_point_stderr": 0.0000389,
+                "rankings": {**self.RANKINGS, "matches_league_scoring": True},
+                "board": [
+                    {
+                        "add": "Ryan Flournoy",
+                        "position": "WR",
+                        "drop": "Denzel Boston",
+                        "delta_points": 1.4,
+                        "delta_title": 0.0012,
+                        "stderr": 0.0001,
+                        "verdict": "act",
+                        "clears_threshold": True,
+                        "clears_certain": True,
+                        "clears_margin": 0.0003,
+                        "board": "55-over-60",
+                        "note": "Underrated playmaker.",
+                    },
+                    {
+                        "add": "Jets D/ST",
+                        "position": "DST",
+                        "drop": "X",
+                        "delta_points": 3.0,
+                        "delta_title": 0.0030,
+                        "stderr": 0.0001,
+                        "verdict": "act",
+                        "clears_threshold": True,
+                        "clears_certain": True,
+                        "clears_margin": 0.002,
+                        "board": "-",
+                        "note": "-",
+                    },
+                ],
+                "claims": [],
+                "any_claim": False,
+                "waterfall_note": "",
+            },
+            _wide(),
+        )
+        out = capsys.readouterr().out
+        assert "55-over-60" in out
+        assert "Underrated playmaker." in out
+        assert "silva board" in out and "unverified" in out
+        # A board with no opinion about a row prints nothing for it, not a dash-as-fact.
+        assert "-over-" in out and out.count("-over-") == 1

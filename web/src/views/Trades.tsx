@@ -20,6 +20,7 @@
 import { useCallback, useState } from 'react';
 
 import { api, fmt, type MovedPlayer, type TradeRow, type TradesPayload } from '../api';
+import { RankingsNote } from '../components/RankingsNote';
 import { Delta } from '../components/Delta';
 import { Failure, Loading, useLeagueId, useResource } from '../components/Layout';
 import { Stat } from '../components/Stat';
@@ -58,7 +59,9 @@ export default function Trades() {
             Trades — {data.name}
           </h1>
           <div className="caption">
-            Every side has to gain on its own starting lineup, or it never gets proposed.{' '}
+            {data.rankings
+              ? 'Two questions, asked of different people: does it help you by the analyst board, and does it help them by the projections on their own screen.'
+              : 'Every side has to gain on its own starting lineup, or it never gets proposed.'}{' '}
             {data.n_found} candidate{data.n_found === 1 ? '' : 's'} confirmed
             {data.min_gain ? ` at a minimum gain of ${fmt.num(data.min_gain, 1)} points` : ''}.
           </div>
@@ -74,7 +77,8 @@ export default function Trades() {
       {trades.length > 0 && data.selection_note ? (
         <p className="note note--warn">{data.selection_note}</p>
       ) : null}
-      {trades.length > 0 ? <CounterpartySide /> : null}
+      {data.rankings ? <RankingsNote rankings={data.rankings} surface="trades" /> : null}
+      {trades.length > 0 ? <CounterpartySide priced={Boolean(data.rankings)} /> : null}
 
       {trades.length === 0 ? (
         <div className="state">
@@ -181,7 +185,11 @@ function analysisText(trade: TradeRow, receipts: Receipt[]): string {
       (trade.z === null ? '' : ` (${fmt.z(trade.z)})`) +
       `, verdict ${trade.verdict}, confidence ${trade.confidence}`,
     `my Δpoints ${fmt.signed(trade.delta_points, 1)} playoff-weighted starters`,
+    trade.spread === null || trade.spread === undefined
+      ? ''
+      : `their read vs ours ${fmt.signed(trade.spread, 1)} (by the projections on their screen)`,
     ...(trade.caveats ?? []).map((caveat) => `caveat: ${caveat}`),
+    ...Object.entries(trade.notes ?? {}).map(([who, note]) => `${who}: ${note}`),
     trade.rationale ?? '',
   ];
   return lines.filter(Boolean).join('\n');
@@ -273,6 +281,18 @@ function TradeCard({
             format="raw"
             sub="playoff-weighted starters"
           />
+          {trade.spread !== null && trade.spread !== undefined ? (
+            // The arbitrage. How much better the OTHER side reads this by the
+            // projections on their screen than by the analyst board. Positive means
+            // they think they are getting more than we think they are.
+            <Stat
+              size="xs"
+              label="their read vs ours"
+              value={fmt.signed(trade.spread, 1)}
+              format="raw"
+              sub={trade.mispriced ? 'they read it richer than it is' : 'both boards agree'}
+            />
+          ) : null}
           <Stat
             size="xs"
             label="z"
@@ -305,6 +325,16 @@ function TradeCard({
           </ul>
         ) : null}
 
+        {trade.notes && Object.keys(trade.notes).length ? (
+          <ul style={{ margin: 0, paddingLeft: '1.1em' }}>
+            {Object.entries(trade.notes).map(([who, note]) => (
+              <li key={who} className="caption">
+                <strong>{who}:</strong> {note}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
         {trade.rationale ? <p className="prose">{trade.rationale}</p> : null}
 
         <div className="row">
@@ -332,7 +362,19 @@ function TradeCard({
  * repeated per trade it became the longest text on the page -- a notice about a
  * missing API field outweighing the analysis it qualifies.
  */
-function CounterpartySide() {
+function CounterpartySide({ priced }: { priced: boolean }) {
+  if (priced) {
+    return (
+      <p className="note">
+        Their simulated ΔP(title) is not in this payload. What is: every counterparty gains in{' '}
+        <em>playoff-weighted starting points</em> by the projections on their own screen, and
+        "their read vs ours" on each card is how much richer they read the deal than the analyst
+        board does. That is an acceptance <em>condition</em>, not a prediction that they accept.
+        A <span className="mono">counterparty-loses</span> tag means the title simulation
+        disagrees about their side.
+      </p>
+    );
+  }
   return (
     <p className="note">
       Their simulated ΔP(title) is not in this payload. The gate every side cleared is a strict

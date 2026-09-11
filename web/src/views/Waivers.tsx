@@ -16,6 +16,7 @@
  * coin flip is not allowed to look like a row that clears.
  */
 import { api, fmt, type WaiverRow, type WaiversPayload } from '../api';
+import { RankingsNote } from '../components/RankingsNote';
 import { DeltaCell, ErrorBar } from '../components/Delta';
 import { Failure, Loading, useLeagueId, useResource } from '../components/Layout';
 import { Stat } from '../components/Stat';
@@ -63,6 +64,7 @@ export default function Waivers() {
       </header>
 
       <Rule data={data} />
+      {data.rankings ? <RankingsNote rankings={data.rankings} surface="waivers" /> : null}
       <Claims data={data} />
       <Board data={data} />
       {data.blocks?.length ? <Blocks rows={data.blocks} /> : null}
@@ -184,9 +186,35 @@ function claimColumns(withRank: boolean): Array<Column<WaiverRow>> {
       header: 'add',
       width: '24%',
       value: (row) => row.add,
-      render: (row) => row.add,
+      // The analyst's note rides under the name when the board has one. It is the
+      // one thing on this row that is not a number, and the one thing a human wrote.
+      render: (row) =>
+        row.note && row.note !== '-' ? (
+          <span>
+            {row.add}
+            <span className="caption" style={{ display: 'block' }} title={row.note}>
+              {row.note}
+            </span>
+          </span>
+        ) : (
+          row.add
+        ),
     },
     { key: 'pos', header: 'pos', width: 54, value: (row) => row.position },
+    {
+      key: 'board',
+      header: 'board',
+      help: "the analyst's positional rank of the add over the drop, read straight off the board -- not derived from ΔP(title)",
+      align: 'center',
+      width: 74,
+      value: (row) => (row.board && row.board !== '-' ? row.board : ''),
+      render: (row) =>
+        row.board && row.board !== '-' ? (
+          <span className="up mono">{row.board}</span>
+        ) : (
+          <span className="faint">—</span>
+        ),
+    },
     {
       key: 'drop',
       header: 'drop',

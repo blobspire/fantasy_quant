@@ -2116,6 +2116,11 @@ def _waiver_recs(stake: LeagueStake) -> Candidates:
     """
     from ..decide.waivers import waiver_board
 
+    # No analyst board here, deliberately. The portfolio ranks waiver rows against
+    # streaming and lineup rows in one currency, and those two surfaces run on ESPN's
+    # numbers; handing the wire a different projection set would rank a Silva-priced
+    # claim against an ESPN-priced stream. `fq waivers` carries the board; this does not,
+    # and the two will disagree about the wire until the rest of the portfolio does too.
     report = waiver_board(stake.sim, team_id=stake.team_id)
     recs = list(report.claims) or [report.hold]
     return Candidates(tuple(recs), max(len(report.board), len(recs), 1))
@@ -2133,6 +2138,7 @@ def _trade_recs(stake: LeagueStake) -> Candidates:
     """
     from ..decide.trades import find_trades
 
+    # Same reason as `_waiver_recs`: one currency across the portfolio, so no board.
     every = list(find_trades(stake.sim, for_team=stake.team_id, include_harmful=True))
     positive = tuple(r for r in every if r.delta_title > 0.0)
     return Candidates(positive, max(len(every), 1))
