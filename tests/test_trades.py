@@ -35,10 +35,12 @@ from fantasy_quant.decide.trades import (
     TradeFinder,
     TradeLeg,
     TradeProposal,
+    _move_set,
     best_free_agents,
     find_trades,
     playoff_weights,
     positional_requirements,
+    prune_throw_ins,
     select_non_overlapping,
     selection_threshold,
     simple_cycles,
@@ -1281,10 +1283,16 @@ def test_find_trades_confirms_the_whole_screened_set_not_the_screens_top_eight()
     finder = TradeFinder(sim.state, sim.draw, sim.outlooks)
     screened = finder.search(for_team=1, max_teams=3)
     assert len(screened) > 8, "the fixture has to have more candidates than the old cap"
-    everything = find_trades(sim, for_team=1, finder=finder, include_harmful=True)
+    # `parsimony=False`: this test is about the confirm BUDGET, and the parsimony pass
+    # drops candidates after the budget has already been spent on them.
+    everything = find_trades(
+        sim, for_team=1, finder=finder, include_harmful=True, parsimony=False
+    )
     assert len(everything) == len(screened)
     assert all("confirmed" in r.tags for r in everything)
-    capped = find_trades(sim, for_team=1, finder=finder, n_confirm=8, include_harmful=True)
+    capped = find_trades(
+        sim, for_team=1, finder=finder, n_confirm=8, include_harmful=True, parsimony=False
+    )
     assert len(capped) == 8
 
 
@@ -1653,3 +1661,165 @@ class TestTheSubjectDefaultsToOurOwnTeam:
             _by_name(finder, "RB traded"),
         ])
         assert ev.rosters[2] == theirs
+
+
+# --------------------------------------------------------------------------------------
+# Parsimony: the same trade with a throw-in is not a better trade
+# --------------------------------------------------------------------------------------
+
+
+def _confirmed(finder, proposal, paired_by_team):
+    """An evaluation carrying hand-made per-simulation arrays, so the comparison under
+    test is arithmetic rather than a re-simulation."""
+    ev = finder.evaluate(proposal)
+    return dataclasses.replace(
+        ev,
+        confirmed=True,
+        paired={t: np.asarray(v, dtype=np.float32) for t, v in paired_by_team.items()},
+    )
+
+
+class TestPruneThrowIns:
+    """Measured on the live Type shi board at 8,000 sims over three seeds: "Lawrence for
+    Tate" and "Lawrence + Mahomes for Tate" came out +0.563pp, -0.175pp and +0.125pp
+    apart. The sign flips, so which one tops the board is decided by the draw -- and the
+    one that won left four quarterbacks on a sixteen-man roster."""
+
+    def _pair(self, finder):
+        """`lean` and `fat` differ by exactly one throw-in from the SAME owner, which is
+        what makes one move-set a strict subset of the other."""
+        me = 1
+        a = _by_name(finder, "WR elite")
+        owner = next(t for t, r in finder.rosters.items() if a in r)
+        b = next(p for p in finder.rosters[owner] if p != a)
+        tate = _by_name(finder, "RB traded")
+        lean = TradeProposal(42, (TradeLeg(me, owner, (tate,)), TradeLeg(owner, me, (a,))))
+        fat = TradeProposal(42, (TradeLeg(me, owner, (tate,)), TradeLeg(owner, me, (a, b))))
+        return lean, fat
+
+    def test_a_superset_worth_the_same_is_dropped(self):
+        """The throw-in moves the season a little in both directions and nothing on
+        average -- which is what the live pair looked like across three seeds."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        lean, fat = self._pair(finder)
+        rng = np.random.default_rng(0)
+        base = rng.normal(0.0, 1.0, 4000)
+        evs = [
+            _confirmed(finder, fat, {1: base + rng.normal(0.0, 0.05, 4000)}),
+            _confirmed(finder, lean, {1: base}),
+        ]
+        kept, absorbed = prune_throw_ins(evs, 1, z=2.0)
+        assert [_move_set(e) for e in kept] == [_move_set(evs[1])]
+        assert absorbed[_move_set(evs[1])] == 1
+
+    def test_a_superset_that_really_is_better_survives(self):
+        """The rule must be able to NOT fire, or it is just a filter on package size."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        lean, fat = self._pair(finder)
+        rng = np.random.default_rng(0)
+        base = rng.normal(0.0, 1.0, 4000)
+        evs = [
+            _confirmed(finder, fat, {1: base + rng.normal(0.05, 0.05, 4000)}),
+            _confirmed(finder, lean, {1: base}),
+        ]
+        kept, absorbed = prune_throw_ins(evs, 1, z=2.0)
+        assert len(kept) == 2 and absorbed == {}
+
+    def test_the_comparison_is_paired_not_a_difference_of_two_error_bars(self):
+        """Both candidates ran against the same baseline on the same draw, so the
+        pairing survives between them and the error on `A - B` is far smaller than
+        either one's own. Differencing the two published means would separate almost
+        nothing, which is why `confirm_titles` keeps the arrays at all."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        lean, fat = self._pair(finder)
+        rng = np.random.default_rng(1)
+        base = rng.normal(0.0, 1.0, 4000)
+        offset = rng.normal(0.02, 0.05, 4000)
+        evs = [
+            _confirmed(finder, fat, {1: base + offset}),
+            _confirmed(finder, lean, {1: base}),
+        ]
+        own_se = base.std(ddof=1) / np.sqrt(base.size)
+        paired_se = offset.std(ddof=1) / np.sqrt(offset.size)
+        assert paired_se < own_se / 10, "the pairing is the whole point"
+        # A real 0.02 difference is ~25 paired standard errors and is comfortably
+        # resolved; measured against the unpaired errors it is under one and would
+        # vanish, taking the whole rule with it.
+        assert abs(offset.mean()) > 2.0 * paired_se
+        assert abs(offset.mean()) < 2.0 * own_se
+        assert prune_throw_ins(evs, 1, z=2.0)[0] == evs
+
+    def test_an_unconfirmed_candidate_is_never_dropped(self):
+        """No paired array means nothing to compare; a screen-only list passes through."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        lean, fat = self._pair(finder)
+        evs = [finder.evaluate(fat), finder.evaluate(lean)]
+        kept, absorbed = prune_throw_ins(evs, 1, z=2.0)
+        assert kept == evs and absorbed == {}
+
+    def test_trades_that_are_not_subsets_are_left_alone(self):
+        """Only a strict subset counts -- same deal, fewer players. Two different trades
+        of the same size are two different trades and both belong on the board."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        me = 1
+        a = _by_name(finder, "WR elite")
+        owner = next(t for t, r in finder.rosters.items() if a in r)
+        b = next(p for p in finder.rosters[owner] if p != a)
+        tate = _by_name(finder, "RB traded")
+        one = TradeProposal(42, (TradeLeg(me, owner, (tate,)), TradeLeg(owner, me, (a,))))
+        two = TradeProposal(42, (TradeLeg(me, owner, (tate,)), TradeLeg(owner, me, (b,))))
+        rng = np.random.default_rng(2)
+        base = rng.normal(0.0, 1.0, 2000)
+        evs = [_confirmed(finder, one, {1: base}), _confirmed(finder, two, {1: base})]
+        assert prune_throw_ins(evs, 1, z=2.0)[0] == evs
+
+    def test_nothing_is_dropped_without_its_leaner_sibling_surviving(self):
+        """The safety property, and the reason this is not a recall cost: everything
+        dropped is a fatter copy of something kept. Verified on all three live leagues
+        at week 1 of 2026 -- 40 candidates down to 10-18, and zero orphans."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        evs = finder.confirm_titles(finder.search(for_team=1))
+        kept, _ = prune_throw_ins(evs, 1, z=selection_threshold(len(evs)))
+        surviving = {_move_set(e) for e in kept}
+        for ev in evs:
+            key = _move_set(ev)
+            if key in surviving:
+                continue
+            assert any(k < key for k in surviving), "dropped a trade with no leaner sibling"
+
+
+class TestParsimonyIsOptional:
+    def test_off_reproduces_the_previous_behaviour_exactly(self):
+        sim = _sim()
+        finder = TradeFinder(sim.state, sim.draw, sim.outlooks)
+        off = find_trades(sim, for_team=1, finder=finder, include_harmful=True, parsimony=False)
+        on = find_trades(sim, for_team=1, finder=finder, include_harmful=True)
+        assert len(on) < len(off), "the fixture must contain a throw-in to prune"
+        assert all("leanest" not in t for r in off for t in r.tags)
+
+    def test_the_survivor_says_it_absorbed_something(self):
+        sim = _sim()
+        finder = TradeFinder(sim.state, sim.draw, sim.outlooks)
+        on = find_trades(sim, for_team=1, finder=finder, include_harmful=True)
+        assert any(any(t.startswith("leanest:") for t in r.tags) for r in on)
+
+
+class TestCapacityComesFromTheLeague:
+    def test_a_team_below_the_limit_can_add_without_cutting(self):
+        """`capacity` was `len(roster)`, which asserts nobody ever has an open spot."""
+        state, outlooks = _market(CONSOLIDATION, WIRE)
+        draw = _dummy_draw(state, outlooks)
+        tight = TradeFinder(state, draw, outlooks)
+        limit = len(state.franchises[0].player_ids) + 2
+        roomy = TradeFinder(state, draw, outlooks, roster_limit=limit)
+        extra = list(roomy.rosters[2])[:1]
+        after = [*tight.rosters[1], *extra]
+        assert len(tight.settle(1, after)[1]) == 1, "no room: somebody must go"
+        assert roomy.settle(1, after)[1] == (), "room for him: nobody has to go"
+
+    def test_a_limit_below_the_current_roster_never_shrinks_it(self):
+        """A league that counts IR separately can report a limit under a real roster;
+        that is a reason to leave the roster alone, not to start cutting."""
+        state, outlooks = _market(CONSOLIDATION, WIRE)
+        f = TradeFinder(state, _dummy_draw(state, outlooks), outlooks, roster_limit=2)
+        assert f.capacity[1] == len(f.rosters[1])

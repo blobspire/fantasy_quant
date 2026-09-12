@@ -533,6 +533,14 @@ class TradeEvaluation:
     rosters: Mapping[int, tuple[int, ...]]
     names: Mapping[int, str] = field(default_factory=dict, repr=False)
     confirmed: bool = False
+    #: `team_id -> (sims,)` per-simulation championship difference against the shared
+    #: baseline, kept from `confirm_titles`. Two candidates confirmed on the same draw
+    #: can therefore be differenced against EACH OTHER as a paired sample, which is the
+    #: only honest way to ask "is this one really better than that one" -- comparing two
+    #: published means and their standard errors throws away the pairing that makes the
+    #: whole confirmation worth running. Not part of the value; float32 to keep forty
+    #: candidates at a few megabytes.
+    paired: Mapping[int, np.ndarray] | None = field(default=None, compare=False, repr=False)
 
     @property
     def pareto(self) -> bool:
@@ -926,6 +934,7 @@ class TradeFinder:
         wire_depth: int = DEFAULT_WIRE_DEPTH,
         efficiency: S.LineupEfficiency | None = None,
         market: TradeFinder | None = None,
+        roster_limit: int | None = None,
     ) -> None:
         self.state = state
         self.draw = draw
@@ -983,7 +992,16 @@ class TradeFinder:
         self.rosters: dict[int, tuple[int, ...]] = {
             f.team_id: tuple(f.player_ids) for f in state.franchises
         }
-        self.capacity: dict[int, int] = {t: len(r) for t, r in self.rosters.items()}
+        #: How many players a team may hold. `roster_limit` is the league's real
+        #: `starter_count + bench_slots`, which `decide/waivers.py` already reads off
+        #: settings; without it this falls back to each team's CURRENT size, which is
+        #: what it always used to be and which quietly asserts that nobody has an open
+        #: spot. A team one short of the limit can take an add without cutting anybody,
+        #: and modelling that away made every acquisition look like it costs a player.
+        self.capacity: dict[int, int] = {
+            t: max(len(r), roster_limit) if roster_limit else len(r)
+            for t, r in self.rosters.items()
+        }
         self.team_names: dict[int, str] = {f.team_id: f.name for f in state.franchises}
 
         self._plans: dict[tuple[int, ...], tuple[LineupPlan, np.ndarray, np.ndarray]] = {}
@@ -1004,6 +1022,7 @@ class TradeFinder:
         *,
         rankings: EtrRankings | None = None,
         rankings_weight: float = DEFAULT_RANKINGS_WEIGHT,
+        roster_limit: int | None = None,
         **kwargs,
     ) -> TradeFinder:
         """Build from `pipeline.build`'s output. This is how you get a live league.
@@ -1016,7 +1035,14 @@ class TradeFinder:
         Applied here rather than in `pipeline.build` on purpose. Every surface reads
         `sim.outlooks`, so re-dealing them upstream would move the odds table and the
         streaming plan too; this board's remit is trades.
+
+        `roster_limit` is read off the league when it can be, the same way
+        `waivers.waiver_board` does it. A failure there is not fatal -- the finder
+        falls back to current roster sizes, which is what it did before.
         """
+        if roster_limit is None:
+            roster_limit = _roster_limit(sim)
+        kwargs["roster_limit"] = roster_limit
         if rankings is None or rankings_weight == 0.0:
             return cls(sim.state, sim.draw, sim.outlooks, **kwargs)
         outlooks = tilt_outlooks(
@@ -1740,9 +1766,11 @@ class TradeFinder:
             alt_champ = alt.champions.astype(np.float64)
 
             impacts = []
+            per_team: dict[int, np.ndarray] = {}
             for impact in ev.impacts:
                 t = index[impact.team_id]
                 paired = alt_champ[:, t] - base_champ[:, t]
+                per_team[impact.team_id] = paired.astype(np.float32)
                 impacts.append(
                     replace(
                         impact,
@@ -1750,7 +1778,7 @@ class TradeFinder:
                         delta_title_stderr=float(paired.std(ddof=1) / math.sqrt(paired.size)),
                     )
                 )
-            out.append(replace(ev, impacts=tuple(impacts), confirmed=True))
+            out.append(replace(ev, impacts=tuple(impacts), confirmed=True, paired=per_team))
         return out
 
     # -- recommendations ---------------------------------------------------------------
@@ -1760,6 +1788,7 @@ class TradeFinder:
         evaluations: Sequence[TradeEvaluation],
         *,
         for_team: int | None = None,
+        parsimony: bool = True,
     ) -> list[Recommendation]:
         """One `core.Recommendation` per trade, from `for_team`'s side of the table."""
         team = for_team if for_team is not None else self.my_team_id
@@ -1769,8 +1798,15 @@ class TradeFinder:
         # Every confirmed candidate in this list competed for the top of it, so the
         # winner's own standard error is not the right yardstick for the winner. See
         # `selection_threshold`.
+        #
+        # `z` is computed over the FULL set, before pruning: multiplicity is a fact
+        # about how many candidates competed, and dropping some of them afterwards does
+        # not un-compete them.
         n_confirmed = sum(1 for ev in evaluations if ev.confirmed)
         z = selection_threshold(n_confirmed)
+        absorbed: dict[frozenset[tuple[int, int, int]], int] = {}
+        if parsimony:
+            evaluations, absorbed = prune_throw_ins(evaluations, team, z=z)
         out: list[Recommendation] = []
         for ev in evaluations:
             mine = ev.impact_for(team)
@@ -1825,6 +1861,9 @@ class TradeFinder:
                     )
             if ev.title_pareto:
                 tags.append("title-pareto")
+            n_absorbed = absorbed.get(_move_set(ev), 0)
+            if n_absorbed:
+                tags.append(f"leanest:{n_absorbed}")
             rec = Recommendation(
                 move=ev.proposal.to_move(),
                 delta_title=mine.delta_title,
@@ -1980,6 +2019,85 @@ class TradeFinder:
         return self.recommend(evals)
 
 
+def _roster_limit(sim: LeagueSim) -> int | None:
+    """`starter_count + bench_slots`, or None when ESPN will not say.
+
+    Read defensively and never fatal: the finder's previous behaviour -- capacity is
+    whatever each roster currently holds -- is the fallback, so a settings failure costs
+    the open-spot modelling and nothing else.
+    """
+    try:
+        roster = sim.league.settings().roster
+        return int(roster.starter_count) + int(roster.bench_slots)
+    except Exception as err:  # pragma: no cover - live-only path
+        log.info("no roster limit for league %s (%s); using current roster sizes", 
+                 getattr(sim.state, "league_id", "?"), err)
+        return None
+
+
+def _move_set(ev: TradeEvaluation) -> frozenset[tuple[int, int, int]]:
+    """Every `(from, to, player)` this proposal moves. The identity `_dedupe` uses."""
+    return frozenset(
+        (leg.from_team, leg.to_team, pid) for leg in ev.proposal.legs for pid in leg.player_ids
+    )
+
+
+def prune_throw_ins(
+    evaluations: Sequence[TradeEvaluation], team: int, *, z: float = 2.0
+) -> tuple[list[TradeEvaluation], dict[frozenset[tuple[int, int, int]], int]]:
+    """Drop a trade when a strictly smaller version of it is worth the same.
+
+    Returns `(kept, how many fatter versions each survivor absorbed)`.
+
+    **The measurement this exists for.** On the live Type shi board, "Lawrence for Tate"
+    and "Lawrence + Mahomes for Tate" were confirmed at 8,000 simulations under three
+    seeds and came out +0.563pp, -0.175pp and +0.125pp apart -- the sign flips. The
+    model cannot tell them apart, so which one reaches the top of the board is decided
+    by the draw; and the one that won left four quarterbacks on a sixteen-man roster and
+    forced Jordyn Tyson to be cut. Twenty of forty candidates had a strictly leaner
+    sibling in the same search.
+
+    So when one candidate's moves are a strict SUBSET of another's and the bigger one
+    cannot be shown to be better, the bigger one is not a better trade -- it is the same
+    trade with a throw-in the simulation cannot price, bought with an extra asset and a
+    roster spot. A subset is the right relation because it needs no judgement: same
+    deal, fewer players.
+
+    The comparison is paired. Both candidates were simulated against the same baseline
+    on the same draw, so their per-simulation differences subtract exactly and the
+    standard error of `A - B` is far smaller than either one's own -- which is the whole
+    reason `confirm_titles` keeps the arrays. Differencing the two published means
+    instead would fail to separate almost anything.
+
+    `z` is the caller's significance bar, normally `selection_threshold(n)`: the same
+    bar the board already uses to decide whether its winner is real.
+    """
+    keys = [_move_set(ev) for ev in evaluations]
+    absorbed: dict[frozenset[tuple[int, int, int]], int] = {}
+    drop: set[int] = set()
+
+    for i, big in enumerate(evaluations):
+        mine = None if big.paired is None else big.paired.get(team)
+        if mine is None:
+            continue  # never confirmed; nothing to compare
+        for j, small in enumerate(evaluations):
+            if i == j or not (keys[j] < keys[i]):
+                continue
+            theirs = None if small.paired is None else small.paired.get(team)
+            if theirs is None:
+                continue
+            diff = mine.astype(np.float64) - theirs.astype(np.float64)
+            se = float(diff.std(ddof=1) / math.sqrt(diff.size))
+            if float(diff.mean()) > z * se:
+                continue  # the extra pieces really do buy something
+            drop.add(i)
+            absorbed[keys[j]] = absorbed.get(keys[j], 0) + 1
+            break
+
+    kept = [ev for i, ev in enumerate(evaluations) if i not in drop]
+    return kept, absorbed
+
+
 def _dedupe(evaluations: Sequence[TradeEvaluation]) -> list[TradeEvaluation]:
     """Collapse proposals that move the same players between the same teams.
 
@@ -2043,6 +2161,7 @@ def find_trades(
     finder: TradeFinder | None = None,
     rankings: EtrRankings | None = None,
     rankings_weight: float = DEFAULT_RANKINGS_WEIGHT,
+    parsimony: bool = True,
 ) -> list[Recommendation]:
     """Search one live league and return confirmed trades, best first.
 
@@ -2083,6 +2202,12 @@ def find_trades(
     and a trade that passes both is one the numbers on their screen argue for. That is
     as far as this goes -- there is no model of whether they will actually accept, and
     there cannot be, because no accepted-or-rejected trade has ever been recorded here.
+
+    `parsimony` drops a candidate when a strict subset of its own moves is worth the
+    same to within the selection-adjusted error -- see `prune_throw_ins`. It is on by
+    default because the alternative is publishing a trade that costs an extra asset for
+    a difference the simulation cannot measure. `parsimony=False` is the negative
+    control and reproduces the previous behaviour exactly.
     """
     engine = finder or TradeFinder.from_sim(
         sim, rankings=rankings, rankings_weight=rankings_weight
@@ -2098,7 +2223,7 @@ def find_trades(
     if not screened:
         return []
     confirmed = engine.confirm_titles(screened if n_confirm is None else screened[:n_confirm])
-    out = engine.recommend(confirmed, for_team=team)
+    out = engine.recommend(confirmed, for_team=team, parsimony=parsimony)
     if include_harmful:
         return out
     return [r for r in out if r.delta_title > 0.0]
