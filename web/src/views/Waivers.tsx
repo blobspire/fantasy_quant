@@ -15,7 +15,7 @@
  * ±0.024pp — so `clears_certain` gets its own column and a row that clears by a
  * coin flip is not allowed to look like a row that clears.
  */
-import { api, fmt, type WaiverRow, type WaiversPayload } from '../api';
+import { api, fmt, type StreamAdvantage, type WaiverRow, type WaiversPayload } from '../api';
 import { RankingsNote } from '../components/RankingsNote';
 import { DeltaCell, ErrorBar } from '../components/Delta';
 import { Failure, Loading, useLeagueId, useResource } from '../components/Layout';
@@ -65,6 +65,7 @@ export default function Waivers() {
 
       <Rule data={data} />
       {data.rankings ? <RankingsNote rankings={data.rankings} surface="waivers" /> : null}
+      <StreamNote rows={data.stream_advantage ?? []} />
       <Claims data={data} />
       <Board data={data} />
       {data.blocks?.length ? <Blocks rows={data.blocks} /> : null}
@@ -201,6 +202,22 @@ function claimColumns(withRank: boolean): Array<Column<WaiverRow>> {
         ),
     },
     { key: 'pos', header: 'pos', width: 54, value: (row) => row.position },
+    {
+      key: 'ceiling',
+      header: 'ceiling',
+      help: "what dropping him costs as lineups are actually set, against what he'd have been worth to someone who knew which weeks to start him -- shown, never charged",
+      align: 'center',
+      width: 96,
+      value: (row) => (row.drop_ceiling && row.drop_ceiling !== '-' ? row.drop_ceiling : ''),
+      render: (row) =>
+        row.drop_ceiling && row.drop_ceiling !== '-' ? (
+          <span className="mono" style={{ color: 'var(--noise)' }}>
+            {row.drop_ceiling}
+          </span>
+        ) : (
+          <span className="faint">—</span>
+        ),
+    },
     {
       key: 'board',
       header: 'board',
@@ -358,6 +375,33 @@ function Claims({ data }: { data: WaiversPayload }) {
         footer={data.waterfall_note ? <span className="note">{data.waterfall_note}</span> : undefined}
       />
     </Panel>
+  );
+}
+
+/**
+ * Where a whole seat is better streamed than filled.
+ *
+ * The gap is non-negative by construction -- streaming sums a per-week maximum and
+ * holding maximises a per-week sum -- so the sign says nothing and only the size
+ * across positions does. Written to make that impossible to misread.
+ */
+function StreamNote({ rows }: { rows: StreamAdvantage[] }) {
+  const live = rows.filter((r) => r.gap > 0);
+  if (!live.length) return null;
+  const best = live.reduce((a, b) => (b.gap > a.gap ? b : a));
+  return (
+    <p className="note">
+      <strong>Streaming vs holding, per single-body slot:</strong>{' '}
+      {live
+        .slice()
+        .sort((a, b) => b.gap - a.gap)
+        .map((r) => `${r.position} ${r.gap >= 0 ? '+' : ''}${r.gap.toFixed(0)}`)
+        .join(', ')}{' '}
+      points over the rest of the season. Every gap is positive by construction, so read
+      the <em>ratio</em>, not the sign: <strong>{best.position}</strong> is the seat worth
+      streaming. Neither column pays for the weekly transaction — the Stream tab plans
+      that properly.
+    </p>
   );
 }
 

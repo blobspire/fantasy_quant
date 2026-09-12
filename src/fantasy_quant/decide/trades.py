@@ -1859,9 +1859,13 @@ class TradeFinder:
         n_confirmed = sum(1 for ev in evaluations if ev.confirmed)
         z = selection_threshold(n_confirmed)
         absorbed: dict[frozenset[tuple[int, int, int]], int] = {}
+        routes: dict[int, int] = {}
         if parsimony:
             evaluations, absorbed = prune_throw_ins(evaluations, team, z=z)
+            evaluations, routes = order_routes(evaluations, team)
         out: list[Recommendation] = []
+        ranked: list[tuple[TradeEvaluation, Recommendation]] = []
+        by_rec: dict[int, TradeEvaluation] = {}
         for ev in evaluations:
             mine = ev.impact_for(team)
             tags = ["trade", f"{ev.n_teams}-team"]
@@ -1924,6 +1928,11 @@ class TradeFinder:
             # the winner won -- understating exactly the bias the correction exists for.
             if n_confirmed:
                 tags.append(f"considered:{n_confirmed}")
+            n_routes = routes.get(id(ev), 0)
+            if n_routes > 0:
+                tags.append(f"routes:{n_routes}")
+            elif n_routes < 0:
+                tags.append("same-return")
             rec = Recommendation(
                 move=ev.proposal.to_move(),
                 delta_title=mine.delta_title,
@@ -1935,11 +1944,28 @@ class TradeFinder:
                 tags=tuple(tags),
             )
             out.append(rec)
+            ranked.append((ev, rec))
+            by_rec[id(rec)] = ev
         # Title probability is the unit and leads whenever every candidate has one. A
         # half-screened list has no common unit at all, so it falls back to points
         # rather than ranking a measured title delta against a structural zero.
         confirmed = all("confirmed" in r.tags for r in out)
-        out.sort(key=(lambda r: -r.delta_title) if confirmed else (lambda r: -r.delta_points))
+        value = (lambda r: r.delta_title) if confirmed else (lambda r: r.delta_points)
+        if not routes:
+            out.sort(key=lambda r: -value(r))
+            return out
+        # Routes to the same return stay together and behind their own leader, or the
+        # global sort would split a family across the board and let a three-team version
+        # outrank the two-team one that hands over the identical players. Families are
+        # ranked by their best member, which is the value of the opportunity; within a
+        # family `order_routes` has already put the easiest to sign first.
+        best: dict[tuple[tuple[int, ...], tuple[int, ...]], float] = {}
+        for ev, rec in ranked:
+            key = _my_side(ev, team)
+            best[key] = max(best.get(key, -math.inf), value(rec))
+        order = {id(rec): i for i, (_, rec) in enumerate(ranked)}
+        out.sort(key=lambda r: order[id(r)])
+        out.sort(key=lambda r: -best[_my_side(by_rec[id(r)], team)])
         return out
 
     def _confidence(self, ev: TradeEvaluation, mine: TeamImpact, *, z: float = 2.0) -> str:
@@ -2178,6 +2204,56 @@ def prune_throw_ins(
 
     kept = [ev for i, ev in enumerate(evaluations) if i not in drop]
     return kept, absorbed
+
+
+def _my_side(ev: TradeEvaluation, team: int) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """What this trade gets me and what it costs me, ignoring how it is routed."""
+    mine = ev.impact_for(team)
+    return tuple(sorted(mine.received)), tuple(sorted(mine.given))
+
+
+def order_routes(
+    evaluations: Sequence[TradeEvaluation], team: int
+) -> tuple[list[TradeEvaluation], dict[int, int]]:
+    """Put the easiest route to each return first, and count the rest.
+
+    Returns `(ordered, id(ev) -> how many other routes deliver the same return)`.
+
+    A three-team cycle and a two-team swap can hand the subject exactly the same
+    players for exactly the same price and differ only in who stands in the middle.
+    Measured on the live boards at 4,000 simulations, the top THREE rows of Type shi
+    were all "Trevor Lawrence for Carnell Tate" -- +2.67pp, +2.43pp and +2.25pp against
+    standard errors of 0.55 -- routed through one, two and two counterparties. That is
+    one decision printed three times, and it pushes three genuinely different ideas off
+    a five-row board.
+
+    They are not duplicates and are not dropped: a different middleman is a different
+    person to persuade and carries a different spread, which is exactly the number the
+    subject needs when choosing whom to ask. But the two-team version is strictly easier
+    to get signed than the three-team one, so it leads, and the others are marked as the
+    same return by another route rather than read as separate opportunities.
+
+    Fewest teams first, then widest spread -- the order in which a human would try them.
+    """
+    groups: dict[tuple[tuple[int, ...], tuple[int, ...]], list[TradeEvaluation]] = {}
+    for ev in evaluations:
+        groups.setdefault(_my_side(ev, team), []).append(ev)
+
+    alternatives: dict[int, int] = {}
+    ordered: list[TradeEvaluation] = []
+    seen: set[int] = set()
+    for ev in evaluations:
+        key = _my_side(ev, team)
+        if id(ev) in seen:
+            continue
+        family = sorted(
+            groups[key], key=lambda e: (e.proposal.n_teams, -e.spread(team))
+        )
+        for rank, member in enumerate(family):
+            seen.add(id(member))
+            alternatives[id(member)] = len(family) - 1 if rank == 0 else -1
+            ordered.append(member)
+    return ordered, alternatives
 
 
 def _dedupe(evaluations: Sequence[TradeEvaluation]) -> list[TradeEvaluation]:

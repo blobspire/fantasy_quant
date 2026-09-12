@@ -1135,6 +1135,13 @@ def trades_payload(
         spread = tag_value(rec, "spread:") if rankings is not None else "-"
         body["spread"] = float(spread) if spread and spread != "-" else None
         body["mispriced"] = "mispriced" in rec.tags
+        # How many other ways there are to end up with exactly these players for exactly
+        # this price, differing only in who stands in the middle. `same_return` marks
+        # those alternatives; the row that leads a family is the easiest one to get
+        # signed. See `trades.order_routes`.
+        routes = tag_value(rec, "routes:")
+        body["routes"] = int(routes) if routes.isdigit() else 0
+        body["same_return"] = "same-return" in rec.tags
         body["notes"] = {
             names.get(p.player_id, str(p.player_id)): notes[p.player_id]
             for p in rec.move.players
@@ -2387,6 +2394,11 @@ def render_trades(payload: Mapping[str, Any], out: Console | None = None) -> Non
             what += f"\n  caveat: {note}"
         for who, note in (row.get("notes") or {}).items():
             what += f"\n  {who}: {note}"
+        if row.get("same_return"):
+            what += "\n  same return as a row above, routed through someone else"
+        elif row.get("routes"):
+            n = row["routes"]
+            what += f"\n  {n} other route{'s' if n > 1 else ''} to this same return below"
         cells = [
             _cell(", ".join(p["name"] for p in row["partners"]), verdict),
             _cell(what, verdict),

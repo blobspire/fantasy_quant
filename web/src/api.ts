@@ -527,6 +527,15 @@ export interface WaiverRow extends Recommendation {
   board?: string;
   /** The analyst's one-line note on the add. "-" when absent. */
   note?: string;
+  /**
+   * `"+0.0/+16.3"`: what dropping this player costs as lineups are actually set,
+   * against what he would have been worth to someone who knew which weeks to start
+   * him. The second number is deliberately NOT charged -- a projection-set lineup
+   * already captures ~0.89 of the ceiling and real managers capture 0.78, so nobody
+   * measured beats the projection. Shown so the cut is the user's call. "-" when the
+   * gap is under 10 points.
+   */
+  drop_ceiling?: string;
   bracket_title: number;
   bracket_stderr: number;
   agrees: boolean;
@@ -543,6 +552,15 @@ export interface WaiverRow extends Recommendation {
   clears_margin: number;
   /** False means the margin over the threshold is inside this row's own error: a coin flip. */
   clears_certain: boolean;
+}
+
+export interface StreamAdvantage {
+  slot: number;
+  position: string;
+  stream_points: number;
+  hold_points: number;
+  hold_player: string;
+  gap: number;
 }
 
 export interface WaiversPayload {
@@ -570,6 +588,17 @@ export interface WaiversPayload {
   /** How many are simply free. Null when ESPN was not asked. */
   n_free_agents_available: number | null;
   rankings: RankingsRef | null;
+  /**
+   * Per single-body slot, over the remaining season: what the seat yields taking the
+   * best available every week, against holding the best rosterable body.
+   *
+   * `gap` is non-negative by CONSTRUCTION -- streaming sums a per-week max and holding
+   * maximises a per-week sum -- so never render the sign as evidence. Render the
+   * comparison ACROSS positions: D/ST runs ~38 points against ~13 at K and TE, and
+   * that ratio is the measured reason a defense is the seat you stream. Neither column
+   * pays for the weekly transaction.
+   */
+  stream_advantage: StreamAdvantage[];
   board: WaiverRow[];
   /** Costs waiver priority, and clears the continuation value of holding it. */
   claims: WaiverRow[];
@@ -607,6 +636,14 @@ export interface TradeRow extends Recommendation {
   mispriced: boolean;
   /** The analyst's note per player in the deal, keyed by name. Empty with no board. */
   notes: Record<string, string>;
+  /**
+   * How many OTHER routes deliver this exact return for this exact price, differing
+   * only in who stands in the middle. Set on the row that leads the family, which is
+   * the easiest one to get signed (fewest teams, then widest spread).
+   */
+  routes: number;
+  /** This row is one of those alternatives -- the same return, routed differently. */
+  same_return: boolean;
 }
 
 export interface TradesPayload {

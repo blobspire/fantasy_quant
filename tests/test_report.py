@@ -1770,3 +1770,67 @@ class TestTheBoardlessPathStillWorks:
         )
         assert board is not None and board.n == 1
         assert matched is (cfg.scoring_variant == "half_ppr")
+
+
+class TestTheCeilingAndStreamingReachTheOutput:
+    """Both are disclosures the objective deliberately does not price, so if they are
+    not rendered they may as well not exist."""
+
+    def _waivers(self, **over):
+        base = {
+            "uses_faab": False, "priority": 3, "priority_known": True, "budget": 0,
+            "threshold": 0.00087, "baseline_title": 0.0415, "title_per_point": 0.00079,
+            "title_per_point_stderr": 0.0000389, "claims": [], "any_claim": False,
+            "waterfall_note": "",
+            "board": [
+                {
+                    "add": "Jets D/ST", "position": "DST", "drop": "Ray Davis",
+                    "delta_points": 3.0, "delta_title": 0.0030, "stderr": 0.0001,
+                    "verdict": "act", "clears_threshold": True, "clears_certain": True,
+                    "clears_margin": 0.002, "drop_ceiling": "+0.0/+12.4",
+                }
+            ],
+            "stream_advantage": [
+                {"slot": 16, "position": "DST", "stream_points": 138.5,
+                 "hold_points": 100.1, "hold_player": "Chiefs D/ST", "gap": 38.4},
+                {"slot": 17, "position": "K", "stream_points": 154.0,
+                 "hold_points": 140.8, "hold_player": "Cairo Santos", "gap": 13.2},
+            ],
+        }
+        base.update(over)
+        return base
+
+    def test_the_drop_ceiling_is_rendered_with_what_it_means(self, capsys):
+        report.render_waivers(self._waivers(), _wide())
+        out = capsys.readouterr().out
+        assert "+0.0/+12.4" in out
+        assert "NOT charged" in out or "not charged" in out
+
+    def test_the_streaming_gap_is_rendered_as_a_ratio_not_a_verdict(self, capsys):
+        """`sum_w max_i >= max_i sum_w` always, so quoting the sign as evidence would be
+        a defensible-looking number that is not the right quantity."""
+        report.render_waivers(self._waivers(), _wide())
+        out = capsys.readouterr().out
+        assert "DST +38" in out and "K +13" in out
+        assert "RATIO" in out or "ratio" in out
+        assert "non-negative by" in out
+
+    def test_neither_appears_when_there_is_nothing_to_say(self, capsys):
+        report.render_waivers(
+            self._waivers(
+                board=[
+                    {
+                        "add": "Jets D/ST", "position": "DST", "drop": "X",
+                        "delta_points": 3.0, "delta_title": 0.003, "stderr": 0.0001,
+                        "verdict": "act", "clears_threshold": True,
+                        "clears_certain": True, "clears_margin": 0.002,
+                        "drop_ceiling": "-",
+                    }
+                ],
+                stream_advantage=[],
+            ),
+            _wide(),
+        )
+        out = capsys.readouterr().out
+        assert "ceiling" not in out.lower()
+        assert "streaming vs holding" not in out.lower()

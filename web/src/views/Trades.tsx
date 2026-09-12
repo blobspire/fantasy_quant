@@ -325,6 +325,18 @@ function TradeCard({
           </ul>
         ) : null}
 
+        {trade.same_return ? (
+          <p className="caption">
+            Same players, same price as a card above — routed through a different team, so
+            it needs a different person to say yes.
+          </p>
+        ) : trade.routes ? (
+          <p className="caption">
+            {trade.routes} other route{trade.routes > 1 ? 's' : ''} below deliver the same
+            return; this is the easiest to get signed.
+          </p>
+        ) : null}
+
         {trade.notes && Object.keys(trade.notes).length ? (
           <ul style={{ margin: 0, paddingLeft: '1.1em' }}>
             {Object.entries(trade.notes).map(([who, note]) => (

@@ -38,6 +38,7 @@ from fantasy_quant.decide.trades import (
     _move_set,
     best_free_agents,
     find_trades,
+    order_routes,
     playoff_weights,
     positional_requirements,
     prune_throw_ins,
@@ -1905,3 +1906,78 @@ class TestTheCeilingIsReportedNotCharged:
             pytest.skip("this fixture produced no forced cut")
         text = finder._rationale(with_cut[0], 1)
         assert "would have to cut" in text
+
+
+class TestRoutesToTheSameReturn:
+    """Measured on the live boards at 4,000 sims, the top THREE rows of Type shi were
+    all "Trevor Lawrence for Carnell Tate" -- +2.67, +2.43 and +2.25pp against standard
+    errors of 0.55 -- routed through one, two and two counterparties. One decision,
+    three rows, and three genuinely different ideas pushed off a five-row board."""
+
+    def _routes(self, finder, me=1):
+        """Two proposals handing `me` the same players for the same price, one direct
+        and one through a third team."""
+        a = _by_name(finder, "WR elite")
+        owner = next(t for t, r in finder.rosters.items() if a in r)
+        mid = next(t for t in finder.rosters if t not in (me, owner))
+        tate = _by_name(finder, "RB traded")
+        theirs = next(p for p in finder.rosters[mid])
+        direct = TradeProposal(42, (TradeLeg(me, owner, (tate,)), TradeLeg(owner, me, (a,))))
+        via = TradeProposal(
+            42,
+            (
+                TradeLeg(me, mid, (tate,)),
+                TradeLeg(mid, owner, (theirs,)),
+                TradeLeg(owner, me, (a,)),
+            ),
+        )
+        return direct, via
+
+    def test_the_two_team_route_leads(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        direct, via = self._routes(finder)
+        evs = [finder.evaluate(via), finder.evaluate(direct)]  # harder one first
+        ordered, alts = order_routes(evs, 1)
+        assert ordered[0].proposal.n_teams == 2, "the easiest route to sign must lead"
+        assert alts[id(ordered[0])] == 1
+        assert alts[id(ordered[1])] == -1
+
+    def test_they_are_marked_rather_than_dropped(self):
+        """A different middleman is a different person to persuade and carries its own
+        spread, so the alternatives are information, not duplication."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        direct, via = self._routes(finder)
+        evs = [finder.evaluate(direct), finder.evaluate(via)]
+        ordered, _ = order_routes(evs, 1)
+        assert len(ordered) == 2
+
+    def test_trades_with_different_returns_are_not_grouped(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        me = 1
+        a = _by_name(finder, "WR elite")
+        owner = next(t for t, r in finder.rosters.items() if a in r)
+        b = next(p for p in finder.rosters[owner] if p != a)
+        tate = _by_name(finder, "RB traded")
+        one = TradeProposal(42, (TradeLeg(me, owner, (tate,)), TradeLeg(owner, me, (a,))))
+        two = TradeProposal(42, (TradeLeg(me, owner, (tate,)), TradeLeg(owner, me, (b,))))
+        evs = [finder.evaluate(one), finder.evaluate(two)]
+        _, alts = order_routes(evs, 1)
+        assert all(v == 0 for v in alts.values()), "different returns are different trades"
+
+    def test_a_family_stays_together_in_the_published_order(self):
+        """Without a group-aware sort the global ranking splits a family across the
+        board and can put the three-team version above the two-team one that hands over
+        the identical players."""
+        sim = _sim()
+        finder = TradeFinder(sim.state, sim.draw, sim.outlooks)
+        recs = finder.recommend(finder.confirm_titles(finder.search(for_team=1)), for_team=1)
+        seen: dict[str, int] = {}
+        for i, r in enumerate(recs):
+            key = str(sorted(p.player_id for p in r.move.players))
+            lead = "same-return" not in r.tags
+            if lead:
+                seen[key] = i
+        for i, r in enumerate(recs):
+            if "same-return" in r.tags:
+                key = str(sorted(p.player_id for p in r.move.players))
+                assert key not in seen or seen[key] < i

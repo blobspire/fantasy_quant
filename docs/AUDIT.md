@@ -749,6 +749,98 @@ rows in one currency and the latter two run on ESPN's numbers.
 
 ---
 
+## After the board: making the advice worth acting on
+
+The second opinion shipped and the user's verdict was that the recommendations were bad:
+the trade board acquired **multiple quarterbacks** in one-QB leagues, and the waiver board
+wanted to **add defenses while dropping high-upside running backs**. Both complaints were
+correct. Neither was caused by the ETR work.
+
+### The four-QB trade was a coin flip the board kept losing
+
+At **8,000 simulations under three seeds**, "Lawrence for Tate" against "Lawrence +
+Mahomes for Tate" came out **+0.563pp, −0.175pp and +0.125pp** apart. The sign flips: the
+model cannot separate them, so which one tops the board is decided by the draw — and the
+one that won left four quarterbacks on a sixteen-man roster and forced Jordyn Tyson out.
+Twenty of forty candidates had a strictly leaner sibling already in the same search.
+
+`prune_throw_ins` drops a candidate when a strict **subset** of its own moves cannot be
+shown to be worse. The comparison is paired — both ran against the same baseline on the
+same draw, so the error on `A − B` is ~20× smaller than either one's own, and comparing
+the two published means (±0.4pp each, on a 0.06pp gap) would never have fired. Live, the
+four-QB trades are gone and 40 candidates become 10–18 with **zero orphans**: everything
+dropped is a fatter copy of something kept.
+
+Two things it is not. It is not the redundancy gate the plan called for — measured on the
+user's roster, a "do not exceed the startable requirement" rule refuses adds at QB, RB,
+WR, K *and* D/ST, and would have blocked the +14-point Lawrence upgrade too. And it
+cannot fix a throw-in whose lean variant the search never enumerated; one such case
+survives on Type shi.
+
+### Bench upside is real, nobody captures it
+
+`sim/season.py` already said a rank-less tensor gives "the upper bound you need to price
+bench option value". Priced, in rest-of-season points:
+
+| dropping | costs, ex ante | at the hindsight ceiling |
+|---|---|---|
+| Jordyn Tyson | +0.27 | **+19.13** |
+| Tank Bigsby | +0.56 to +0.81 | +7.4 to +9.8 |
+| Makai Lemon | +0.8 | **+45.9** |
+
+So the upside is real, by a factor of ten to seventy. **And nobody captures it.**
+`measure_hindsight_ratio` puts the projection-optimal lineup at **0.886/0.900/0.886** of
+that ceiling, against a measured manager efficiency of **0.775** — real managers land
+eleven points *below* simply following projections. A foresight parameter above zero
+would price skill nobody has ever demonstrated, which is `PLAYOFF_WEIGHT` again.
+
+So it is reported and never charged: `cut_cost` and `drop_cost` return both numbers, the
+trade rationale prints the gap, the waiver board tags it, and the output says why the
+second number is not charged. The cut becomes the user's decision with the one fact the
+objective cannot see — the same move `cut_alternatives` made for ties.
+
+**The roster-spot half of the plan collapsed.** A spot is worth what the marginal player
+it holds is worth, and that is the same zero for the same reason. Pricing it separately
+would double-count a number that is not there.
+
+### Streaming, and a framing error that nearly shipped
+
+`stream_advantage` reports per single-body slot what the best available every week yields
+against holding the best rosterable body. The first version quoted the positive gap as
+evidence that streaming wins. **It is not**: `sum_w max_i >= max_i sum_w` for any table of
+numbers, so the sign is an identity. Only the size across positions is information —
+D/ST **+38.4**, QB +27.5, K +13.2, TE +12.9. D/ST is three times K and TE, and that is
+the measured reason a defense is the seat everybody streams. Neither column pays for the
+weekly transaction, so it is a ceiling, not a policy.
+
+### One decision printed three times
+
+At 4,000 simulations the top **three** rows of Type shi were all "Trevor Lawrence for
+Carnell Tate" — +2.67pp, +2.43pp and +2.25pp against standard errors of 0.55 — routed
+through one, two and two counterparties. Wine Wednesday's top three were all "Mike Evans
+for DK Metcalf". One decision each, taking three of five rows and pushing genuinely
+different ideas off the board.
+
+They are not duplicates and are not dropped: a different middleman is a different person
+to persuade and carries its own spread, which is the number you want when choosing whom
+to ask. `order_routes` groups them by what the subject actually gets and gives, leads with
+the easiest to sign (fewest teams, then widest spread), and marks the rest `same-return`.
+The published sort is group-aware, or the global ranking would split a family and let a
+three-team version outrank the two-team one handing over identical players.
+
+### Two regressions this work introduced, both caught
+
+- **Pruning shrank the selection field.** `portfolio` sized the multiplicity off
+  `len(find_trades(...))`, which parsimony had just cut from forty to ten — softening the
+  correction on the noisiest surface in the app. The count now travels on a
+  `considered:N` tag. Only the live test caught it; no offline fixture has enough
+  candidates.
+- **The dashboard was pricing on ESPN alone.** Two cwd-relative data roots (`data/manual/etr`
+  and the `data/reference` crosswalk) resolved silently to nothing off the repo root.
+  `paths.data_dir` resolves both, and absence is now loud.
+
+---
+
 ## Remaining work
 
 ### Raised by this work, and now answered: `PLAYOFF_WEIGHT`
@@ -842,7 +934,7 @@ honest action is to leave it alone and record why.
 
 ## How to work on this
 
-- `uv run pytest -q -m "not network"` — 2,011 offline tests, ~95s.
+- `uv run pytest -q -m "not network"` — 2,038 offline tests, ~100s.
 - `uv run pytest -q -m network` — hits ESPN and FanDuel with the real credentials, ~4.5 min.
   Live-market tests are inherently a little flaky; judge on distributions, not single items.
 - `uv run ruff check src tests` before every commit.
