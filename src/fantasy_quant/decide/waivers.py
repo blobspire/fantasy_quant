@@ -544,6 +544,11 @@ class RosterSimulator:
     #: the claim. Without it an empty seat is paid its mean with no variance at all, and
     #: 15.7-19.6% of slot-weeks on these rosters are empty.
     _noise: S.FloorNoise | None = None
+    #: `drop_cost` answers, keyed on the player. Not part of the value -- two simulators
+    #: over the same draw are the same simulator whether or not either has been asked.
+    _drop_costs: dict[int, tuple[float, float]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
     # -- construction ------------------------------------------------------------------
 
@@ -715,12 +720,22 @@ class RosterSimulator:
     def drop_cost(self, player_id: int) -> tuple[float, float]:
         """`(what dropping him costs, what he was worth at the hindsight ceiling)`.
 
+        Memoised, because the board asks for the same player over and over: every row
+        that proposes an add is paired with the cheapest drop, so one player's name sits
+        under thirty rows and each answer costs four full-tensor lineup solves. Measured
+        at 4,000 simulations on a live league, that was 4.6s of a 74s board for one
+        distinct player. The cache is keyed on the player and lives on the simulator, so
+        it dies with the roster it describes.
+
         Rest-of-season points, over the same draw. The first is what this board charges;
         the second is what he would have been worth to someone who knew which weeks he
         goes off, and the gap between them is the thing a points board cannot otherwise
         say. Neither is a reason on its own -- see `decide/trades.TradeFinder.cut_cost`
         for the measurement that says the ceiling must not be charged.
         """
+        hit = self._drop_costs.get(player_id)
+        if hit is not None:
+            return hit
         roster = list(self.roster)
         if player_id not in roster:
             return 0.0, 0.0
@@ -737,7 +752,9 @@ class RosterSimulator:
             ).sum(axis=1)
             for ids in (roster, kept)
         )
-        return ex, float((full - less).mean())
+        answer = (ex, float((full - less).mean()))
+        self._drop_costs[player_id] = answer
+        return answer
 
     def season_points(self, player_ids: Sequence[int], team_id: int | None = None) -> np.ndarray:
         """`(sims,)` starting-lineup points over the whole remaining season."""

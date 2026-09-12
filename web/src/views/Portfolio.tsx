@@ -112,7 +112,7 @@ export default function Portfolio() {
   const book = useResource<PortfolioPayload>((signal) => api.portfolio({ signal }), []);
 
   if (book.loading && !book.data) {
-    return <Loading what="portfolio across one shared NFL season" />;
+    return <Loading what="portfolio across one shared NFL season" slow />;
   }
   if (book.error && !book.data) return <Failure error={book.error} onRetry={book.reload} />;
   if (!book.data) return null;

@@ -192,7 +192,7 @@ export default function Queue({ onNavigate }: ViewProps) {
     [],
   );
 
-  if (queue.loading && !payload) return <Loading what="queue across every league" />;
+  if (queue.loading && !payload) return <Loading what="queue across every league" slow />;
   if (queue.error && !payload) return <Failure error={queue.error} onRetry={queue.reload} />;
 
   const lead =

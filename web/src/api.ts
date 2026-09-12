@@ -32,6 +32,20 @@ export const API_BASE = '/api';
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
+ * The cross-league endpoints run EVERY surface in EVERY league before they can rank
+ * anything, so they are not slow versions of the single-league calls — they are a
+ * different order of work.
+ *
+ * Measured cold on the three live leagues at 4,000 sims: `/queue` takes **334s**, of
+ * which the waiver boards alone are ~74s each. At the 120s default the browser gave up
+ * every time on a fresh server while the server carried on and finished, so the next
+ * attempt returned in 0.0s from cache — a timeout that reported failure for work that
+ * was succeeding. Ten minutes is the measured cost with headroom, and the server caches
+ * with no TTL, so this is paid once per server run and never again.
+ */
+const CROSS_LEAGUE_TIMEOUT_MS = 600_000;
+
+/**
  * `report.WEEKLY_SECTIONS`, in its order. The server rejects a name it does not
  * know (deliberately: a silently ignored `skip` means the slow trade search ran
  * after all), so this list must stay in step with the Python one.
@@ -1206,7 +1220,11 @@ export const api = {
     params: { limit?: number; actionable?: boolean } = {},
     options: ListOptions = {},
   ): Promise<WithMeta<QueuePayload>> {
-    return request<QueuePayload>('/queue', { ...options, query: { ...params } });
+    return request<QueuePayload>('/queue', {
+      timeoutMs: CROSS_LEAGUE_TIMEOUT_MS,
+      ...options,
+      query: { ...params },
+    });
   },
 
   /**
@@ -1228,7 +1246,7 @@ export const api = {
     const { signal, timeoutMs, ...query } = params;
     return request<PortfolioPayload>('/portfolio', {
       signal: options.signal ?? signal,
-      timeoutMs: options.timeoutMs ?? timeoutMs,
+      timeoutMs: options.timeoutMs ?? timeoutMs ?? CROSS_LEAGUE_TIMEOUT_MS,
       query,
     });
   },

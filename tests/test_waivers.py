@@ -2015,3 +2015,33 @@ class TestAnOutsideRankingSetOnTheWire:
         # The board's pick is worth nothing until the board is believed, then arrives.
         assert sweep[0.5]["FA5"] == 0.0
         assert 0.0 < sweep[0.75]["FA5"] < sweep[1.0]["FA5"]
+
+
+class TestDropCostIsMemoised:
+    """Every row on the board pairs its add with the same cheapest drop, so one player's
+    name sits under thirty rows and each answer costs four full-tensor lineup solves.
+    Measured at 4,000 sims on a live league that was 4.6s of a 74s board for one distinct
+    player, on a surface the cross-league queue runs three times."""
+
+    def _engine(self):
+        state, outlooks = _league(weeks=(1, 2, 3, 4), playoff_rounds=((4,),))
+        return W.RosterSimulator.build(state, _draw(state, outlooks, n_sims=200), 1)
+
+    def test_the_second_call_is_free_and_identical(self):
+        eng = self._engine()
+        pid = eng.roster[0]
+        first = eng.drop_cost(pid)
+        assert eng.drop_cost(pid) == first
+        assert eng._drop_costs[pid] == first
+
+    def test_a_player_not_on_the_roster_is_not_cached_as_a_real_answer(self):
+        eng = self._engine()
+        assert eng.drop_cost(-999) == (0.0, 0.0)
+        assert -999 not in eng._drop_costs
+
+    def test_the_cache_is_not_part_of_the_value(self):
+        """Two simulators over the same draw are the same simulator whether or not
+        either has been asked a question."""
+        a, b = self._engine(), self._engine()
+        a.drop_cost(a.roster[0])
+        assert a._drop_costs and not b._drop_costs

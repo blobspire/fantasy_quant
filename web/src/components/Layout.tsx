@@ -549,14 +549,25 @@ export function Layout({ children }: { children: ReactNode }) {
    ========================================================================== */
 
 /** A view waiting on a cold simulation. Says what it is waiting for. */
-export function Loading({ what = 'simulation' }: { what?: string }) {
+/**
+ * `slow` is for the cross-league views, which run every surface in every league before
+ * they can rank anything. Measured cold at 4,000 sims: ~334s for the queue against ~3s
+ * for a league simulation. Saying "the decision surfaces take longer" in front of a
+ * five-minute wait reads as a hang, and the honest number is the difference between
+ * waiting and reaching for the reload.
+ */
+export function Loading({ what = 'simulation', slow = false }: { what?: string; slow?: boolean }) {
   return (
     <div className="state">
       <div className="row">
         <span className="spin" />
         <span className="state__title">running the {what}</span>
       </div>
-      <span>A cold league is about three seconds; the decision surfaces take longer.</span>
+      <span>
+        {slow
+          ? 'Every surface in every league, about five minutes on a freshly started server. It is cached afterwards, so this is paid once and later loads are instant.'
+          : 'A cold league is about three seconds; the decision surfaces take longer.'}
+      </span>
     </div>
   );
 }

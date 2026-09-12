@@ -859,6 +859,27 @@ what its weakest leg can carry. **The fix is latent**: the candidate composition
 unchanged on all three leagues, because the 200-cycle budget was never binding at these
 league sizes. It will matter when it is.
 
+### The queue could never load on a cold server
+
+Reported as `timed out after 120s waiting for /queue` on a freshly restarted dashboard.
+Measured: **`/api/queue` takes 334s cold and 0.0s warm.** It runs every surface in every
+league before it can rank anything — the three waiver boards alone are ~74s each — so it
+is not a slow version of a single-league call, it is a different order of work. The 120s
+client default was written for single-league surfaces, and `_lifespan`'s "deliberately no
+warm-up: the first request pays" was written when that meant ten seconds.
+
+The browser gave up while the server carried on and finished, so the *next* attempt
+returned instantly from a cache with no TTL — a timeout reporting failure for work that
+was succeeding. The cross-league endpoints now carry a 600s timeout measured against the
+334s cost, and their loading state says five minutes and says it is paid once per server
+run rather than "the decision surfaces take longer".
+
+`drop_cost` is also memoised per simulator. Every row pairs its add with the same
+cheapest drop, so one player sat under thirty rows at four full-tensor lineup solves
+each: 4.6s of a 74s board, three times over in the queue. It was **not** the cause — the
+334s is almost entirely pre-existing `price()` calls at ~0.5s each — and saying so
+matters more than the saving.
+
 ### Two regressions this work introduced, both caught
 
 - **Pruning shrank the selection field.** `portfolio` sized the multiplicity off
@@ -965,7 +986,7 @@ honest action is to leave it alone and record why.
 
 ## How to work on this
 
-- `uv run pytest -q -m "not network"` — 2,047 offline tests, ~100s.
+- `uv run pytest -q -m "not network"` — 2,050 offline tests, ~100s.
 - `uv run pytest -q -m network` — hits ESPN and FanDuel with the real credentials, ~4.5 min.
   Live-market tests are inherently a little flaky; judge on distributions, not single items.
 - `uv run ruff check src tests` before every commit.
