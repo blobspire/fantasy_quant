@@ -72,6 +72,7 @@ from . import corpus, pipeline, registry
 from .core import DST, Recommendation
 from .data import etr
 from .decide import lineups as lineups_mod
+from .decide import opinion as opinion_mod
 from .decide import streaming as streaming_mod
 from .decide import title as title_mod
 from .decide import trades as trades_mod
@@ -555,8 +556,15 @@ def rec_payload(
     *,
     team_id: int | None = None,
     surface: str = "",
+    ranks: Mapping[int, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """One `core.Recommendation` as JSON, with the players named and a verdict attached."""
+    """One `core.Recommendation` as JSON, with the players named and a verdict attached.
+
+    `ranks` is `decide/opinion.rank_pairs`: where our projections have each player at
+    his position and where the analyst has him. Carried on every player reference
+    because it is the arbitrage stated in the one unit both sources publish -- "ESPN
+    WR29, analyst WR45" says more about why a trade is on the board than the delta does.
+    """
     verdict = verdict_for(rec, surface=surface)
     moved = rec.move.players if team_id is not None else ()
     receive = [p.player_id for p in moved if p.to_team == team_id]
@@ -575,18 +583,29 @@ def rec_payload(
         "confidence": rec.confidence,
         "tags": list(rec.tags),
         "rationale": rec.rationale,
-        "receive": [{"player_id": p, "name": names.get(p, str(p))} for p in receive],
-        "send": [{"player_id": p, "name": names.get(p, str(p))} for p in send],
+        "receive": [_player_ref(p, names, ranks) for p in receive],
+        "send": [_player_ref(p, names, ranks) for p in send],
         "players": [
             {
-                "player_id": p.player_id,
-                "name": names.get(p.player_id, str(p.player_id)),
+                **_player_ref(p.player_id, names, ranks),
                 "from_team": p.from_team,
                 "to_team": p.to_team,
             }
             for p in rec.move.players
         ],
     }
+
+
+def _player_ref(
+    player_id: int,
+    names: Mapping[int, str],
+    ranks: Mapping[int, Mapping[str, Any]] | None,
+) -> dict[str, Any]:
+    """`{player_id, name}` plus both sides' positional rank when they are known."""
+    ref: dict[str, Any] = {"player_id": player_id, "name": names.get(player_id, str(player_id))}
+    if ranks:
+        ref.update(ranks.get(player_id, {}))
+    return ref
 
 
 # --------------------------------------------------------------------------------------
@@ -971,6 +990,15 @@ def waivers_payload(
     rankings, rankings_match = ws.rankings(cfg)
     report = waivers_mod.waiver_board(sim, team_id=team_id, week=week, rankings=rankings)
     on_waivers = {a.name: a.on_waivers for a in report.free_agents}
+    ranks = opinion_mod.rank_pairs(sim.outlooks, rankings, weeks=sim.state.weeks)
+    by_name = {o.name: int(o.player_id) for o in sim.outlooks if o.name}
+
+    def _ranked(label: str) -> str:
+        """"RB12 / RB18" for a player named in a tag, or "" when either side is silent."""
+        row = ranks.get(by_name.get(label, -1), {})
+        if not row.get("espn"):
+            return ""
+        return f"{row['espn']} / {row['etr']}" if row.get("etr") else str(row["espn"])
 
     def _row(rec: Recommendation) -> dict[str, Any]:
         price = waivers_mod.price_of(rec)
@@ -1023,6 +1051,10 @@ def waivers_payload(
                 # and what he would have been worth to someone who knew which weeks to
                 # start him. Reported, never charged -- see `waivers._ceiling_tags`.
                 "drop_ceiling": tag_value(rec, "ceiling:"),
+                # "WR84 / WR55": where our projections put him at his position, and
+                # where the analyst does. The disagreement in the unit both publish.
+                "add_ranks": _ranked(tag_value(rec, "add:")),
+                "drop_ranks": _ranked(tag_value(rec, "drop:")),
             }
         )
         return body
@@ -1089,7 +1121,12 @@ def waivers_payload(
 
 
 def trades_payload(
-    ws: Workspace, cfg: registry.LeagueConfig, *, limit: int = 5, min_gain: float = 0.0
+    ws: Workspace,
+    cfg: registry.LeagueConfig,
+    *,
+    limit: int = 5,
+    min_gain: float = 0.0,
+    max_teams: int = trades_mod.DEFAULT_MAX_TEAMS,
 ) -> dict[str, Any]:
     """Confirmed Pareto trades, best first, from this team's side of the table.
 
@@ -1116,11 +1153,14 @@ def trades_payload(
     names = ws.names(cfg)
     franchises = {f.team_id: f.name for f in sim.state.franchises}
     rankings, rankings_match = ws.rankings(cfg)
-    recs = trades_mod.find_trades(sim, for_team=team_id, min_gain=min_gain, rankings=rankings)
+    recs = trades_mod.find_trades(
+        sim, for_team=team_id, min_gain=min_gain, rankings=rankings, max_teams=max_teams
+    )
     notes = rankings.comments() if rankings is not None else {}
+    ranks = opinion_mod.rank_pairs(sim.outlooks, rankings, weeks=sim.state.weeks)
     rows = []
     for rec in recs[:limit]:
-        body = rec_payload(rec, names, team_id=team_id, surface="trade")
+        body = rec_payload(rec, names, team_id=team_id, surface="trade", ranks=ranks)
         partners = sorted({t for t in rec.move.teams if t != team_id})
         body["partners"] = [{"team_id": t, "name": franchises.get(t, str(t))} for t in partners]
         body["caveats"] = caveats_for(rec.tags)
@@ -1155,6 +1195,14 @@ def trades_payload(
         "team_id": team_id,
         "n_found": n_found,
         "min_gain": min_gain,
+        "max_teams": max_teams,
+        # A two-team swap needs a bilateral coincidence of wants -- you have what I want
+        # AND I have what you want -- while a cycle only needs a chain, so cycles are
+        # simply more findable. Measured at week 1 of 2026 the screen returned 13, 0 and
+        # 4 two-team candidates against 27, 40 and 36 three-team ones. That is economics
+        # rather than a defect; `max_teams=2` is how a caller asks for only the trades it
+        # can do with a single person.
+        "n_two_team": sum(1 for r in recs if len(r.move.teams) <= 2),
         "rankings": _rankings_payload(
             rankings, rankings_match, trades_mod.DEFAULT_RANKINGS_WEIGHT
         ),
@@ -2166,6 +2214,19 @@ def _availability_note(payload: Mapping[str, Any]) -> str:
     return f"{on_waivers} on waivers, {free} free"
 
 
+def _named(ref: Mapping[str, Any]) -> str:
+    """`Jaylen Waddle (WR26/WR21)` -- our positional rank and the analyst's.
+
+    Both, always, when both exist. The trade board's whole claim is that the two
+    disagree, and a name with no ranks beside it makes the reader take that on trust.
+    """
+    name = str(ref.get("name", ""))
+    ours, theirs = ref.get("espn"), ref.get("etr")
+    if not ours:
+        return name
+    return f"{name} ({ours}/{theirs})" if theirs else f"{name} ({ours})"
+
+
 def _rankings_line(ranked: Mapping[str, Any]) -> str:
     """One line naming the board a surface was priced against, and that it is unverified."""
     fit = "" if ranked["matches_league_scoring"] else f" ({ranked['scoring']} board; ~1 rank drift)"
@@ -2245,13 +2306,18 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
         if not on_waivers:
             clears = "n/a"
         add = str(row["add"])
+        if row.get("add_ranks"):
+            add += f" ({row['add_ranks']})"
         note = row.get("note")
         if note and note != "-":
             add += f"\n  {note}"
         cells = [
             _cell(add, verdict),
             _cell(str(row["position"]), verdict),
-            _cell(str(row["drop"]), verdict),
+            _cell(
+                str(row["drop"]) + (f" ({row['drop_ranks']})" if row.get("drop_ranks") else ""),
+                verdict,
+            ),
             _cell(signed(row["delta_points"]), verdict),
             _cell(pp(row["delta_title"], 3) + _marker(verdict), verdict),
             _cell(f"{row['stderr'] * 100:.3f}pp", verdict),
@@ -2389,7 +2455,7 @@ def render_trades(payload: Mapping[str, Any], out: Console | None = None) -> Non
     table.add_column("z", justify="right")
     for row in payload["trades"]:
         verdict = row["verdict"]
-        what = ", ".join(p["name"] for p in row["receive"])
+        what = ", ".join(_named(p) for p in row["receive"])
         for note in row.get("caveats", []):
             what += f"\n  caveat: {note}"
         for who, note in (row.get("notes") or {}).items():
@@ -2403,7 +2469,7 @@ def render_trades(payload: Mapping[str, Any], out: Console | None = None) -> Non
         cells = [
             _cell(", ".join(p["name"] for p in row["partners"]), verdict),
             _cell(what, verdict),
-            _cell(", ".join(p["name"] for p in row["send"]), verdict),
+            _cell(", ".join(_named(p) for p in row["send"]), verdict),
             _cell(signed(row["delta_points"]), verdict),
         ]
         if ranked:
@@ -2425,6 +2491,16 @@ def render_trades(payload: Mapping[str, Any], out: Console | None = None) -> Non
                 "  dPts is yours by the analyst board; spread is how much better the other "
                 "side reads it by the projections on their own screen. dTitle is priced on "
                 "the board too, so compare its deltas across rows, not its level to `fq odds`.",
+                style="dim",
+            )
+        )
+    n2 = payload.get("n_two_team")
+    if n2 is not None and payload.get("max_teams", 3) > 2:
+        out.print(
+            Text(
+                f"  {n2} of {len(payload['trades'])} shown need only ONE other manager; "
+                "the rest are three-way chains, which are far more numerous because they "
+                "need no bilateral coincidence of wants. `--max-teams 2` for bilateral only.",
                 style="dim",
             )
         )
@@ -2834,6 +2910,16 @@ def trades_command(
             "more negotiable list.",
         ),
     ] = 0.0,
+    max_teams: Annotated[
+        int,
+        typer.Option(
+            "--max-teams",
+            help="Largest trade cycle to search. 2 restricts the board to deals you can "
+            "do with ONE other person; 3 (the default) also finds three-way chains, "
+            "which are far more numerous because they need no bilateral coincidence of "
+            "wants.",
+        ),
+    ] = trades_mod.DEFAULT_MAX_TEAMS,
     no_rankings: RankingsOpt = False,
     as_json: JsonOpt = False,
 ) -> None:
@@ -2846,7 +2932,9 @@ def trades_command(
         sims,
         seed,
         as_json,
-        lambda ws, cfg: trades_payload(ws, cfg, limit=limit, min_gain=min_gain),
+        lambda ws, cfg: trades_payload(
+            ws, cfg, limit=limit, min_gain=min_gain, max_teams=max_teams
+        ),
         rankings=not no_rankings,
     )
     _emit(payload, as_json, lambda: _render_each(payload, render_trades))

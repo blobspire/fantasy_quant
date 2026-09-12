@@ -1518,17 +1518,26 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
         sims: int | None = None,
         limit: int = 5,
         min_gain: float = 0.0,
+        max_teams: int = 3,
     ) -> dict[str, Any]:
-        """`report.trades_payload`: confirmed Pareto trades, with the selection caveat."""
+        """`report.trades_payload`: confirmed Pareto trades, with the selection caveat.
+
+        `max_teams=2` restricts the board to deals needing one other manager. Three-way
+        chains dominate the search because they need no bilateral coincidence of wants,
+        not because they are better.
+        """
         c = eng.config(league_id)
         return await eng.surface(
             "trades",
             c,
-            lambda ws, cc: report.trades_payload(ws, cc, limit=limit, min_gain=min_gain),
+            lambda ws, cc: report.trades_payload(
+                ws, cc, limit=limit, min_gain=min_gain, max_teams=max_teams
+            ),
             sims=sims,
             force=refresh,
             limit=limit,
             min_gain=min_gain,
+            max_teams=max_teams,
         )
 
     @api.get("/leagues/{league_id}/lineup")

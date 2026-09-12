@@ -264,7 +264,12 @@ def test_request_parameters_reach_the_builder(client: TestClient, rec: Recorder)
     body = client.get(_url("waivers"), params={"limit": 12, "week": 3}).json()
     assert body["data"]["kwargs"] == {"limit": 12, "week": 3}
     body = client.get(_url("trades"), params={"limit": 2, "min_gain": 0.5}).json()
-    assert body["data"]["kwargs"] == {"limit": 2, "min_gain": 0.5}
+    assert body["data"]["kwargs"] == {"limit": 2, "min_gain": 0.5, "max_teams": 3}
+    # `max_teams` is part of the cache key, not just the call: a bilateral-only board and
+    # a three-way board are different answers to different questions and must not share
+    # a cached entry.
+    body = client.get(_url("trades"), params={"limit": 2, "max_teams": 2}).json()
+    assert body["data"]["kwargs"] == {"limit": 2, "min_gain": 0.0, "max_teams": 2}
 
 
 def test_sims_is_clamped_and_reaches_the_workspace(client: TestClient) -> None:

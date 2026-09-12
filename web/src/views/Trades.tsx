@@ -78,6 +78,13 @@ export default function Trades() {
         <p className="note note--warn">{data.selection_note}</p>
       ) : null}
       {data.rankings ? <RankingsNote rankings={data.rankings} surface="trades" /> : null}
+      {trades.length > 0 && (data.max_teams ?? 3) > 2 ? (
+        <p className="caption">
+          {data.n_two_team} of {trades.length} shown need only <strong>one</strong> other
+          manager. Three-way chains dominate the search because they need no bilateral
+          coincidence of wants — not because they are better.
+        </p>
+      ) : null}
       {trades.length > 0 ? <CounterpartySide priced={Boolean(data.rankings)} /> : null}
 
       {trades.length === 0 ? (
@@ -111,6 +118,17 @@ export default function Trades() {
    One trade
    ========================================================================== */
 
+/**
+ * `Jaylen Waddle (WR26/WR21)` — our positional rank, then the analyst's.
+ *
+ * On every player everywhere, because the whole claim of this board is that the two
+ * disagree, and a bare name asks the reader to take that on trust.
+ */
+function named(p: { name: string; espn?: string; etr?: string }): string {
+  if (!p.espn) return p.name;
+  return p.etr ? `${p.name} (${p.espn}/${p.etr})` : `${p.name} (${p.espn})`;
+}
+
 interface Receipt {
   teamId: number | null;
   label: string;
@@ -140,13 +158,13 @@ function receiptsFor(trade: TradeRow, myTeamId: number | null): Receipt[] {
     receipts.push({
       teamId,
       label: names.get(teamId) ?? `Team ${teamId}`,
-      gets: players.map((player) => player.name),
+      gets: players.map(named),
     });
   }
   const mine =
     myTeamId !== null && byTeam.has(myTeamId)
-      ? (byTeam.get(myTeamId) as MovedPlayer[]).map((player) => player.name)
-      : (trade.receive ?? []).map((player) => player.name);
+      ? (byTeam.get(myTeamId) as MovedPlayer[]).map(named)
+      : (trade.receive ?? []).map(named);
   receipts.push({ teamId: myTeamId, label: 'You', gets: mine });
   return receipts;
 }

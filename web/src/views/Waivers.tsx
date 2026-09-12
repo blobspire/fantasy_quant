@@ -193,12 +193,16 @@ function claimColumns(withRank: boolean): Array<Column<WaiverRow>> {
         row.note && row.note !== '-' ? (
           <span>
             {row.add}
+            {row.add_ranks ? <span className="faint"> ({row.add_ranks})</span> : null}
             <span className="caption" style={{ display: 'block' }} title={row.note}>
               {row.note}
             </span>
           </span>
         ) : (
-          row.add
+          <span>
+            {row.add}
+            {row.add_ranks ? <span className="faint"> ({row.add_ranks})</span> : null}
+          </span>
         ),
     },
     { key: 'pos', header: 'pos', width: 54, value: (row) => row.position },
@@ -238,7 +242,14 @@ function claimColumns(withRank: boolean): Array<Column<WaiverRow>> {
       width: '20%',
       value: (row) => row.drop,
       render: (row) =>
-        row.drop && row.drop !== '-' ? row.drop : <span className="faint">nobody</span>,
+        row.drop && row.drop !== '-' ? (
+          <span>
+            {row.drop}
+            {row.drop_ranks ? <span className="faint"> ({row.drop_ranks})</span> : null}
+          </span>
+        ) : (
+          <span className="faint">nobody</span>
+        ),
     },
     {
       key: 'delta',

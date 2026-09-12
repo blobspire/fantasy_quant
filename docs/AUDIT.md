@@ -828,6 +828,37 @@ the easiest to sign (fewest teams, then widest spread), and marks the rest `same
 The published sort is group-aware, or the global ranking would split a family and let a
 three-team version outrank the two-team one handing over identical players.
 
+### Both ranks, on every player
+
+`opinion.rank_pairs` puts our positional rank and the analyst's beside every name the
+board prints: **Lawrence (QB12/QB10) for Tate (WR29/WR45)**. It is the arbitrage stated
+in the one unit both sources publish, and without it the reader takes the claim on trust.
+Our side is ranked on rest-of-season points over the remaining weeks, not ESPN's frozen
+preseason ordering, which `PlayerOutlook.mean_from` is explicit is never revised. Players
+the board does not rank carry our side alone — it covers 150 of ~598, and implying an
+opinion it has not published would be worse than silence.
+
+### Why the boards are full of three-way trades
+
+They are, and it is economics rather than a defect. A two-team swap needs a **bilateral
+coincidence of wants** — I have what you want *and* you have what I want — while a cycle
+only needs a chain, so cycles are simply more findable. Measured at week 1 of 2026 the
+screen returned **13 / 0 / 4** two-team candidates against **27 / 40 / 36** three-team
+ones, and Wine Wednesday had no bilateral trade that cleared the Pareto gate at all.
+
+Where a two-team trade does exist it tends to be *better* (+1.82 against +1.68pp on
+Blacksburg, +2.83 against +2.43 on Type shi), and two of the three leagues already lead
+with one. `--max-teams 2` restricts the board to deals needing one other manager, and the
+output says how many of the shown rows already qualify.
+
+One real bias was found and fixed while checking this: `_cycle_gain` **summed** one
+non-negative term per leg, so a three-cycle outscored a two-cycle by construction and
+took the search budget with it — the same shape as ranking positions by a sum of per-week
+maxima. It is the minimum leg now, because the Pareto gate makes a cycle worth exactly
+what its weakest leg can carry. **The fix is latent**: the candidate composition is
+unchanged on all three leagues, because the 200-cycle budget was never binding at these
+league sizes. It will matter when it is.
+
 ### Two regressions this work introduced, both caught
 
 - **Pruning shrank the selection field.** `portfolio` sized the multiplicity off
@@ -934,7 +965,7 @@ honest action is to leave it alone and record why.
 
 ## How to work on this
 
-- `uv run pytest -q -m "not network"` — 2,038 offline tests, ~100s.
+- `uv run pytest -q -m "not network"` — 2,047 offline tests, ~100s.
 - `uv run pytest -q -m network` — hits ESPN and FanDuel with the real credentials, ~4.5 min.
   Live-market tests are inherently a little flaky; judge on distributions, not single items.
 - `uv run ruff check src tests` before every commit.

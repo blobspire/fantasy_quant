@@ -237,6 +237,17 @@ export type Confidence = 'high' | 'medium' | 'low' | string;
 export interface PlayerRef {
   player_id: number;
   name: string;
+  /**
+   * Where OUR projections put him at his position this rest-of-season, e.g. `"WR29"`.
+   * Absent for a player we do not project.
+   */
+  espn?: string;
+  espn_rank?: number;
+  /** Where the analyst board puts him, e.g. `"WR45"`. Absent when it does not rank him. */
+  etr?: string;
+  etr_rank?: number;
+  /** `espn_rank - etr_rank`: positive when the analyst likes him MORE than we do. */
+  gap?: number;
 }
 
 export interface MovedPlayer extends PlayerRef {
@@ -527,6 +538,10 @@ export interface WaiverRow extends Recommendation {
   board?: string;
   /** The analyst's one-line note on the add. "-" when absent. */
   note?: string;
+  /** `"WR84 / WR55"`: our positional rank for the add, then the analyst's. */
+  add_ranks?: string;
+  /** The same pair for the player being dropped. */
+  drop_ranks?: string;
   /**
    * `"+0.0/+16.3"`: what dropping this player costs as lineups are actually set,
    * against what he would have been worth to someone who knew which weeks to start
@@ -653,6 +668,15 @@ export interface TradesPayload {
   n_found: number;
   min_gain: number;
   rankings: RankingsRef | null;
+  /** Largest cycle searched. 2 means every row needs only one other manager. */
+  max_teams: number;
+  /**
+   * How many of the shown trades need only ONE other manager. Three-way chains dominate
+   * because they need no bilateral coincidence of wants -- measured at week 1 of 2026,
+   * the screen found 13/0/4 two-team candidates against 27/40/36 three-team ones -- not
+   * because they are better. Request `max_teams=2` for bilateral only.
+   */
+  n_two_team: number;
   /**
    * "analyst board" or "espn projections". With a board, every `delta_title` on the
    * page and the paired baseline behind it are priced on the re-dealt projections, so

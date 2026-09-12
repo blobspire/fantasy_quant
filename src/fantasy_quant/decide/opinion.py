@@ -456,3 +456,61 @@ def partial_season(
         if absent > max_absent_weeks:
             out.append(o)
     return tuple(out)
+
+
+def positional_ranks(
+    outlooks: Sequence[PlayerOutlook], *, weeks: Sequence[int] | None = None
+) -> dict[int, tuple[int, int]]:
+    """`{espn_id: (position_id, rank within that position)}` by OUR projections.
+
+    The counterpart to `EtrRankings.positional()`, built the same way off the same
+    horizon so the two are directly comparable: "RB12 by ESPN, RB18 by the analyst" is
+    the arbitrage stated in the one unit both sources publish.
+
+    Ranked on rest-of-season points over the remaining weeks, not on ESPN's own frozen
+    preseason ordering -- `PlayerOutlook.mean_from` is explicit that the season-total
+    field is never revised, and a rank read off it would go stale the first time
+    somebody got hurt. Ties break on the player id so the ordering does not depend on
+    dictionary order.
+    """
+    horizon = _horizon(outlooks, weeks)
+    by_position: dict[int, list[tuple[float, int]]] = {}
+    for o in outlooks:
+        by_position.setdefault(o.position_id, []).append((_value(o, horizon), int(o.player_id)))
+    out: dict[int, tuple[int, int]] = {}
+    for pos, rows in by_position.items():
+        for rank, (_, pid) in enumerate(sorted(rows, key=lambda r: (-r[0], r[1])), start=1):
+            out[pid] = (pos, rank)
+    return out
+
+
+def rank_pairs(
+    outlooks: Sequence[PlayerOutlook],
+    board: EtrRankings | None,
+    *,
+    weeks: Sequence[int] | None = None,
+) -> dict[int, dict[str, object]]:
+    """Per player: where ESPN has him, where the analyst has him, and the gap.
+
+    `{espn_id: {"espn": "RB12", "etr": "RB18", "gap": -6}}`. `gap` is positive when the
+    analyst likes him MORE than our projections do -- a smaller rank number is better,
+    so it is `espn_rank - etr_rank`, the same sign convention as
+    `EtrRankings.disagreements`' `etr_edge`.
+
+    `etr` is absent for a player the board does not rank, which is most of them: the
+    Top 150 covers 150 of ~598 projected players, and saying so is more useful than
+    implying the analyst has an opinion he has not published.
+    """
+    ours = positional_ranks(outlooks, weeks=weeks)
+    theirs = board.positional() if board is not None else {}
+    abbrev = {1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DST"}
+    out: dict[int, dict[str, object]] = {}
+    for pid, (pos, rank) in ours.items():
+        row: dict[str, object] = {"espn": f"{abbrev.get(pos, pos)}{rank}", "espn_rank": rank}
+        hit = theirs.get(pid)
+        if hit is not None and hit[0] == pos:
+            row["etr"] = f"{abbrev.get(pos, pos)}{hit[1]}"
+            row["etr_rank"] = hit[1]
+            row["gap"] = rank - hit[1]
+        out[pid] = row
+    return out

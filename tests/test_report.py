@@ -1834,3 +1834,79 @@ class TestTheCeilingAndStreamingReachTheOutput:
         out = capsys.readouterr().out
         assert "ceiling" not in out.lower()
         assert "streaming vs holding" not in out.lower()
+
+
+class TestRanksReachThePlayerNames:
+    def test_a_player_reference_carries_both_ranks(self):
+        from fantasy_quant.core import Move, MoveKind, PlayerMove
+
+        rec = Recommendation(
+            move=Move(
+                kind=MoveKind.TRADE,
+                league_id=1,
+                players=(PlayerMove(player_id=7, from_team=2, to_team=1),),
+            ),
+            delta_title=0.01, delta_points=1.0, stderr=0.001, leverage=1.0,
+            rationale="", confidence="high", tags=("trade",),
+        )
+        body = report.rec_payload(
+            rec, {7: "Carnell Tate"}, team_id=1, surface="trade",
+            ranks={7: {"espn": "WR29", "espn_rank": 29, "etr": "WR45", "etr_rank": 45, "gap": -16}},
+        )
+        got = body["receive"][0]
+        assert got["name"] == "Carnell Tate"
+        assert got["espn"] == "WR29" and got["etr"] == "WR45" and got["gap"] == -16
+        assert body["players"][0]["etr"] == "WR45"
+
+    def test_without_ranks_the_reference_is_exactly_as_before(self):
+        from fantasy_quant.core import Move, MoveKind, PlayerMove
+
+        rec = Recommendation(
+            move=Move(
+                kind=MoveKind.TRADE, league_id=1,
+                players=(PlayerMove(player_id=7, from_team=2, to_team=1),),
+            ),
+            delta_title=0.01, delta_points=1.0, stderr=0.001, leverage=1.0,
+            rationale="", confidence="high", tags=("trade",),
+        )
+        body = report.rec_payload(rec, {7: "X"}, team_id=1, surface="trade")
+        assert body["receive"][0] == {"player_id": 7, "name": "X"}
+
+    def test_the_trade_table_prints_both_ranks_next_to_the_name(self, capsys):
+        report.render_trades(
+            {
+                "trades": [
+                    {
+                        "partners": [{"name": "Rob"}],
+                        "receive": [{"name": "Trevor Lawrence", "espn": "QB12", "etr": "QB10"}],
+                        "send": [{"name": "Carnell Tate", "espn": "WR29", "etr": "WR45"}],
+                        "delta_points": 14.0, "delta_title": 0.028, "stderr": 0.0113,
+                        "z": 2.5, "significant": False, "verdict": "noise",
+                    }
+                ],
+                "n_found": 1, "significance_test": "selection-adjusted",
+            },
+            _wide(),
+        )
+        out = capsys.readouterr().out
+        assert "QB12/QB10" in out and "WR29/WR45" in out
+
+    def test_the_table_says_how_many_need_only_one_other_manager(self, capsys):
+        report.render_trades(
+            {
+                "trades": [
+                    {
+                        "partners": [{"name": "Rob"}],
+                        "receive": [{"name": "A"}], "send": [{"name": "B"}],
+                        "delta_points": 1.0, "delta_title": 0.01, "stderr": 0.001,
+                        "z": 5.0, "significant": True, "verdict": "act",
+                    }
+                ],
+                "n_found": 1, "n_two_team": 1, "max_teams": 3,
+                "significance_test": "selection-adjusted",
+            },
+            _wide(),
+        )
+        out = capsys.readouterr().out
+        assert "1 of 1 shown need only ONE other manager" in out
+        assert "--max-teams 2" in out

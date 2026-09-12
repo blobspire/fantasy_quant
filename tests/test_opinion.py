@@ -446,3 +446,47 @@ class TestTheHorizonIsTheRemainingWeeks:
         healthy = outlook(13, RB, {w: 9.0 for w in range(1, 19)})
         pair = board([(12, RB, 1, 1, "Out", ""), (13, RB, 2, 2, "Fine", "")])
         assert opinion.partial_season([out_now, healthy], pair, weeks=range(1, 18)) == (out_now,)
+
+
+class TestRankPairs:
+    """The arbitrage stated in the one unit both sources publish: "ESPN WR29, analyst
+    WR45". On the live boards that is the player the trade board tells you to give away,
+    and without both ranks beside his name the reader takes the claim on trust."""
+
+    OUT = [
+        outlook(10, RB, {1: 20.0, 2: 20.0}),
+        outlook(11, RB, {1: 10.0, 2: 10.0}),
+        outlook(12, RB, {1: 5.0, 2: 5.0}),
+        outlook(20, WR, {1: 15.0, 2: 15.0}),
+    ]
+
+    def test_our_ranks_are_by_position_and_by_remaining_points(self):
+        ranks = opinion.positional_ranks(self.OUT)
+        assert ranks[10] == (RB, 1) and ranks[11] == (RB, 2) and ranks[12] == (RB, 3)
+        assert ranks[20] == (WR, 1), "a receiver is not ranked against running backs"
+
+    def test_the_horizon_is_respected(self):
+        """Ranking over weeks already played would go stale the moment anyone got hurt."""
+        early = outlook(13, RB, {1: 100.0, 2: 1.0})
+        ranks = opinion.positional_ranks([*self.OUT, early], weeks=(2,))
+        assert ranks[13][1] > ranks[10][1], "week 1 must not count toward a week-2 horizon"
+
+    def test_a_pair_carries_both_sides_and_a_signed_gap(self):
+        b = board([(12, RB, 1, 1, "C", ""), (10, RB, 2, 2, "A", "")])
+        pairs = opinion.rank_pairs(self.OUT, b)
+        assert pairs[12]["espn"] == "RB3" and pairs[12]["etr"] == "RB1"
+        assert pairs[12]["gap"] == 2, "positive means the analyst likes him MORE"
+        assert pairs[10]["gap"] == -1
+
+    def test_a_player_the_board_ignores_carries_our_rank_alone(self):
+        """The Top 150 covers 150 of ~598 projected players. Implying an opinion he has
+        not published would be worse than saying nothing."""
+        b = board([(10, RB, 1, 1, "A", "")])
+        pairs = opinion.rank_pairs(self.OUT, b)
+        assert pairs[11]["espn"] == "RB2"
+        assert "etr" not in pairs[11] and "gap" not in pairs[11]
+
+    def test_no_board_at_all_still_gives_our_side(self):
+        pairs = opinion.rank_pairs(self.OUT, None)
+        assert pairs[10]["espn"] == "RB1"
+        assert all("etr" not in v for v in pairs.values())

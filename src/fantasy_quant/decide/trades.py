@@ -1533,11 +1533,25 @@ class TradeFinder:
     def _cycle_gain(
         self, cycle: Sequence[int], edges: Mapping[int, Sequence[PreferenceEdge]]
     ) -> float:
-        total = 0.0
+        """How much trade there is around this cycle: the WEAKEST leg, not the total.
+
+        This summed one non-negative term per leg, so a three-team cycle outscored a
+        two-team one by construction and took the search budget with it -- the same
+        defect shape as ranking positions by a sum of per-week maxima. It is the
+        ordering that decides which cycles are explored at all, so the bias compounds.
+
+        The minimum is the right quantity because the gate is Pareto: every side has to
+        gain, so a cycle is worth exactly what its worst leg can carry. A three-way with
+        legs (10, 9, 1) has a dead leg and cannot clear; under the sum it scored 20 and
+        beat a clean two-way at (10, 8) scoring 18.
+        """
+        legs = []
         for i, team in enumerate(cycle):
             owner = cycle[(i + 1) % len(cycle)]
-            total += max((e.gain for e in edges.get(team, ()) if e.owner_id == owner), default=0.0)
-        return total
+            legs.append(
+                max((e.gain for e in edges.get(team, ()) if e.owner_id == owner), default=0.0)
+            )
+        return min(legs) if legs else 0.0
 
     def _cycle_proposals(
         self,
