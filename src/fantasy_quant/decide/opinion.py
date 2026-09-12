@@ -47,7 +47,7 @@ log = logging.getLogger(__name__)
 MIN_TRANSPORT_POINTS = 1.0
 
 #: A player whose ESPN projection is near zero for more weeks than this is left out of
-#: the transport and keeps his own numbers. One is the bye.
+#: the transport and keeps his own numbers. A bye is one such week.
 #:
 #: This is the mechanism's real limit, and it was found by its headline rather than by
 #: reasoning. The board's rank is a REST-OF-SEASON opinion and ESPN's projection is a
@@ -62,7 +62,22 @@ MIN_TRANSPORT_POINTS = 1.0
 #: Where both sources agree on games played, a season total and a per-game rate are the
 #: same thing up to a constant and the transport is exact. Where they do not, there is
 #: no games count in a rank to recover, so the honest answer is not to guess one.
-MAX_ABSENT_WEEKS = 1
+#:
+#: **Three, not one, and the gap is measured rather than fitted.** Over the three live
+#: leagues at week 1 of 2026 the board's players fall into two groups with nothing
+#: between them: a bye-plus-one group at **2** weeks absent (Brock Bowers, TreVeyon
+#: Henderson) and Jordyn Tyson at **8**. At a threshold of 1 the first group was
+#: excluded for nothing -- transporting them moves their per-game rate by 5% and 12%,
+#: which is just the analyst disagreeing, and the analyst disagreeing is the entire
+#: point of reading his board. Tyson moves by 53%.
+#:
+#: Re-tested after the ladder horizon was corrected, on the theory that the horizon bug
+#: had been the real cause and this rule could go. **It could not.** With every
+#: partial-season player transported, Wine Wednesday's top trade becomes "get Jordyn
+#: Tyson for DK Metcalf" at +5.25pp with a spread of **+60.46** -- a counterparty sixty
+#: playoff-weighted points out of pocket by their own numbers, which is the units error
+#: wearing an edge again. The rule stays; only the threshold moves.
+MAX_ABSENT_WEEKS = 3
 
 
 @dataclass(frozen=True, slots=True)

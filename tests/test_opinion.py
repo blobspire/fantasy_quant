@@ -325,10 +325,24 @@ class TestPartialSeasonsAreNotTransported:
         return [
             outlook(10, RB, {w: 10.0 for w in range(1, 11)}),
             outlook(11, RB, {w: 8.0 for w in range(1, 11)}),
-            # Out through week 6, then a modest 6.0. The calibration's absence is 0.06
-            # with p_zero ~0.84, not an exact zero.
+            # Out through week 6 -- six absences, well past the threshold of 3. The
+            # calibration's absence is 0.06 with p_zero ~0.84, never an exact zero.
             outlook(12, RB, {**{w: 0.064 for w in range(1, 7)}, **{w: 6.0 for w in range(7, 11)}}),
         ]
+
+    def test_a_bye_plus_one_missed_week_is_still_transported(self):
+        """The threshold is 3 because the live board splits 2-versus-8 with nothing in
+        between: a bye-plus-one group (Bowers, Henderson) whose transport moves them 5%
+        and 12%, and Tyson at 53%. Excluding the first group threw away the analyst
+        disagreeing, which is the only reason to read his board."""
+        out = [
+            outlook(10, RB, {**{w: 10.0 for w in range(1, 11)}, 3: 0.0, 7: 0.0}),  # 80
+            outlook(11, RB, {w: 6.0 for w in range(1, 11)}),  # 60
+        ]
+        swapped = board([(11, RB, 1, 1, "B", ""), (10, RB, 2, 2, "A", "")])
+        assert opinion.partial_season(out, swapped) == ()
+        tilted = {o.player_id: o for o in opinion.tilt_outlooks(out, swapped, weight=1.0)}
+        assert tilted[11].mean_from(1) > out[1].mean_from(1)
 
     def test_the_absent_player_keeps_his_own_numbers(self):
         # Board has the injured player at RB1 -- an ROS opinion that has netted out the
