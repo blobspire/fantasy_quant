@@ -1823,3 +1823,30 @@ class TestCapacityComesFromTheLeague:
         state, outlooks = _market(CONSOLIDATION, WIRE)
         f = TradeFinder(state, _dummy_draw(state, outlooks), outlooks, roster_limit=2)
         assert f.capacity[1] == len(f.rosters[1])
+
+
+class TestTheFieldSizeSurvivesPruning:
+    """`edges/portfolio.py` corrects for the field a winner beat, and it used to read
+    that field off the length of the published list. Parsimony drops candidates AFTER
+    they have competed, so the list is no longer the field -- and a correction computed
+    off it would go soft on the noisiest surface in the app, which is the one it exists
+    for."""
+
+    def test_the_recommendation_carries_how_many_it_beat(self):
+        sim = _sim()
+        finder = TradeFinder(sim.state, sim.draw, sim.outlooks)
+        confirmed = finder.confirm_titles(finder.search(for_team=1))
+        lean = finder.recommend(confirmed, for_team=1)
+        assert len(lean) < len(confirmed), "the fixture must contain a throw-in"
+        for rec in lean:
+            assert f"considered:{len(confirmed)}" in rec.tags
+
+    def test_it_is_the_same_count_with_parsimony_off(self):
+        sim = _sim()
+        finder = TradeFinder(sim.state, sim.draw, sim.outlooks)
+        confirmed = finder.confirm_titles(finder.search(for_team=1))
+        fat = finder.recommend(confirmed, for_team=1, parsimony=False)
+        lean = finder.recommend(confirmed, for_team=1)
+        tag = f"considered:{len(confirmed)}"
+        assert all(tag in r.tags for r in fat)
+        assert all(tag in r.tags for r in lean)

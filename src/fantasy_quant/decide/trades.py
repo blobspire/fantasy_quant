@@ -1864,6 +1864,12 @@ class TradeFinder:
             n_absorbed = absorbed.get(_move_set(ev), 0)
             if n_absorbed:
                 tags.append(f"leanest:{n_absorbed}")
+            # How many candidates this row beat, which is NOT how many are published.
+            # Parsimony drops candidates after they have competed, and a selection
+            # correction computed off the surviving list would quietly shrink the field
+            # the winner won -- understating exactly the bias the correction exists for.
+            if n_confirmed:
+                tags.append(f"considered:{n_confirmed}")
             rec = Recommendation(
                 move=ev.proposal.to_move(),
                 delta_title=mine.delta_title,

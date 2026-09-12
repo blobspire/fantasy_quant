@@ -1794,6 +1794,17 @@ def diversification(portfolio: Portfolio, *, odds: PortfolioOdds | None = None) 
 # --------------------------------------------------------------------------------------
 
 
+def _tag_int(rec: Recommendation, prefix: str) -> int:
+    """Read a `key:integer` tag off a recommendation, or 0."""
+    for tag in rec.tags:
+        if tag.startswith(prefix):
+            try:
+                return int(tag[len(prefix) :])
+            except ValueError:
+                return 0
+    return 0
+
+
 @functools.cache
 def _selection_z(n_candidates: int) -> float:
     """`decide/trades.selection_threshold`, memoised. Not reimplemented -- imported."""
@@ -2141,7 +2152,13 @@ def _trade_recs(stake: LeagueStake) -> Candidates:
     # Same reason as `_waiver_recs`: one currency across the portfolio, so no board.
     every = list(find_trades(stake.sim, for_team=stake.team_id, include_harmful=True))
     positive = tuple(r for r in every if r.delta_title > 0.0)
-    return Candidates(positive, max(len(every), 1))
+    # The field is what was CONFIRMED, not what survived being published. `find_trades`
+    # prunes a candidate when a strict subset of its moves is worth the same, which
+    # happens after every one of them has already competed for the top of the list --
+    # so `len(every)` understates the multiplicity and the correction would go soft on
+    # precisely the surface it was built for. The count travels on the tag.
+    considered = max((_tag_int(r, "considered:") for r in every), default=0)
+    return Candidates(positive, max(considered, len(every), 1))
 
 
 def _lineup_recs(stake: LeagueStake) -> list[Recommendation]:
