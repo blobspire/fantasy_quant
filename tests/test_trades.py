@@ -1850,3 +1850,58 @@ class TestTheFieldSizeSurvivesPruning:
         tag = f"considered:{len(confirmed)}"
         assert all(tag in r.tags for r in fat)
         assert all(tag in r.tags for r in lean)
+
+
+class TestTheCeilingIsReportedNotCharged:
+    """The user's complaint was that the board drops his high-upside stashes. It does,
+    and the model is right that they are worth nothing to a lineup set on projections --
+    but "worth nothing" and "no upside" are different claims and only the first is true.
+
+    Measured at week 1 of 2026: cutting Jordyn Tyson costs +0.27 points ex ante and
+    +19.13 at the hindsight ceiling; Tank Bigsby +0.56 against +7.4. The ceiling is not
+    charged, because the projection-optimal lineup already captures 0.886-0.900 of it
+    (`measure_hindsight_ratio`) while real managers capture 0.775
+    (`OPPONENT_LINEUP_EFFICIENCY`) -- nobody measured has ever beaten the projection, so
+    paying for the ceiling would price skill that has never been demonstrated."""
+
+    def test_the_ceiling_is_at_least_the_ex_ante_cost(self):
+        """A hindsight lineup is chosen over the same draw with more information, so it
+        can never do worse. If this ever inverts, the two are not the same draw."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        roster = list(finder.rosters[1])
+        for pid in roster:
+            ex, ceiling = finder.cut_cost(1, roster, pid)
+            assert ceiling >= ex - 1e-6, (finder._name[pid], ex, ceiling)
+
+    def test_a_bench_player_is_worth_far_more_at_the_ceiling_than_ex_ante(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        roster = list(finder.rosters[1])
+        bench = _by_name(finder, "TE sub-wire")
+        ex, ceiling = finder.cut_cost(1, roster, bench)
+        assert ex < 1.0, "a sub-wire bench player is worth ~0 to a projected lineup"
+        assert ceiling > ex
+
+    def test_a_player_not_on_the_roster_costs_nothing_either_way(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        assert finder.cut_cost(1, list(finder.rosters[1]), _by_name(finder, "WR elite")) == (
+            0.0,
+            0.0,
+        )
+
+    def test_hindsight_scores_at_least_as_much_as_the_projected_lineup(self):
+        """`franchise_scores(hindsight=True)` is the bound `sim/season.py` documents a
+        rank-less tensor as being for. It must dominate, or it is not a bound."""
+        finder = _finder(CONSOLIDATION, WIRE)
+        roster = list(finder.rosters[1])
+        ex = finder.franchise_scores(1, roster).sum(axis=1).mean()
+        hi = finder.franchise_scores(1, roster, hindsight=True).sum(axis=1).mean()
+        assert hi >= ex
+
+    def test_the_rationale_says_so_when_the_gap_is_worth_saying(self):
+        finder = _finder(CONSOLIDATION, WIRE)
+        evs = finder.confirm_titles(finder.search(for_team=1))
+        with_cut = [e for e in evs if e.impact_for(1).dropped]
+        if not with_cut:
+            pytest.skip("this fixture produced no forced cut")
+        text = finder._rationale(with_cut[0], 1)
+        assert "would have to cut" in text

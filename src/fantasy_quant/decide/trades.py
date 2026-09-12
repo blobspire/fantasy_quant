@@ -200,6 +200,12 @@ DEFAULT_WIRE_DEPTH = 3
 #: `0.0` is byte-identical to not having the board.
 DEFAULT_RANKINGS_WEIGHT = 1.0
 
+#: Only mention a cut player's ceiling when it exceeds what the model charges by more
+#: than this, in rest-of-season points. Every bench player has SOME gap -- the ceiling
+#: is an upper bound over the same draw -- so without a floor the sentence would appear
+#: on every row and mean nothing. Five points is about half a startable week.
+_CEILING_WORTH_SAYING = 5.0
+
 POSITION_ABBREV: Mapping[int, str] = {1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DST"}
 
 
@@ -1641,8 +1647,16 @@ class TradeFinder:
 
     # -- the simulation half -----------------------------------------------------------
 
-    def franchise_scores(self, team_id: int, roster: Sequence[int]) -> np.ndarray:
+    def franchise_scores(
+        self, team_id: int, roster: Sequence[int], *, hindsight: bool = False
+    ) -> np.ndarray:
         """`(sims, weeks)` weekly totals for one roster, floored at the wire.
+
+        `hindsight=True` sets each week's lineup on the DRAWN points instead of the
+        projection. That is not a model of anybody -- it is the ceiling, the thing
+        `sim/season.py` says a bare tensor with no rank is for: "the upper bound you
+        need to price bench option value". Never use it to rank a move; use it to say
+        how much a bench player would have been worth to someone who knew.
 
         One franchise at a time rather than a whole league in one call, because the
         fillable-slot split is a property of the *roster*: `live_slots` has to remove
@@ -1665,10 +1679,50 @@ class TradeFinder:
             playoff_team_count=0,
             lineup_slot_counts=live,
         )
-        scores = S.team_week_scores(
-            sub, self.draw, replacement={s: self.season_floor[s] for s in live}
+        floor = {s: self.season_floor[s] for s in live}
+        scores = (
+            S.team_week_scores(sub, self.draw.points, rank=None, replacement=floor)
+            if hindsight
+            else S.team_week_scores(sub, self.draw, replacement=floor)
         )
         return scores[:, :, 0] + float(constant)
+
+    def cut_cost(self, team_id: int, roster: Sequence[int], player_id: int) -> tuple[float, float]:
+        """`(what the model charges for cutting him, what he was worth at the ceiling)`.
+
+        Both in points over the remaining season, per simulation and averaged.
+
+        The gap between the two is the number this board could not otherwise show, and
+        it is the honest answer to "you are telling me to drop my upside". Measured at
+        week 1 of 2026, cutting Jordyn Tyson costs **+0.27** points ex ante and
+        **+19.13** at the ceiling; Tank Bigsby costs +0.56 to +0.81 against +7.4 to
+        +9.8. He really does have that upside and the model really is right not to pay
+        for it, because a lineup set on projections cannot find the weeks it lands in.
+
+        Which of the two is the decision-relevant number is not this module's call. The
+        projection-optimal lineup already captures 0.886-0.900 of the ceiling
+        (`measure_hindsight_ratio` on these leagues) and real managers capture 0.775
+        (`OPPONENT_LINEUP_EFFICIENCY`) -- so nobody measured has ever beaten the
+        projection, and pricing the ceiling into the objective would be modelling skill
+        nobody demonstrates. Reported, not charged.
+        """
+        kept = [p for p in roster if p != player_id]
+        if len(kept) == len(roster):
+            return 0.0, 0.0
+        ex = float(
+            (self.franchise_scores(team_id, roster) - self.franchise_scores(team_id, kept))
+            .sum(axis=1)
+            .mean()
+        )
+        ceiling = float(
+            (
+                self.franchise_scores(team_id, roster, hindsight=True)
+                - self.franchise_scores(team_id, kept, hindsight=True)
+            )
+            .sum(axis=1)
+            .mean()
+        )
+        return ex, ceiling
 
     def _ensure_base(self) -> tuple[np.ndarray, S.SeasonResult]:
         if self._base_scores is None or self._base_result is None:
@@ -2009,6 +2063,28 @@ class TradeFinder:
                     + ", ".join(self._name.get(p, str(p)) for p in equals)
                     + " cost exactly the same, so pick on something this model does not "
                     "see."
+                )
+            # And here is one of the things it does not see, measured rather than
+            # gestured at. The objective sets lineups on projections, so a bench player
+            # is worth what he adds when a starter is out; what he would be worth to
+            # someone who knew which weeks he goes off is a different and much larger
+            # number. Both are printed because the gap is the whole argument, and
+            # neither is charged, because a lineup set on projections cannot find those
+            # weeks -- see `cut_cost`.
+            roster = ev.rosters.get(team, ())
+            ceilings = []
+            for pid in (*mine.dropped, *equals):
+                ex, ceiling = self.cut_cost(team, [*roster, pid], pid)
+                if ceiling - ex > _CEILING_WORTH_SAYING:
+                    ceilings.append((self._name.get(pid, str(pid)), ex, ceiling))
+            if ceilings:
+                body += " Upside you are giving up, which this objective does not pay for: " + (
+                    ", ".join(
+                        f"{n} costs {ex:+.1f} pts as the lineup is actually set but "
+                        f"{c:+.1f} to someone who knew which weeks to start him"
+                        for n, ex, c in ceilings
+                    )
+                    + "."
                 )
         return head + body
 

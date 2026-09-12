@@ -94,7 +94,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
@@ -160,6 +160,14 @@ DEFAULT_CANDIDATES = 60
 #: constant that reverses the whole decision, and `0.0` is byte-identical to not
 #: having the board at all.
 DEFAULT_BOARD_WEIGHT = 1.0
+
+#: Only mention a dropped player's hindsight ceiling when it exceeds what the board
+#: charges by more than this, in rest-of-season points. Mirrors
+#: `decide/trades._CEILING_WORTH_SAYING`: every bench player has some gap, so without a
+#: floor the note appears on every row and carries no information. At 5.0 it fired on
+#: 28 of 28 live rows, which is the same thing as not firing; at 10.0 it marks the
+#: stashes whose ceiling is genuinely a startable week or more.
+CEILING_WORTH_SAYING = 10.0
 
 #: Simulations for the screen. Under common random numbers a points-for difference
 #: carries ~1000x the variance reduction of a title difference, so a few hundred paired
@@ -703,6 +711,33 @@ class RosterSimulator:
             noise=self._noise,
             team_index=self._index if team_id is None else self.state.team_index[team_id],
         )
+
+    def drop_cost(self, player_id: int) -> tuple[float, float]:
+        """`(what dropping him costs, what he was worth at the hindsight ceiling)`.
+
+        Rest-of-season points, over the same draw. The first is what this board charges;
+        the second is what he would have been worth to someone who knew which weeks he
+        goes off, and the gap between them is the thing a points board cannot otherwise
+        say. Neither is a reason on its own -- see `decide/trades.TradeFinder.cut_cost`
+        for the measurement that says the ceiling must not be charged.
+        """
+        roster = list(self.roster)
+        if player_id not in roster:
+            return 0.0, 0.0
+        kept = [p for p in roster if p != player_id]
+        ex = float((self.season_points(roster) - self.season_points(kept)).mean())
+        # Hindsight is "rank on the realisation": the lineup is chosen knowing what
+        # every player actually scored. `S._franchise_scores` wants an explicit ranking
+        # key, so the key IS the points tensor -- which is what `team_week_scores`
+        # constructs internally when it is handed a bare tensor with no rank.
+        full, less = (
+            _lineup_scores(
+                self.state, self._points, self._points, self.replacement, tuple(ids),
+                noise=self._noise, team_index=self._index,
+            ).sum(axis=1)
+            for ids in (roster, kept)
+        )
+        return ex, float((full - less).mean())
 
     def season_points(self, player_ids: Sequence[int], team_id: int | None = None) -> np.ndarray:
         """`(sims,)` starting-lineup points over the whole remaining season."""
@@ -1509,6 +1544,12 @@ class WaiverReport:
     #: False when the waiver order could not be read and `priority` is an assumption
     #: rather than a fact. The threshold is only as good as this.
     priority_known: bool = True
+    #: `slot -> (streaming points, best rosterable points, that player)` for every
+    #: single-body slot, over the remaining season. See `stream_advantage`: on the live
+    #: leagues the D/ST gap is ~37 points a season against ~13 at K and TE. The gap is
+    #: non-negative by construction; it is the RATIO between positions that says which
+    #: seat is worth streaming. See `stream_advantage`.
+    stream_advantage: Mapping[int, tuple[float, float, str]] = field(default_factory=dict)
 
     @property
     def best(self) -> Recommendation:
@@ -2156,6 +2197,7 @@ def waiver_board(
                     f"pos:{agent.position}",
                     f"drop:{names.get(drop_id, '-') if drop_id is not None else '-'}",
                     *_board_tags(endorsed.get((agent.player_id, drop_id))),
+                    *_ceiling_tags(reporter, drop_id),
                 ),
             )
         )
@@ -2177,6 +2219,7 @@ def waiver_board(
     if history is not None:
         contest_rate = contest_rate_from_log(history, state.size, played)
         arrival = arrival_rate_from_log(history, played)
+    streamable = stream_advantage(outlooks, state, _all_rostered(state))
     opportunity = OpportunityDistribution.from_board([r.delta_title for r in recs], arrival=arrival)
     table: ContinuationTable | None = None
     threshold = 0.0
@@ -2309,6 +2352,7 @@ def waiver_board(
         n_free_agents_available=None if availability is None else availability.n_free_agents,
         blocks=block_recs,
         hold=hold,
+        stream_advantage=streamable,
         free_agents=agents,
         priority_known=uses_faab or priority_known,
     )
@@ -2381,3 +2425,85 @@ def _board_tags(upgrade: Upgrade | None) -> tuple[str, ...]:
         f"board:{upgrade.add_rank}-over-{upgrade.drop_rank}",
         *((f"note:{upgrade.add_comment}",) if upgrade.add_comment else ()),
     )
+
+
+def _ceiling_tags(engine: object, drop_id: int | None) -> tuple[str, ...]:
+    """What the dropped player would have been worth to someone who knew.
+
+    A points board charges a bench player what he adds to a lineup set on projections,
+    which for a buried stash is zero. That is the right price and it is not the whole
+    truth: measured at week 1 of 2026, dropping Jordyn Tyson costs -0.03 points and his
+    hindsight ceiling is +16.26. The ceiling is reported and never charged -- the
+    projection-optimal lineup already captures 0.886-0.900 of it while real managers
+    capture 0.775, so nobody measured has beaten the projection and paying for the
+    ceiling would price skill that has never been shown.
+
+    Only when the gap is worth a sentence; every bench player has some gap.
+    """
+    cost = getattr(engine, "drop_cost", None)
+    if drop_id is None or cost is None:
+        return ()
+    try:
+        ex, ceiling = cost(drop_id)
+    except Exception:  # pragma: no cover - never worth failing a board over
+        return ()
+    if ceiling - ex <= CEILING_WORTH_SAYING:
+        return ()
+    return (f"ceiling:{ex:+.1f}/{ceiling:+.1f}",)
+
+
+def stream_advantage(
+    outlooks: Sequence[PlayerOutlook],
+    state: S.LeagueState,
+    rostered: Iterable[int],
+) -> dict[int, tuple[float, float, str]]:
+    """`slot -> (streaming points, best rosterable points, that player)` per season.
+
+    **The gap is non-negative by construction, so its sign proves nothing and only its
+    size is information.** Streaming sums a per-week maximum and holding maximises a
+    per-week sum, and `sum_w max_i >= max_i sum_w` for any table of numbers. Quoting the
+    positive gap as evidence that streaming wins would be exactly the mistake this repo
+    keeps finding: a defensible-looking number that is not the right quantity.
+
+    What is informative is how the size varies by position, because that is a fact about
+    week-to-week spread rather than about arithmetic. Measured at week 1 of 2026 on Type
+    shi, over the remaining season:
+
+      D/ST   stream 138.5   best held 100.1 (Chiefs D/ST)    +38.4
+      QB     stream 251.0   best held 223.5 (C.J. Stroud)    +27.5
+      TE     stream 120.6   best held 107.7 (Kenyon Sadiq)   +12.9
+      K      stream 154.0   best held 140.8 (Cairo Santos)   +13.2
+
+    D/ST is three times K and TE, and that is the measured reason a defense is the
+    position everybody streams: its usable body changes week to week more than anything
+    else on the roster. The other three leagues agree to within a point.
+
+    None of this is achievable for free -- the streaming column assumes a transaction
+    every week and pays nothing for it, so it is a ceiling and not a policy.
+    `decide/streaming.py` plans the real thing, with acquisition costs and the
+    single-slot constraint. This exists so the two surfaces cannot quietly disagree
+    about the same seat, which is the defect `411ed47` fixed once already.
+
+    Only slots whose eligible set is a single position and whose starting count is one.
+    Everything else is a lineup, not a stream.
+    """
+    owned = {int(p) for p in rostered}
+    out: dict[int, tuple[float, float, str]] = {}
+    for slot, count in state.lineup_slot_counts.items():
+        eligible = set(state.slot_eligibility.get(slot, ()))
+        if count != 1 or len(eligible) != 1:
+            continue
+        pos = next(iter(eligible))
+        free = [o for o in outlooks if o.position_id == pos and int(o.player_id) not in owned]
+        if not free:
+            continue
+        stream = sum(
+            max((o.weeks[w].mean for o in free if w in o.weeks), default=0.0)
+            for w in state.weeks
+        )
+        best, who = max(
+            ((sum(o.weeks[w].mean for w in state.weeks if w in o.weeks), o.name) for o in free),
+            default=(0.0, ""),
+        )
+        out[slot] = (float(stream), float(best), who)
+    return out

@@ -1019,6 +1019,10 @@ def waivers_payload(
                 # the tilt -- see `waivers._board_tags`.
                 "board": tag_value(rec, "board:"),
                 "note": tag_value(rec, "note:"),
+                # "+0.0/+16.3": what dropping him costs as lineups are actually set,
+                # and what he would have been worth to someone who knew which weeks to
+                # start him. Reported, never charged -- see `waivers._ceiling_tags`.
+                "drop_ceiling": tag_value(rec, "ceiling:"),
             }
         )
         return body
@@ -1049,6 +1053,23 @@ def waivers_payload(
         "n_on_waivers": report.n_on_waivers,
         "n_free_agents_available": report.n_free_agents_available,
         "rankings": _rankings_payload(rankings, rankings_match, waivers_mod.DEFAULT_BOARD_WEIGHT),
+        # Per single-body slot: what the seat is worth taking the best available every
+        # week against holding the best rosterable body. The gap is non-negative by
+        # construction, so only its size across positions carries information -- D/ST
+        # runs ~37 points a season against ~13 at K and TE. See `stream_advantage`.
+        "stream_advantage": [
+            {
+                "slot": slot,
+                "position": POSITION_ABBREV.get(
+                    next(iter(sim.state.slot_eligibility.get(slot, ())), 0), str(slot)
+                ),
+                "stream_points": stream,
+                "hold_points": hold,
+                "hold_player": who,
+                "gap": stream - hold,
+            }
+            for slot, (stream, hold, who) in sorted(report.stream_advantage.items())
+        ],
         "board": board,
         "claims": claims,
         "free_adds": [_row(r) for r in report.free_adds],
@@ -2195,6 +2216,11 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
     ranked = payload.get("rankings")
     if ranked:
         table.add_column("board", justify="right")
+    ceilings = any(
+        r.get("drop_ceiling") and r["drop_ceiling"] != "-" for r in payload.get("board", [])
+    )
+    if ceilings:
+        table.add_column("drop ceiling", justify="right")
     if not payload["board"]:
         out.print(Text("  Nothing on the wire projects above replacement.", style="dim"))
         return
@@ -2228,8 +2254,38 @@ def render_waivers(payload: Mapping[str, Any], out: Console | None = None) -> No
         if ranked:
             board = row.get("board")
             cells.append(_cell("" if not board or board == "-" else board, verdict))
+        if ceilings:
+            c = row.get("drop_ceiling")
+            cells.append(_cell("" if not c or c == "-" else c, verdict))
         table.add_row(*cells)
     out.print(table)
+    if ceilings:
+        out.print(
+            Text(
+                "  'drop ceiling' is what that player costs as lineups are actually set, "
+                "against what he would have been worth to someone who knew which weeks to "
+                "start him. The second number is NOT charged: a lineup set on projections "
+                "already captures 0.89 of the ceiling and real managers capture 0.78, so "
+                "nobody measured has beaten the projection. It is there so the cut is your "
+                "call and not the model's.",
+                style="dim",
+            )
+        )
+    stream = payload.get("stream_advantage") or []
+    big = [r for r in stream if r["gap"] > 0]
+    if big:
+        best = max(big, key=lambda r: r["gap"])
+        out.print(
+            Text(
+                "  streaming vs holding, per single-body slot: "
+                + ", ".join(f"{r['position']} {r['gap']:+.0f}" for r in big)
+                + f" pts over the rest of the season. The gap is non-negative by "
+                f"construction, so read the RATIO: {best['position']} is the seat worth "
+                f"streaming. Neither number pays for the weekly transaction -- `fq stream` "
+                f"plans that properly.",
+                style="dim",
+            )
+        )
     if ranked:
         out.print(Text("  " + _rankings_line(ranked), style="dim"))
     if fence:
