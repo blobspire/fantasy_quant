@@ -333,7 +333,7 @@ function TradeCard({
         ) : trade.routes ? (
           <p className="caption">
             {trade.routes} other route{trade.routes > 1 ? 's' : ''} below deliver the same
-            return; this is the easiest to get signed.
+            return through other teams; this one needs the fewest people to agree.
           </p>
         ) : null}
 

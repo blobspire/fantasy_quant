@@ -2233,7 +2233,13 @@ def order_routes(
     to get signed than the three-team one, so it leads, and the others are marked as the
     same return by another route rather than read as separate opportunities.
 
-    Fewest teams first, then widest spread -- the order in which a human would try them.
+    Fewest teams first, then the bigger title delta. Ranking the runner-up on spread
+    was tried and looked like a sorting bug: Wine Wednesday led a family at +1.18pp with
+    a +1.80pp sibling directly beneath it, because the lower row was easier to sign.
+    Within a family the deltas differ only through second-order effects on other teams'
+    standings -- the subject's own roster is identical down every route -- so ordering
+    on the number the board actually prints costs nothing real and surprises nobody. The
+    spread is on the row for the reader to weigh.
     """
     groups: dict[tuple[tuple[int, ...], tuple[int, ...]], list[TradeEvaluation]] = {}
     for ev in evaluations:
@@ -2247,7 +2253,8 @@ def order_routes(
         if id(ev) in seen:
             continue
         family = sorted(
-            groups[key], key=lambda e: (e.proposal.n_teams, -e.spread(team))
+            groups[key],
+            key=lambda e: (e.proposal.n_teams, -e.impact_for(team).delta_title),
         )
         for rank, member in enumerate(family):
             seen.add(id(member))

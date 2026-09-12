@@ -2398,7 +2398,8 @@ def render_trades(payload: Mapping[str, Any], out: Console | None = None) -> Non
             what += "\n  same return as a row above, routed through someone else"
         elif row.get("routes"):
             n = row["routes"]
-            what += f"\n  {n} other route{'s' if n > 1 else ''} to this same return below"
+            plural = "s" if n > 1 else ""
+            what += f"\n  {n} other route{plural} to this return; this needs fewest to agree"
         cells = [
             _cell(", ".join(p["name"] for p in row["partners"]), verdict),
             _cell(what, verdict),
